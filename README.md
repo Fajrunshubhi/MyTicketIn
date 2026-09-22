@@ -41,6 +41,13 @@ Jika memakai PostgreSQL Windows (bukan Docker), buat database `myticketin` lalu 
 
 Di hosting, isi URL Neon: pooled → `DATABASE_URL`, direct (tanpa `-pooler`) → `DATABASE_URL_UNPOOLED`, `sslmode=require`. Jangan memakai localhost.
 
+Vercel **hanya** menjalankan Next.js. Katalog, login, dan rewrite `/api/*` membutuhkan proses Go terpisah (Railway, Render, Fly, atau VM). Tanpa origin API HTTPS, halaman Vercel menampilkan “Katalog sedang tidak tersedia”.
+
+1. Deploy `backend/` (Dockerfile) ke host yang mendukung binary Go. Jalankan migrasi sekali: `MIGRATIONS_DIR=/app/migrations /app/migrate`.
+2. Env **API**: `APP_ENV=preview`, `WEB_ORIGIN=https://myticketin.vercel.app`, `DATABASE_URL` (pooler Neon), `DATABASE_URL_UNPOOLED` (host Neon langsung), `SESSION_SECRET` ≥32 karakter, plus secret QR/scheduler sesuai `APP_ENV`.
+3. Env **Vercel** (Production, lalu Redeploy): `API_ORIGIN` dan `NEXT_PUBLIC_API_BASE_URL` = URL HTTPS API Go (tanpa slash akhir). Jangan `localhost`.
+4. Pastikan `WEB_ORIGIN` di API sama persis dengan URL situs Vercel (skema + host).
+
 ## 2. Environment
 
 Salin `.env.example` ke `.env.local`. Isi secret; **jangan** commit `.env.local`. Simpan URL Neon di catatan terpisah agar tinggal ditukar saat deploy.

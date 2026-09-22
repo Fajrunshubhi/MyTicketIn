@@ -178,3 +178,16 @@ func TestLoadDefaultsSandboxEmailProvider(t *testing.T) {
 		t.Fatalf("got %q", cfg.EmailProvider)
 	}
 }
+
+func TestLoadAPIAddrFromPORT(t *testing.T) {
+	setRequired(t)
+	t.Setenv("API_ADDR", "")
+	t.Setenv("PORT", "8080")
+	cfg, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.APIAddr != ":8080" {
+		t.Fatalf("got %q", cfg.APIAddr)
+	}
+}

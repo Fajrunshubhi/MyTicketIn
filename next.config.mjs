@@ -6,7 +6,10 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   async rewrites() {
-    const api = process.env.NEXT_PUBLIC_API_BASE_URL || "http://127.0.0.1:8080";
+    const api = (process.env.API_ORIGIN || process.env.NEXT_PUBLIC_API_BASE_URL || "http://127.0.0.1:8080").replace(
+      /\/$/,
+      "",
+    );
     return [
       { source: "/api/:path*", destination: `${api}/api/:path*` },
       { source: "/uploads/:path*", destination: `${api}/uploads/:path*` },
@@ -31,7 +34,7 @@ const nextConfig = {
           {
             key: "Content-Security-Policy",
             value:
-              "default-src 'self'; img-src 'self' data: blob: https://*.googleapis.com https://*.gstatic.com https://*.google.com https://*.google.co.id; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; connect-src 'self' http://127.0.0.1:* http://localhost:*; media-src 'self' blob:; frame-src 'self' https://www.google.com https://maps.google.com https://www.google.co.id; child-src 'self' https://www.google.com https://maps.google.com https://www.google.co.id; frame-ancestors 'none'; base-uri 'self'",
+              "default-src 'self'; img-src 'self' data: blob: https://*.googleapis.com https://*.gstatic.com https://*.google.com https://*.google.co.id; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; connect-src 'self' https: http://127.0.0.1:* http://localhost:*; media-src 'self' blob:; frame-src 'self' https://www.google.com https://maps.google.com https://www.google.co.id; child-src 'self' https://www.google.com https://maps.google.com https://www.google.co.id; frame-ancestors 'none'; base-uri 'self'",
           },
         ],
       },

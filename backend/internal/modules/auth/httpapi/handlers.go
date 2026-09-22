@@ -509,7 +509,7 @@ func (a API) clearAuthCookies(w http.ResponseWriter) {
 }
 
 func (a API) setCookie(w http.ResponseWriter, name, value string, exp time.Time, httpOnly bool) {
-	secure := a.Cfg.AppEnv == "production-demo" || a.Cfg.AppEnv == "preview"
+	secure := a.Cfg.AppEnv == "production-demo" || a.Cfg.AppEnv == "preview" || strings.HasPrefix(a.Cfg.WebOrigin, "https://")
 	sameSite := http.SameSiteLaxMode
 	c := &http.Cookie{
 		Name:     name,

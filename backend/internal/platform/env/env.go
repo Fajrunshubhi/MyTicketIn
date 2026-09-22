@@ -48,7 +48,7 @@ func Load() (Config, error) {
 	applyDotEnv()
 	cfg := Config{
 		AppEnv:                strings.TrimSpace(os.Getenv("APP_ENV")),
-		APIAddr:               strings.TrimSpace(os.Getenv("API_ADDR")),
+		APIAddr:               listenAddr(),
 		WebOrigin:             strings.TrimSpace(os.Getenv("WEB_ORIGIN")),
 		SessionSecret:         strings.TrimSpace(os.Getenv("SESSION_SECRET")),
 		DatabaseURL:           strings.TrimSpace(os.Getenv("DATABASE_URL")),
@@ -184,6 +184,21 @@ func deriveDevQR(sessionSecret string) (string, string, int) {
 	pepper := sha256.Sum256([]byte(sessionSecret + "|qr-pepper"))
 	key := sha256.Sum256([]byte(sessionSecret + "|qr-enc-v1"))
 	return hex.EncodeToString(pepper[:]), "1:" + hex.EncodeToString(key[:]), 1
+}
+
+func listenAddr() string {
+	addr := strings.TrimSpace(os.Getenv("API_ADDR"))
+	if addr != "" {
+		return addr
+	}
+	port := strings.TrimSpace(os.Getenv("PORT"))
+	if port == "" {
+		return ""
+	}
+	if strings.HasPrefix(port, ":") {
+		return port
+	}
+	return ":" + port
 }
 
 func missingRequired(cfg Config) []string {
