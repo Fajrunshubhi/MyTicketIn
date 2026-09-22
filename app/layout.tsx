@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import { Fraunces, Outfit } from "next/font/google";
-import AuthProvider from "@/components/AuthProvider";
+import { SkipLink } from "@/components/ui/SkipLink";
 import "./globals.css";
 
 const outfit = Outfit({
@@ -15,16 +15,16 @@ const fraunces = Fraunces({
 });
 
 export const metadata: Metadata = {
-  title: "TicketIn | Login Event Ticketing",
-  description:
-    "Aplikasi ticketing event untuk pemesanan tiket, pembayaran, dan validasi peserta.",
+  title: "MyTicketIn",
+  description: "Aplikasi tiket event tatap muka untuk pembeli, organizer, petugas, dan admin.",
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="id">
       <body className={`${outfit.variable} ${fraunces.variable} font-sans antialiased`}>
-        <AuthProvider>{children}</AuthProvider>
+        <SkipLink />
+        <div id="konten-utama">{children}</div>
       </body>
     </html>
   );

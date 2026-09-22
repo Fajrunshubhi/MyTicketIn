@@ -10,7 +10,7 @@ Pragmatisme : Menyeimbangkan praktik terbaik secara teoritis dengan pertimbangan
 Pemrograman Defensif : Antisipasi kasus-kasus ekstrem dan potensi kegagalan
 Perspektif Sistem : Pertimbangkan dampak pada kinerja, keamanan, dan pengalaman pengguna.
 Konteks
-Implementasi ini mencakup RFC-013, yang berfokus pada menyediakan notifikasi in-app, email, reminder event, dan reset kata sandi yang aman. Silakan merujuk ke dokumen-dokumen berikut:
+Implementasi ini mencakup RFC-013, yang berfokus pada notifikasi in-app, email transaksional wajib, reminder event wajib melalui scheduler yang ada, serta reset kata sandi yang aman. Silakan merujuk ke dokumen-dokumen berikut:
 
 @PRD.md untuk persyaratan produk secara keseluruhan
 Lihat @FEATURES.md untuk spesifikasi fitur yang lebih detail.

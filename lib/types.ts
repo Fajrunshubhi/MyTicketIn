@@ -1,14 +1,5 @@
 export type UserRole = "USER" | "ADMIN";
 
-export type SeedAccount = {
-  id: string;
-  username: string;
-  email: string;
-  name: string;
-  password: string;
-  role: UserRole;
-};
-
 export type AppUser = {
   id: string;
   name: string;

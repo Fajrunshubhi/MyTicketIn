@@ -10,15 +10,26 @@ const config: Config = {
     extend: {
       fontFamily: {
         sans: ["var(--font-outfit)", "system-ui", "sans-serif"],
-        display: ["var(--font-fraunces)", "Georgia", "serif"],
+        display: ["var(--font-outfit)", "system-ui", "sans-serif"],
       },
       colors: {
-        ink: "#0b1020",
+        canvas: "#f4f1fb",
+        paper: "#ffffff",
+        navy: "#1c1636",
+        ink: "#1c1636",
         gold: {
-          50: "#fbf6ea",
-          400: "#e3c16a",
-          500: "#d4af37",
+          50: "#f4efff",
+          100: "#e4d9ff",
+          400: "#8b6cf6",
+          500: "#6d4aff",
+          600: "#5a38e6",
+          700: "#4c2ed4",
+          800: "#3b22a8",
         },
+      },
+      boxShadow: {
+        card: "0 16px 40px -28px rgba(28, 22, 54, 0.45)",
+        soft: "0 10px 24px -18px rgba(28, 22, 54, 0.35)",
       },
     },
   },

@@ -10,7 +10,7 @@ Pragmatisme : Menyeimbangkan praktik terbaik secara teoritis dengan pertimbangan
 Pemrograman Defensif : Antisipasi kasus-kasus ekstrem dan potensi kegagalan
 Perspektif Sistem : Pertimbangkan dampak pada kinerja, keamanan, dan pengalaman pengguna.
 Konteks
-Implementasi ini mencakup RFC-008, yang berfokus pada menyediakan checkout idempoten, inventori atomik, order, reservasi 15 menit, dan expiry scheduler. Silakan merujuk ke dokumen-dokumen berikut:
+Implementasi ini mencakup RFC-008, yang berfokus pada menyediakan checkout idempoten, inventori atomik, order, reservasi 15 menit, expiry scheduler, serta akun, ledger, reservasi, dan redemption loyalty pembeli-organizer. Silakan merujuk ke dokumen-dokumen berikut:
 
 @PRD.md untuk persyaratan produk secara keseluruhan
 Lihat @FEATURES.md untuk spesifikasi fitur yang lebih detail.

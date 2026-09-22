@@ -1,16 +1,17 @@
-# Daftar Fitur TicketIn
+# Daftar Fitur MyTicketIn
 
 | Atribut | Nilai |
 |---|---|
-| **Sumber** | `prd-improved.md` versi 2.0 |
+| **Sumber** | `prd-improved.md` versi 2.2 |
 | **Tujuan** | Acuan perencanaan implementasi MVP akademik |
 | **Platform** | Web responsif, Bahasa Indonesia, Rupiah |
 | **Model pembayaran MVP** | Payment gateway sandbox; tanpa uang nyata |
-| **Jumlah fitur** | 73 |
+| **Jumlah fitur** | 77 |
+| **Cakupan aktif MVP** | 66 fitur (57 Must, 5 Should, 4 Could) |
 
 ## Gambaran Produk
 
-TicketIn adalah platform tiket event tatap muka untuk empat persona: **pembeli**, **organizer**, **petugas check-in**, dan **admin**. Alur intinya mencakup pembuatan serta moderasi event, pengaturan inventori, pencarian dan checkout, pembayaran sandbox, penerbitan e-ticket QR, dan check-in satu kali.
+MyTicketIn adalah platform tiket event tatap muka untuk empat persona: **pembeli**, **organizer**, **petugas check-in**, dan **admin**. Alur intinya mencakup pembuatan serta moderasi event, pengaturan inventori dalam tiga mode (`GENERAL_ADMISSION`, `ZONED`, `RESERVED_SEATING`), discovery melalui filter/rekomendasi/pencarian bahasa alami, checkout dengan loyalitas per organizer, pembayaran sandbox, penerbitan e-ticket QR, check-in satu kali, serta bantuan AI poster-ke-draft dengan kendali manusia.
 
 MVP ditujukan untuk validasi akademik selama 12 minggu. Transaksi uang nyata, settlement/payout organizer, dan peluncuran komersial tidak termasuk rilis ini.
 
@@ -38,8 +39,9 @@ MVP ditujukan untuk validasi akademik selama 12 minggu. Transaksi uang nyata, se
 9. [Notifikasi, Analitik, dan Penanganan Error](#8-notifikasi-analitik-dan-penanganan-error)
 10. [Platform, Operasional, dan Kualitas](#9-platform-operasional-dan-kualitas)
 11. [Fitur Pasca-MVP](#10-fitur-pasca-mvp)
-12. [Jalur Kritis dan Urutan Implementasi](#jalur-kritis-dan-urutan-implementasi)
-13. [Decision Gates](#decision-gates)
+12. [Nilai Tambah Wajib](#11-nilai-tambah-wajib)
+13. [Jalur Kritis dan Urutan Implementasi](#jalur-kritis-dan-urutan-implementasi)
+14. [Decision Gates](#decision-gates)
 
 ## Ringkasan
 
@@ -47,11 +49,11 @@ MVP ditujukan untuk validasi akademik selama 12 minggu. Transaksi uang nyata, se
 
 | Prioritas | Jumlah | Interpretasi |
 |---|---:|---|
-| **Must Have** | 48 | Fitur produk, keamanan, dan operasional minimum |
-| **Should Have** | 8 | Peningkatan penting dengan fallback |
-| **Could Have** | 5 | Dikerjakan setelah jalur kritis stabil |
-| **Won’t Have** | 12 | Di luar rilis akademik saat ini |
-| **Total** | **73** |  |
+| **Must Have** | 57 | Seluruh fitur produk, nilai tambah, keamanan, operasional, dan kursi bernomor wajib |
+| **Should Have** | 5 | Peningkatan penting dengan fallback |
+| **Could Have** | 4 | Dikerjakan setelah jalur kritis stabil |
+| **Won’t Have** | 11 | Di luar rilis akademik saat ini |
+| **Total** | **77** | 66 fitur aktif MVP; 11 Won’t Have |
 
 ### Jumlah Berdasarkan Kategori
 
@@ -59,26 +61,30 @@ MVP ditujukan untuk validasi akademik selama 12 minggu. Transaksi uang nyata, se
 |---|---|---:|
 | Autentikasi dan Otorisasi | F1–F6 | 6 |
 | Organizer dan Pengelolaan Event | F7–F14 | 8 |
-| Katalog dan Inventori Tiket | F15–F22 | 8 |
+| Katalog dan Inventori Tiket | F15–F22, F65 | 9 |
 | Checkout dan Order | F23–F28 | 6 |
 | Pembayaran dan Refund Sandbox | F29–F33 | 5 |
 | E-ticket dan Check-in | F34–F42 | 9 |
 | Dashboard, Administrasi, dan Pelaporan | F43–F48 | 6 |
 | Notifikasi, Analitik, dan Penanganan Error | F49–F53 | 5 |
 | Platform, Operasional, dan Kualitas | F54–F62 | 9 |
-| Fitur Pasca-MVP | F63–F73 | 11 |
-| **Total** | **F1–F73** | **73** |
+| Fitur Pasca-MVP | F63–F64, F66–F73 | 10 |
+| Nilai Tambah Wajib | F74–F77 | 4 |
+| **Total** | **F1–F77** | **77** |
 
 ### Fitur Berisiko atau Membutuhkan Keahlian Khusus
 
 | Fitur | Tantangan |
 |---|---|
-| **F16, F26–F28** | Transaksi database, konkurensi, dan pencegahan overselling |
+| **F16, F26–F28, F65** | Transaksi database, konkurensi, overselling kuota, dan hold kursi |
 | **F29–F33** | Integrasi payment gateway, signature webhook, idempotensi, dan rekonsiliasi |
 | **F35, F37–F40** | Keamanan QR, browser camera API, dan check-in atomik |
 | **F59** | Scheduler yang aman dijalankan ulang |
 | **F60–F62** | Backup/restore, isolasi lingkungan, deployment, dan rollback |
 | **F63–F64** | Keuangan nyata, regulasi, settlement, payout, dan refund produksi |
+| **F74** | Privasi riwayat Paid, ranking deterministik, dan pembatasan Published future event |
+| **F75** | Ledger append-only, transaksi/reservasi poin, konkurensi, idempotensi, dan reversal refund |
+| **F76–F77** | Input AI tidak tepercaya, schema validation, prompt injection, retensi/redaksi, rate limit, fallback, dan provider gate |
 
 ## 1. Autentikasi dan Otorisasi
 
@@ -91,8 +97,8 @@ MVP ditujukan untuk validasi akademik selama 12 minggu. Transaksi uang nyata, se
 - **Kriteria penerimaan:**
   - Input wajib divalidasi pada server dan duplikasi username/email ditolak.
   - Kata sandi disimpan sebagai adaptive hash dan tidak pernah dicatat sebagai teks asli.
-  - Registrasi berhasil menghasilkan akun aktif yang dapat digunakan untuk login.
-- **Teknis/kasus khusus:** Terapkan rate limit; tangani request berulang tanpa membuat akun ganda.
+  - Registrasi berhasil menghasilkan akun aktif `USER` yang masuk sebagai pembeli.
+- **Teknis/kasus khusus:** Terapkan rate limit; tangani request berulang tanpa membuat akun ganda. Pendaftaran publik tidak membuat admin dan tidak membuka portal penyelenggara.
 - **Dependensi/keahlian:** PostgreSQL, validasi input, keamanan autentikasi.
 
 ### F2 — Login dengan Username dan Kata Sandi
@@ -102,10 +108,10 @@ MVP ditujukan untuk validasi akademik selama 12 minggu. Transaksi uang nyata, se
 - **Kompleksitas:** Sedang
 - **Deskripsi:** Pengguna masuk dengan kredensial lokal.
 - **Kriteria penerimaan:**
-  - Kredensial valid membuat sesi dan mengarahkan pengguna ke halaman yang diizinkan.
+  - Kredensial valid membuat sesi hanya jika portal yang dipilih cocok dengan jenis akun, lalu mengarahkan ke halaman yang diizinkan.
   - Kredensial salah memberikan pesan generik tanpa membocorkan keberadaan akun.
   - Percobaan berlebihan dibatasi.
-- **Teknis/kasus khusus:** Gunakan NextAuth dan cookie sesi aman.
+- **Teknis/kasus khusus:** Sesi Go (bukan NextAuth). Tiga portal: pembeli, penyelenggara `APPROVED`, admin. Mismatch memakai `AUTH_PORTAL_DENIED` dengan pesan spesifik.
 - **Dependensi/keahlian:** NextAuth, bcrypt/adaptive hashing, rate limiting.
 
 ### F3 — Login Google
@@ -167,12 +173,12 @@ MVP ditujukan untuk validasi akademik selama 12 minggu. Transaksi uang nyata, se
 - **Tipe/persona:** Inti — calon organizer
 - **Prioritas:** Must Have
 - **Kompleksitas:** Sedang
-- **Deskripsi:** Pengguna biasa mengajukan nama organizer, kontak, dan deskripsi.
+- **Deskripsi:** Pengguna biasa (sesi pembeli) mengajukan nama organizer, kontak, dan deskripsi.
 - **Kriteria penerimaan:**
   - Pengajuan valid berstatus Pending dan terlihat oleh admin.
   - Pengguna dapat melihat status serta alasan penolakan.
-  - Pengajuan Pending tidak langsung memberi hak publikasi.
-- **Teknis/kasus khusus:** MVP tidak menerima KYC/dokumen identitas nyata.
+  - Pengajuan Pending tidak langsung memberi hak publikasi atau akses portal penyelenggara.
+- **Teknis/kasus khusus:** MVP tidak menerima KYC/dokumen identitas nyata. Pengajuan dari dalam aplikasi setelah login pembeli, bukan dari formulir daftar.
 - **Dependensi/keahlian:** F1/F2/F3, F5.
 
 ### F8 — Moderasi Organizer
@@ -272,26 +278,30 @@ MVP ditujukan untuk validasi akademik selama 12 minggu. Transaksi uang nyata, se
 - **Tipe/persona:** Inti — organizer
 - **Prioritas:** Must Have
 - **Kompleksitas:** Sedang
-- **Deskripsi:** Organizer menambah beberapa jenis tiket dengan nama, harga, kuota, periode penjualan, dan limit.
+- **Deskripsi:** Organizer menambah beberapa jenis tiket dengan nama, harga, kuota, periode penjualan, dan limit, sesuai mode inventori event.
 - **Kriteria penerimaan:**
+  - Event memilih tepat satu mode: `GENERAL_ADMISSION`, `ZONED`, atau `RESERVED_SEATING`.
   - Harga adalah Rupiah ≥ 0 dan kuota bilangan bulat positif.
   - Jadwal penjualan valid dan berakhir sebelum/ketika event dimulai.
   - Penurunan kuota tidak boleh di bawah jumlah Paid plus reservasi aktif.
-- **Teknis/kasus khusus:** Perubahan harga tidak mengubah snapshot item pada order lama.
-- **Dependensi/keahlian:** F9, data validation.
+  - Pada `ZONED` dan `RESERVED_SEATING`, jenis tiket merepresentasikan kategori/area berharga; kursi bernomor dikelompokkan ke kategori tersebut.
+  - Mode inventori tidak dapat diubah setelah order, reservasi, atau tiket Paid ada.
+- **Teknis/kasus khusus:** Perubahan harga tidak mengubah snapshot item pada order lama. Request yang tidak sesuai mode ditolak dengan `INVENTORY_MODE_MISMATCH`.
+- **Dependensi/keahlian:** F9, F65, data validation.
 
 ### F16 — Perhitungan Ketersediaan Atomik
 
 - **Tipe/persona:** Inti — organizer, pembeli
 - **Prioritas:** Must Have
 - **Kompleksitas:** Tinggi
-- **Deskripsi:** Ketersediaan dihitung dari kuota dikurangi tiket Paid dan reservasi aktif.
+- **Deskripsi:** Ketersediaan dihitung dari kuota dikurangi tiket Paid dan reservasi aktif, atau dari status hold/Paid per kursi pada mode `RESERVED_SEATING`.
 - **Kriteria penerimaan:**
   - Nilai ketersediaan tidak negatif.
   - Checkout bersamaan tidak dapat melampaui kuota.
+  - Dua pembeli yang memilih kursi yang sama hanya menghasilkan satu hold aktif.
   - Dashboard dan detail event memakai sumber perhitungan yang konsisten.
-- **Teknis/kasus khusus:** Gunakan transaksi, conditional update/locking, constraint, dan concurrent test.
-- **Dependensi/keahlian:** PostgreSQL concurrency, F15, F26/F27.
+- **Teknis/kasus khusus:** Gunakan transaksi, conditional update/locking, constraint, dan concurrent test termasuk kursi yang sama.
+- **Dependensi/keahlian:** PostgreSQL concurrency, F15, F26/F27, F65.
 
 ### F17 — Hentikan Penjualan per Jenis Tiket
 
@@ -334,7 +344,7 @@ MVP ditujukan untuk validasi akademik selama 12 minggu. Transaksi uang nyata, se
 ### F20 — Filter Kategori, Lokasi, dan Tanggal
 
 - **Tipe/persona:** Peningkatan — pengunjung/pembeli
-- **Prioritas:** Should Have
+- **Prioritas:** Must Have
 - **Kompleksitas:** Sedang
 - **Deskripsi:** Katalog dapat disaring berdasarkan kategori, lokasi, dan tanggal.
 - **Kriteria penerimaan:**
@@ -348,13 +358,14 @@ MVP ditujukan untuk validasi akademik selama 12 minggu. Transaksi uang nyata, se
 - **Tipe/persona:** Inti — pengunjung/pembeli
 - **Prioritas:** Must Have
 - **Kompleksitas:** Sedang
-- **Deskripsi:** Halaman menampilkan organizer, deskripsi, jadwal, venue, syarat, tiket, harga, dan ketersediaan.
+- **Deskripsi:** Halaman menampilkan organizer, deskripsi, jadwal, venue, syarat, tiket/kategori, harga, ketersediaan, serta denah statis dan selector kursi bila mode `RESERVED_SEATING`.
 - **Kriteria penerimaan:**
   - Data sesuai event Published terbaru.
   - Tombol checkout dinonaktifkan jika event/tiket tidak dapat dijual.
   - Status sold out, belum mulai, atau penjualan berakhir terlihat jelas.
+  - Denah adalah gambar statis dengan alt text/legenda; pemilihan kursi memakai list/grid aksesibel terpisah, bukan peta klik.
 - **Teknis/kasus khusus:** Ketersediaan final tetap divalidasi saat checkout.
-- **Dependensi/keahlian:** F15/F16, F18.
+- **Dependensi/keahlian:** F15/F16, F18, F65.
 
 ### F22 — Gambar Event dan Object Storage
 
@@ -366,8 +377,10 @@ MVP ditujukan untuk validasi akademik selama 12 minggu. Transaksi uang nyata, se
   - Hanya tipe/ukuran file yang diizinkan dapat diunggah.
   - Gambar tampil di katalog/detail; placeholder digunakan jika tidak ada.
   - File tidak disimpan pada filesystem runtime.
-- **Teknis/kasus khusus:** Validasi MIME, ukuran, akses publik/URL, dan penghapusan file yatim.
+- **Teknis/kasus khusus:** Validasi MIME, ukuran, akses publik/URL, dan penghapusan file yatim. Denah venue memakai kontrak upload yang sama dengan gambar event.
 - **Dependensi/keahlian:** Provider object storage pihak ketiga.
+
+F65 (kursi bernomor dan denah venue statis) adalah Must Have inventori; spesifikasi lengkap tetap memakai ID F65 pada bagian 10 agar urutan ID tidak pecah.
 
 ## 4. Checkout dan Order
 
@@ -376,24 +389,26 @@ MVP ditujukan untuk validasi akademik selama 12 minggu. Transaksi uang nyata, se
 - **Tipe/persona:** Inti — pembeli
 - **Prioritas:** Must Have
 - **Kompleksitas:** Sedang
-- **Deskripsi:** Pembeli memilih jenis dan jumlah tiket untuk satu event.
+- **Deskripsi:** Pembeli memilih jenis dan jumlah tiket, atau kursi bernomor, untuk satu event sesuai mode inventori.
 - **Kriteria penerimaan:**
   - Maksimal 5 tiket per jenis per akun per event.
   - Jumlah harus positif dan tidak melebihi ketersediaan saat request diproses.
   - Item dari event berbeda tidak dapat digabung.
-- **Teknis/kasus khusus:** Jangan mempercayai harga/jumlah dari client.
-- **Dependensi/keahlian:** F15/F16, F21.
+  - Pada `RESERVED_SEATING`, pembeli memilih kursi spesifik melalui list/grid aksesibel; denah hanya menjelaskan layout.
+  - Pemilihan yang tidak sesuai mode ditolak dengan `INVENTORY_MODE_MISMATCH`; kursi yang sudah di-hold atau Paid ditolak dengan `SEAT_UNAVAILABLE`.
+- **Teknis/kasus khusus:** Jangan mempercayai harga/jumlah/kursi dari client.
+- **Dependensi/keahlian:** F15/F16, F21, F65.
 
 ### F24 — Ringkasan Checkout
 
 - **Tipe/persona:** Inti — pembeli
 - **Prioritas:** Must Have
 - **Kompleksitas:** Rendah
-- **Deskripsi:** Pembeli meninjau item, jumlah, harga, total, dan batas waktu sebelum pembayaran.
+- **Deskripsi:** Pembeli meninjau item, jumlah, kategori/label kursi, harga, total, dan batas waktu sebelum pembayaran.
 - **Kriteria penerimaan:**
   - Total dihitung ulang pada server.
   - Pembeli memberikan konfirmasi sebelum order/payment dibuat.
-  - Perubahan harga/ketersediaan menghasilkan pesan dan refresh ringkasan.
+  - Perubahan harga/ketersediaan/kursi menghasilkan pesan dan refresh ringkasan.
 - **Teknis/kasus khusus:** MVP tidak memiliki fee layanan.
 - **Dependensi/keahlian:** F23.
 
@@ -404,7 +419,7 @@ MVP ditujukan untuk validasi akademik selama 12 minggu. Transaksi uang nyata, se
 - **Kompleksitas:** Sedang
 - **Deskripsi:** Sistem membuat nomor order unik dan mengelola Pending, Paid, Failed, Expired, Cancelled, Refunded.
 - **Kriteria penerimaan:**
-  - Order menyimpan snapshot item/harga dan pemilik.
+  - Order menyimpan snapshot item/harga/kategori/kursi dan pemilik.
   - Transisi status yang tidak valid ditolak.
   - Pengguna hanya melihat order miliknya; admin dapat menelusuri seluruh order.
 - **Teknis/kasus khusus:** Pisahkan status Order dan Payment.
@@ -415,12 +430,12 @@ MVP ditujukan untuk validasi akademik selama 12 minggu. Transaksi uang nyata, se
 - **Tipe/persona:** Inti — pembeli
 - **Prioritas:** Must Have
 - **Kompleksitas:** Tinggi
-- **Deskripsi:** Order Pending menahan kuota selama 15 menit.
+- **Deskripsi:** Order Pending menahan kuota atau kursi spesifik selama 15 menit.
 - **Kriteria penerimaan:**
   - Reservasi dan order dibuat dalam satu transaksi.
-  - Reservasi aktif mengurangi ketersediaan.
-  - Setelah expiry, order menjadi Expired dan kuota dilepas tepat satu kali.
-- **Teknis/kasus khusus:** Reservasi adalah record terpisah, bukan Ticket.
+  - Reservasi aktif mengurangi ketersediaan; hold kursi aktif menandai kursi tidak tersedia.
+  - Setelah expiry, order menjadi Expired dan kuota/hold kursi dilepas tepat satu kali.
+- **Teknis/kasus khusus:** Reservasi adalah record terpisah, bukan Ticket. Satu kursi paling banyak satu hold aktif.
 - **Dependensi/keahlian:** F16, F25, F59, database transaction.
 
 ### F27 — Pencegahan Overselling
@@ -528,8 +543,9 @@ MVP ditujukan untuk validasi akademik selama 12 minggu. Transaksi uang nyata, se
   - Order Pending/Failed/Expired tidak menghasilkan tiket.
   - Replay webhook tidak menambah tiket.
   - Jumlah Ticket sama dengan jumlah unit pada order Paid.
-- **Teknis/kasus khusus:** Penerbitan terjadi dalam transaksi terkait perubahan pertama ke Paid.
-- **Dependensi/keahlian:** F25, F31, database transaction.
+  - Ticket kursi menyimpan snapshot kategori, label kursi, dan harga yang sama dengan order item.
+- **Teknis/kasus khusus:** Penerbitan terjadi dalam transaksi terkait perubahan pertama ke Paid dan mengonversi hold kursi menjadi assignment Paid.
+- **Dependensi/keahlian:** F25, F31, F65, database transaction.
 
 ### F35 — QR Tiket Aman
 
@@ -552,7 +568,7 @@ MVP ditujukan untuk validasi akademik selama 12 minggu. Transaksi uang nyata, se
 - **Deskripsi:** Pembeli melihat tiket Unused, Used, atau Cancelled pada perangkat mobile.
 - **Kriteria penerimaan:**
   - Hanya pemilik tiket dapat membuka detail/QR.
-  - Detail menampilkan event, jenis tiket, identitas pemilik order, dan status.
+  - Detail menampilkan event, jenis/kategori tiket, label kursi bila ada, identitas pemilik order, dan status.
   - Status berubah setelah check-in atau pembatalan.
 - **Teknis/kasus khusus:** Cegah cache publik pada halaman QR.
 - **Dependensi/keahlian:** F5, F34/F35.
@@ -579,6 +595,7 @@ MVP ditujukan untuk validasi akademik selama 12 minggu. Transaksi uang nyata, se
 - **Kriteria penerimaan:**
   - Hasil memiliki label dan alasan yang mudah dibedakan.
   - Already Used menampilkan waktu penggunaan pertama tanpa PII berlebih.
+  - Valid menampilkan kategori/label kursi yang konsisten dengan tiket dan denah.
   - Gangguan server tidak ditampilkan sebagai tiket Invalid.
 - **Teknis/kasus khusus:** Gunakan reason code stabil untuk UI dan analitik.
 - **Dependensi/keahlian:** F37, F39/F40.
@@ -593,19 +610,21 @@ MVP ditujukan untuk validasi akademik selama 12 minggu. Transaksi uang nyata, se
   - Dua scan bersamaan hanya menghasilkan satu keberhasilan.
   - Ticket Used/Cancelled atau order non-Paid tidak dapat diterima.
   - Scan untuk event berbeda ditolak.
+  - Hasil Valid menampilkan kategori dan label kursi yang sama dengan snapshot tiket.
 - **Teknis/kasus khusus:** Conditional update `Unused → Used` dalam transaksi.
-- **Dependensi/keahlian:** PostgreSQL concurrency, F35/F37.
+- **Dependensi/keahlian:** PostgreSQL concurrency, F35/F37, F65.
 
 ### F40 — Log Percobaan Check-in
 
 - **Tipe/persona:** Inti — admin, organizer
 - **Prioritas:** Must Have
 - **Kompleksitas:** Sedang
-- **Deskripsi:** Setiap scan menyimpan event, petugas, waktu, hasil, dan ticket jika dikenali.
+- **Deskripsi:** Setiap scan menyimpan event, petugas, waktu, hasil, ticket jika dikenali, serta label kategori/kursi dari snapshot tiket.
 - **Kriteria penerimaan:**
   - Scan berhasil maupun gagal tercatat.
   - Organizer hanya melihat log event miliknya.
   - Log tidak menyimpan token QR mentah.
+  - Label kursi/kategori pada log sesuai snapshot tiket, bukan denah yang dapat berubah.
 - **Teknis/kasus khusus:** Tetapkan retensi sebelum pilot data nyata.
 - **Dependensi/keahlian:** F38/F39, F45.
 
@@ -675,12 +694,13 @@ MVP ditujukan untuk validasi akademik selama 12 minggu. Transaksi uang nyata, se
 ### F46 — Ekspor CSV
 
 - **Tipe/persona:** Peningkatan — organizer
-- **Prioritas:** Should Have
+- **Prioritas:** Must Have
 - **Kompleksitas:** Sedang
 - **Deskripsi:** Organizer mengekspor peserta dan check-in milik event.
 - **Kriteria penerimaan:**
   - File hanya memuat event milik organizer dan kolom yang disetujui.
   - Filter yang aktif tercermin dalam hasil ekspor.
+  - Untuk event `RESERVED_SEATING` atau `ZONED`, ekspor menyertakan kategori/area dan label kursi.
 - **Teknis/kasus khusus:** Lindungi dari CSV injection dan minimalkan PII.
 - **Dependensi/keahlian:** F5, F40/F43.
 
@@ -725,7 +745,7 @@ MVP ditujukan untuk validasi akademik selama 12 minggu. Transaksi uang nyata, se
 ### F50 — Notifikasi Email
 
 - **Tipe/persona:** Peningkatan — pembeli, organizer
-- **Prioritas:** Should Have
+- **Prioritas:** Must Have
 - **Kompleksitas:** Sedang
 - **Deskripsi:** Email dikirim untuk konfirmasi pembayaran, tiket, hasil moderasi, dan pembatalan.
 - **Kriteria penerimaan:**
@@ -738,13 +758,13 @@ MVP ditujukan untuk validasi akademik selama 12 minggu. Transaksi uang nyata, se
 ### F51 — Reminder Event
 
 - **Tipe/persona:** Peningkatan — pembeli
-- **Prioritas:** Could Have
+- **Prioritas:** Must Have
 - **Kompleksitas:** Sedang
 - **Deskripsi:** Pembeli menerima pengingat sebelum event.
 - **Kriteria penerimaan:**
   - Hanya pemilik tiket Unused pada event aktif menerima reminder.
   - Event Cancelled tidak mengirim reminder.
-- **Teknis/kasus khusus:** Waktu reminder dan opt-out perlu keputusan lanjutan.
+- **Teknis/kasus khusus:** Reminder dikirim satu kali pada T-24 jam menggunakan waktu database dan zona waktu event; retry wajib idempoten.
 - **Dependensi/keahlian:** F49/F50, scheduler.
 
 ### F52 — Event Analitik Produk
@@ -890,7 +910,7 @@ MVP ditujukan untuk validasi akademik selama 12 minggu. Transaksi uang nyata, se
 
 ## 10. Fitur Pasca-MVP
 
-Fitur berikut dicatat agar tidak “masuk diam-diam” ke rilis akademik.
+F63–F64 dan F66–F73 dicatat agar tidak “masuk diam-diam” ke rilis akademik. **F65 adalah Must Have MVP** (kursi bernomor dan denah venue statis) dan tetap memakai ID ini agar urutan F1–F77 tidak pecah. Clickable map, editor drag-and-drop, orphan-seat optimization, dan collaborative map editing tetap non-goal.
 
 ### F63 — Transaksi Uang Nyata, Settlement, dan Payout
 
@@ -914,13 +934,19 @@ Fitur berikut dicatat agar tidak “masuk diam-diam” ke rilis akademik.
 
 ### F65 — Kursi Bernomor dan Denah Venue
 
-- **Tipe/persona:** Mendatang — pembeli, organizer
-- **Prioritas:** Won’t Have
+- **Tipe/persona:** Inti — pembeli, organizer, petugas
+- **Prioritas:** Must Have
 - **Kompleksitas:** Tinggi
-- **Deskripsi:** Pemilihan dan penguncian kursi spesifik.
-- **Kriteria penerimaan rilis ini:** Semua tiket bersifat general admission.
-- **Teknis/kasus khusus:** Memerlukan seat-map editor dan locking kursi real-time.
-- **Dependensi/keahlian:** Interactive UI, concurrency.
+- **Deskripsi:** Event `RESERVED_SEATING` mengelompokkan kursi bernomor per kategori/area dan harga. Organizer mengunggah denah venue statis beserta legenda/teks alternatif; pembeli memilih kursi melalui list/grid aksesibel yang terpisah. Checkout menahan kursi 15 menit; Paid mengonversi hold menjadi tiket dengan snapshot kursi.
+- **Kriteria penerimaan:**
+  - Setiap event memilih tepat satu mode; `RESERVED_SEATING` mewajibkan section, kursi, denah statis, dan alt text/legenda.
+  - Dua pembeli yang memilih kursi yang sama hanya menghasilkan satu hold aktif atau satu tiket Paid.
+  - Hold kedaluwarsa, Failed, Expired, atau Cancelled melepaskan kursi tepat satu kali.
+  - Denah adalah gambar penjelasan, bukan peta klik atau editor drag-and-drop.
+  - Label kategori/kursi konsisten pada authoring, checkout, tiket, scanner, dan CSV.
+  - Clickable map, orphan-seat optimization, dan collaborative map editing berada di luar rilis ini.
+- **Teknis/kasus khusus:** Model `VenueSection`, `SeatMapAsset`, dan `EventSeat`; error `SEAT_UNAVAILABLE` dan `INVENTORY_MODE_MISMATCH`; mode immutable setelah commerce. Diselesaikan oleh RFC-008 dengan fondasi authoring di RFC-005.
+- **Dependensi/keahlian:** F15/F16, F21–F26, F34–F36, F39/F40, F46; PostgreSQL concurrency, object storage, WCAG 2.1 AA.
 
 ### F66 — Voucher, Promo, dan Referral
 
@@ -1002,26 +1028,100 @@ Fitur berikut dicatat agar tidak “masuk diam-diam” ke rilis akademik.
 - **Teknis/kasus khusus:** Memerlukan pricing strategy, invoice/tax, entitlement, refund allocation, dan eksperimen pasar.
 - **Dependensi/keahlian:** Product strategy, billing, legal/finance.
 
+## 11. Nilai Tambah Wajib
+
+Keempat fitur berikut adalah Must Have aktif MVP akademik. Implementasinya tetap provider-neutral, menggunakan data uji dan sandbox, serta tidak mengubah F42, F63–F64, dan F66–F73 yang tetap Won’t Have. F65 adalah Must Have inventori kursi bernomor dan bukan bagian Won’t Have.
+
+### F74 — Rekomendasi Event Serupa
+
+- **Tipe/persona:** Nilai tambah wajib — pengunjung/pembeli
+- **Prioritas:** Must Have
+- **Kompleksitas:** Tinggi
+- **Deskripsi:** Sistem menampilkan event serupa berdasarkan kategori, lokasi, organizer, konteks event/filter saat ini, serta riwayat Order Paid milik pembeli jika tersedia.
+- **Kriteria penerimaan:**
+  - Kandidat selalu dibatasi pada event Published dengan waktu event di masa depan.
+  - Untuk pembeli dengan riwayat, sinyal personal hanya berasal dari Order Paid milik pembeli tersebut; order Pending/Failed/Expired dan riwayat pengguna lain tidak digunakan.
+  - Tanpa riwayat Paid atau tanpa sesi, sistem memberi fallback kontekstual berdasarkan kategori, lokasi, organizer, dan event yang sedang dilihat.
+  - Event saat ini, Cancelled, Completed, draft, atau event yang waktunya telah lewat tidak ditampilkan.
+  - Ranking memiliki tie-breaker stabil, dapat diuji secara deterministik, dan empty state tidak menghalangi detail/katalog.
+- **Teknis/kasus khusus:** PostgreSQL adalah sumber kandidat dan status; minimalkan data profil, hindari kebocoran riwayat lintas akun, gunakan pagination/limit, dan jangan menganggap output AI sebagai kebutuhan fitur ini.
+- **Dependensi/keahlian:** F5, F11, F18–F21, F25/F31; query/index PostgreSQL, authorization, privacy testing.
+
+### F75 — Poin Loyalitas per Organizer
+
+- **Tipe/persona:** Nilai tambah wajib — pembeli, organizer
+- **Prioritas:** Must Have
+- **Kompleksitas:** Sangat tinggi
+- **Deskripsi:** Pembeli memperoleh dan menukarkan poin yang sepenuhnya terisolasi untuk setiap organizer dalam alur pembayaran sandbox.
+- **Aturan baseline:**
+  - Saldo terisolasi per pasangan pembeli–organizer; poin tidak dapat ditransfer, digabung lintas organizer, diuangkan, atau dipakai sebagai alat pembayaran di luar MyTicketIn.
+  - Earn adalah **1 poin per Rp1.000 net paid**; redeem bernilai **1 poin = Rp10** dan dibatasi maksimum **20% dari total order**.
+  - Poin, Rupiah, saldo, dan batas dihitung sebagai integer dengan aturan pembulatan turun yang eksplisit; poin tidak kedaluwarsa.
+  - Ledger bersifat append-only. Koreksi selalu berupa entri kompensasi dengan reference/idempotency key unik; histori tidak diubah atau dihapus.
+- **Kriteria penerimaan:**
+  - Checkout memvalidasi organizer seluruh item, saldo tersedia, nilai redeem, dan batas 20% pada server.
+  - Pembuatan order dan reservasi poin terjadi atomik; dua checkout bersamaan tidak dapat mereservasi saldo yang sama melebihi saldo tersedia.
+  - Order Pending yang menjadi Failed, Expired, atau Cancelled melepaskan reservasi tepat satu kali.
+  - Transisi pertama Order ke Paid mengonversi reservasi menjadi debit ledger dan memberikan poin earned dari net paid tepat satu kali, termasuk saat webhook direplay.
+  - Refund Completed membalik poin earned sesuai nominal net paid yang direfund melalui entri reversal; full refund Completed memulihkan seluruh poin yang diredeem melalui entri restore.
+  - Refund Requested/Processing/Failed belum mengubah ledger final; retry dan callback out-of-order tidak menggandakan debit, earn, reversal, atau restore.
+  - Saldo dan histori hanya terlihat oleh pembeli terkait serta admin yang berwenang; organizer hanya melihat agregat yang diizinkan, bukan saldo lintas pembeli tanpa kebutuhan.
+- **Teknis/kasus khusus:** Gunakan transaksi PostgreSQL, locking/conditional update, constraint non-negatif, unique idempotency reference, serta rekonsiliasi saldo dari ledger. Label seluruh nilai sebagai program sandbox tanpa nilai tunai.
+- **Dependensi/keahlian:** F5, F23–F33, F45, F52, F59; domain accounting, PostgreSQL concurrency, refund/idempotency testing.
+
+### F76 — Pemindaian Poster Event Berbantuan AI
+
+- **Tipe/persona:** Nilai tambah wajib — organizer
+- **Prioritas:** Must Have
+- **Kompleksitas:** Tinggi
+- **Deskripsi:** Organizer mengunggah poster untuk memperoleh saran terstruktur bagi field draft event, lalu meninjau dan memilih saran sebelum menyimpan.
+- **Kriteria penerimaan:**
+  - Sistem menerima hanya tipe/ukuran gambar yang diizinkan, menerapkan rate limit, dan memperlakukan gambar, OCR, teks, serta metadata sebagai input tidak tepercaya.
+  - Output AI harus sesuai schema/allowlist field draft, misalnya nama, deskripsi, kategori, venue, alamat, waktu, syarat, dan kontak; nilai invalid ditolak atau ditandai.
+  - UI memperlihatkan saran dan perbedaan terhadap draft saat ini; organizer memilih field yang diterapkan dan menekan simpan secara eksplisit.
+  - Pemrosesan tidak pernah membuat event secara diam-diam, auto-submit ke moderasi, auto-approve, atau auto-publish.
+  - Saran tidak dapat melewati ownership, status event, validasi tanggal, moderasi, atau aturan F9–F12.
+  - Timeout, output malformed, atau provider failure menampilkan recovery yang jelas dan tidak merusak draft yang telah ada.
+  - Retensi gambar/output, redaksi PII/log, penghapusan artefak, limit penggunaan, dan provider/model ditutup melalui decision gate sebelum integrasi.
+- **Teknis/kasus khusus:** Gunakan port provider-neutral dan structured output validation; jangan memasukkan instruksi dari poster ke system/tool context, jangan log prompt/gambar/output mentah, dan sediakan deterministic fake untuk test. Tidak ada SDK provider yang dipilih pada baseline.
+- **Dependensi/keahlian:** F5, F9/F10, F22 bila penyimpanan persisten diperlukan, F45, F53, F58, F61/F62; secure upload, AI safety, privacy.
+
+### F77 — Pencarian Event dengan Bahasa Alami Berbantuan AI
+
+- **Tipe/persona:** Nilai tambah wajib — pengunjung/pembeli
+- **Prioritas:** Must Have
+- **Kompleksitas:** Tinggi
+- **Deskripsi:** AI menerjemahkan permintaan pencarian bahasa alami menjadi intent dan filter katalog tervalidasi; aplikasi lalu mengambil hasil dari PostgreSQL.
+- **Kriteria penerimaan:**
+  - Model hanya boleh menghasilkan struktur filter dari allowlist, seperti kata kunci, kategori, lokasi, rentang tanggal, dan organizer; model tidak menghasilkan atau menjalankan SQL.
+  - Boundary memvalidasi panjang input, schema output, enum, tanggal, dan operator sebelum filter digunakan.
+  - Query dibangun oleh repository/application code berparameter dan selalu membatasi hasil ke event Published; event tidak pernah dibuat/dihasilkan oleh model.
+  - Filter hasil parsing terlihat, dapat dihapus/diubah, dan tersinkron ke URL.
+  - Timeout, rate limit, output invalid, atau provider failure otomatis memakai F19/F20 sebagai fallback pencarian standar tanpa memblokir katalog.
+  - Query dan output tidak dicatat utuh bila mengandung PII; telemetry hanya menyimpan metadata aman dan reason code fallback.
+- **Teknis/kasus khusus:** Gunakan port provider-neutral, timeout/circuit breaker terukur, structured output validation, dan deterministic fake. AI tidak menjadi source of truth katalog dan tidak memiliki akses langsung database.
+- **Dependensi/keahlian:** F18–F20, F53, F58, F61/F62; Zod/schema validation, PostgreSQL search, AI security.
+
 ## Jalur Kritis dan Urutan Implementasi
 
 ### Jalur Kritis
 
-`F5 RBAC → F7–F12 Organizer/Event → F15–F16 Inventori → F23–F28 Order/Reservasi → F29–F32 Payment/Webhook → F34–F40 Ticket/Check-in → UAT`
+`Decision gate provider → F5 RBAC → F7–F12 Organizer/Event + F76 AI Draft → F15–F21 Discovery + F65 + F77 → F23–F28 Order/Reservasi/Hold kursi + F75 → F29–F32 Payment/Webhook/Ledger → F34–F40 Ticket/Check-in → F46/F74/F49–F51 → UAT`
 
-Fitur platform **F58–F62** harus dibangun bersama jalur kritis, bukan ditunda ke akhir.
+Fitur platform **F58–F62** harus dibangun bersama jalur kritis, bukan ditunda ke akhir. Seluruh **57 Must Have** wajib selesai dalam baseline 12 minggu; risiko jadwal tinggi harus dimitigasi melalui pemotongan Should/Could atau perubahan kapasitas yang disetujui, bukan dengan menurunkan Must secara diam-diam.
 
 ### Urutan yang Disarankan
 
 | Tahap | Fitur Utama | Exit Criteria |
 |---|---|---|
 | 1. Fondasi | F1–F8, F45, F61 | Login, role, ownership, dan moderasi organizer aman |
-| 2. Event dan katalog | F9–F21 | Event dapat diajukan, disetujui, dan ditemukan |
-| 3. Order dan inventori | F23–F28, F59 | Concurrent checkout tidak oversell; expiry aman |
-| 4. Payment sandbox | F29–F32 | Skenario webhook sukses/gagal/duplikat/terlambat lulus |
+| 2. Event dan katalog | F9–F21, F65, F76–F77 | Event dapat diajukan, ditemukan, dan dicari; AI tetap menghasilkan saran draft/filter; denah/kursi dapat diauthor |
+| 3. Order dan inventori | F23–F28, F59, F65, F75 | Concurrent checkout tidak oversell/over-redeem; expiry melepas kuota, hold kursi, dan poin |
+| 4. Payment sandbox | F29–F32, F75 | Webhook dan konversi/reversal ledger idempoten lulus |
 | 5. Ticket dan check-in | F34–F40 | Penerbitan tepat satu tiket per unit dan double-scan ditolak |
-| 6. Operasional | F43–F45, F49, F52–F62 | Dashboard, audit, observability, dan release gate siap |
-| 7. Peningkatan | F6, F14, F20, F22, F33, F41, F46, F50 | Dikerjakan jika jalur kritis stabil |
-| 8. Opsional | F13, F17, F47, F48, F51 | Dikerjakan hanya jika waktu tersisa |
+| 6. Operasional wajib | F43–F46, F49–F62, F74 | Dashboard, rekomendasi berbasis histori Paid, ekspor, notifikasi/email/reminder, audit, observability, dan release gate siap |
+| 7. Should Have | F6, F14, F22, F33, F41 | Dikerjakan jika jalur kritis stabil |
+| 8. Could Have | F13, F17, F47, F48 | Dikerjakan hanya jika waktu tersisa |
 
 ## Peta Dependensi Utama
 
@@ -1029,14 +1129,19 @@ Fitur platform **F58–F62** harus dibangun bersama jalur kritis, bukan ditunda 
 |---|---|---|
 | F5 RBAC | F1–F4 | Seluruh fitur organizer/admin/petugas |
 | F11 Publikasi | F7–F10, F15 | F18–F21, checkout |
-| F16 Inventori | F15 | F23–F28 |
-| F26 Reservasi | F16, F25, F59 | F29–F32 |
+| F16 Inventori | F15, F65 | F23–F28 |
+| F26 Reservasi | F16, F25, F59, F65 | F29–F32 |
 | F31 Webhook | F25, F29 | F34–F36 |
-| F34 Penerbitan tiket | F31, F35 | F36–F40 |
+| F34 Penerbitan tiket | F31, F35, F65 | F36–F40 |
 | F39 Check-in atomik | F34–F38 | F40, metrik check-in |
 | F45 Audit | Model aktor/entitas | Moderasi, refund, investigasi |
 | F58 Observability | Error/event schema | Release gate |
 | F61/F62 Deployment | Hosting, database, secrets | UAT dan rilis |
+| F65 Kursi bernomor | F15/F16, F21–F26, F34–F36 | Checkout, tiket, scanner, CSV |
+| F74 Rekomendasi | F5, F11, F18–F21, F25/F31 | Discovery personal/kontekstual |
+| F75 Loyalitas | F5, F23–F33, F45, F59 | Checkout, payment, refund, rekonsiliasi |
+| F76 AI poster | F5, F9/F10, F53/F58, provider gate | Draft event terstruktur |
+| F77 AI search | F18–F20, F53/F58, provider gate | Discovery bahasa alami |
 
 ## Decision Gates
 
@@ -1046,7 +1151,9 @@ Fitur platform **F58–F62** harus dibangun bersama jalur kritis, bukan ditunda 
 2. **Object storage:** pilih provider atau gunakan placeholder sehingga F22 tidak memblokir jalur kritis.
 3. **Scheduler:** tentukan mekanisme cron/job yang tersedia pada hosting untuk F59.
 4. **Hosting dan lingkungan:** tetapkan deployment Preview/Test dan Production Demo.
-5. **Pemilik keputusan:** tetapkan pihak yang menyetujui perubahan MoSCoW dan UAT.
+5. **AI provider-neutral:** setujui kebutuhan model/provider, structured output, lokasi pemrosesan, kebijakan retensi/penghapusan, redaksi PII, rate limit/quota, biaya, timeout, dan observability untuk F76/F77. Jangan memilih SDK provider sebelum gate ditutup.
+6. **Email provider:** setujui provider, sender/domain sandbox, quota, retry, dan batas deliverability untuk F50/F51.
+7. **Pemilik keputusan:** tetapkan pihak yang menyetujui perubahan MoSCoW dan UAT.
 
 ### Sebelum Pilot dengan Uang atau Data Nyata
 

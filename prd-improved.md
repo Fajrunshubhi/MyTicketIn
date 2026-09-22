@@ -1,8 +1,8 @@
-# Product Requirements Document — TicketIn
+# Product Requirements Document — MyTicketIn
 
 | Atribut | Nilai |
 |---|---|
-| **Versi** | 2.0 |
+| **Versi** | 2.2 |
 | **Status** | Baseline implementasi MVP akademik |
 | **Platform** | Web responsif |
 | **Pasar sasaran** | Indonesia, event tatap muka |
@@ -14,7 +14,7 @@
 
 ## 1. Ringkasan Eksekutif
 
-TicketIn adalah platform web untuk membuat, menemukan, membeli, dan memvalidasi tiket event tatap muka. Organizer dapat mengelola beberapa event dan inventori tiket; pembeli dapat mencari event, melakukan pembayaran sandbox, menerima e-ticket QR, dan melihat riwayat tiket; admin memoderasi organizer/event serta mengawasi transaksi; petugas melakukan check-in satu kali.
+MyTicketIn adalah platform web untuk membuat, menemukan, membeli, dan memvalidasi tiket event tatap muka. Organizer dapat mengelola beberapa event dan inventori tiket dalam salah satu dari tiga mode: general admission, zona/kategori, atau kursi bernomor; pembeli dapat menemukan event melalui filter, rekomendasi, dan pencarian bahasa alami, memilih tiket atau kursi sesuai mode event, melakukan pembayaran sandbox dengan loyalitas per organizer, menerima e-ticket QR, serta melihat riwayat tiket; admin memoderasi organizer/event serta mengawasi transaksi; petugas melakukan check-in satu kali. Organizer juga memperoleh bantuan AI untuk mengekstrak saran draft event dari poster, dengan review manusia sebelum data disimpan.
 
 **Hipotesis produk:** jika penjualan, status pembayaran, inventori, dan check-in dikelola dalam satu sistem, organizer dapat mengurangi pekerjaan rekap dan risiko tiket ganda, sementara pembeli memperoleh pengalaman yang lebih jelas dan tepercaya.
 
@@ -30,10 +30,10 @@ Organizer yang menggunakan formulir, pesan pribadi, dan transfer manual harus me
 
 ### 2.3 Nilai per Pengguna
 
-| Pengguna | Kebutuhan | Nilai TicketIn |
+| Pengguna | Kebutuhan | Nilai MyTicketIn |
 |---|---|---|
-| **Pembeli** | Menemukan event dan memperoleh tiket yang valid tanpa ketidakjelasan status | Katalog terpusat, checkout, status pembayaran, dan tiket QR |
-| **Organizer** | Menjual tiket tanpa rekap manual dan memantau kehadiran | Inventori atomik, dashboard, serta check-in terintegrasi |
+| **Pembeli** | Menemukan event dan memperoleh tiket yang valid tanpa ketidakjelasan status | Katalog terpusat, pemilihan tiket/kursi sesuai mode, checkout, status pembayaran, dan tiket QR |
+| **Organizer** | Menjual tiket tanpa rekap manual dan memantau kehadiran | Inventori atomik per mode, denah statis, dashboard, serta check-in terintegrasi |
 | **Petugas** | Memvalidasi peserta dengan cepat dan pasti | Scanner dengan hasil Valid/Used/Invalid yang tegas |
 | **Admin** | Mengendalikan kualitas dan menelusuri insiden | Moderasi, pencarian data operasional, serta audit log |
 
@@ -43,15 +43,16 @@ Organizer yang menggunakan formulir, pesan pribadi, dan transfer manual harus me
 
 1. Membuktikan alur organizer dari pembuatan event sampai pemantauan check-in.
 2. Membuktikan alur pembeli dari pencarian sampai memperoleh tiket setelah pembayaran sandbox.
-3. Menjamin kuota tidak terjual melebihi batas pada profil beban uji.
+3. Menjamin kuota dan kursi bernomor tidak terjual melebihi batas pada profil beban uji.
 4. Menjamin satu tiket hanya dapat berhasil di-check-in satu kali.
 5. Mengukur kegunaan produk melalui tugas pengguna dan System Usability Scale (SUS).
+6. Membuktikan delapan fitur nilai tambah wajib—filter event; notifikasi dan reminder; ekspor CSV; rekomendasi; loyalitas; pemindaian poster berbantuan AI; pencarian bahasa alami berbantuan AI; serta kursi bernomor dengan denah venue statis—tanpa melemahkan integritas transaksi inti.
 
 ### 3.2 Non-Tujuan MVP
 
 - Mengoperasikan marketplace tiket komersial atau menerima uang nyata.
 - Menyediakan settlement/payout organizer dan rekonsiliasi finansial produksi.
-- Menangani kursi bernomor, resale, transfer tiket, voucher, atau dynamic pricing.
+- Menangani editor denah interaktif, clickable map, orphan-seat optimization, resale, transfer tiket, voucher, atau dynamic pricing.
 - Mendukung event online/hybrid, multi-negara, multi-mata uang, atau aplikasi mobile native.
 - Menyediakan scanner offline atau integrasi perangkat turnstile.
 - Menyatakan kepatuhan produksi hanya berdasarkan pengujian akademik.
@@ -61,14 +62,14 @@ Organizer yang menggunakan formulir, pesan pribadi, dan transfer manual harus me
 ### 4.1 Pembeli — “Raka”
 
 - **Konteks:** mencari event melalui ponsel dan terbiasa dengan QRIS/e-wallet.
-- **Tujuan:** membeli tiket yang tersedia dan membukanya kembali saat hari acara.
-- **JTBD:** “Ketika menemukan event yang ingin saya hadiri, saya ingin mengetahui harga dan ketersediaannya, menyelesaikan pembayaran, lalu memperoleh tiket yang statusnya jelas.”
+- **Tujuan:** membeli tiket atau kursi yang tersedia dan membukanya kembali saat hari acara.
+- **JTBD:** “Ketika menemukan event yang ingin saya hadiri, saya ingin mengetahui harga, kategori, dan ketersediaannya—termasuk kursi bernomor bila event memakai denah—menyelesaikan pembayaran, lalu memperoleh tiket yang statusnya jelas.”
 
 ### 4.2 Organizer — “Nadia”
 
-- **Konteks:** mengelola beberapa event dengan kelas dan kuota tiket berbeda.
-- **Tujuan:** menerbitkan event, memantau penjualan, dan mengetahui jumlah peserta hadir.
-- **JTBD:** “Ketika menjual tiket, saya ingin kuota dan pembayaran diperbarui otomatis agar tidak perlu merekap manual atau menerima pesanan berlebih.”
+- **Konteks:** mengelola beberapa event dengan kelas, zona, atau kursi bernomor yang harganya berbeda.
+- **Tujuan:** menerbitkan event, memantau penjualan per kategori/kursi, dan mengetahui jumlah peserta hadir.
+- **JTBD:** “Ketika menjual tiket, saya ingin kuota, kursi, dan pembayaran diperbarui otomatis agar tidak perlu merekap manual atau menerima pesanan berlebih.”
 
 ### 4.3 Petugas Check-in — “Dimas”
 
@@ -91,42 +92,54 @@ Keputusan berikut menjadi baseline implementasi. Perubahan harus dicatat sebagai
 | **Akun** | Satu akun biasa dapat membeli tiket dan mengajukan profil organizer; ADMIN adalah peran terpisah |
 | **Verifikasi organizer** | Admin menyetujui nama organizer, kontak, dan deskripsi; verifikasi legal/KYC bukan bagian demo akademik |
 | **Moderasi event** | Event harus disetujui admin sebelum Published |
-| **Tipe event** | Tatap muka, tanpa pemilihan kursi |
+| **Tipe event** | Tatap muka; setiap event memilih tepat satu mode: `GENERAL_ADMISSION`, `ZONED`, atau `RESERVED_SEATING` |
+| **Denah kursi MVP** | Organizer mengunggah gambar denah statis dan legenda/teks alternatif; pembeli memilih melalui list/grid aksesibel terpisah. Clickable map, editor drag-and-drop, orphan-seat optimization, dan collaborative map editing bukan bagian MVP |
 | **Pembayaran** | Satu payment gateway sandbox; QRIS, virtual account, dan e-wallet jika tersedia dalam akun sandbox |
-| **Reservasi kuota** | 15 menit sejak order dibuat; setelah itu order Expired dan kuota dilepas |
+| **Reservasi kuota** | 15 menit sejak order dibuat; setelah itu order Expired dan kuota/hold kursi dilepas |
 | **Batas pembelian** | Maksimal 5 tiket per jenis tiket per akun per event |
-| **Tiket** | Satu unit tiket menghasilkan satu QR unik setelah order Paid |
+| **Tiket** | Satu unit tiket menghasilkan satu QR unik setelah order Paid; tiket kursi menyimpan snapshot label/kategori/harga |
 | **Check-in** | Online; hanya organizer pemilik event atau petugas yang diberi akses |
 | **Pembatalan/refund** | Admin mencatat siklus refund sandbox; tidak ada pengembalian uang nyata |
-| **Notifikasi** | In-app wajib; email bersifat Should Have |
+| **Notifikasi** | In-app dan email transaksional wajib; reminder event wajib |
 | **Bahasa/mata uang** | Bahasa Indonesia dan Rupiah |
 | **Data pengujian** | Gunakan akun dan transaksi uji; hindari dokumen identitas nyata |
+| **Rekomendasi** | Hanya event Published yang akan datang; gunakan kategori, lokasi, organizer, dan riwayat Paid milik pembeli; fallback kontekstual tersedia tanpa riwayat |
+| **Loyalitas** | Poin terisolasi per pasangan pembeli–organizer; 1 poin per Rp1.000 net paid, nilai redeem 1 poin = Rp10, maksimum 20% order, tanpa kedaluwarsa dan tanpa nilai tunai |
+| **AI poster** | Hanya menghasilkan saran terstruktur; organizer wajib meninjau, menerapkan, dan menyimpan; AI tidak boleh auto-submit atau auto-publish |
+| **AI search** | AI hanya mengubah bahasa alami menjadi filter tervalidasi; PostgreSQL tetap memilih event Published; fallback ke pencarian standar bila AI gagal |
+| **Provider AI** | Provider-neutral dan baru dipilih melalui decision gate; tidak ada SDK provider yang dipilih pada baseline |
 
 ## 6. Ruang Lingkup dengan MoSCoW
 
 ### 6.1 Must Have
 
+- Baseline terdiri dari **57 Must Have**; bersama 5 Should Have dan 4 Could Have, cakupan aktif MVP adalah **66 dari total 77 fitur**. F42, F63–F64, dan F66–F73 tetap Won’t Have; F65 adalah Must Have.
 - Registrasi/login, logout, sesi, dan otorisasi server-side.
 - Pengajuan dan persetujuan profil organizer.
 - CRUD draft event, moderasi, publikasi, dan pembatalan.
-- Beberapa jenis tiket per event dengan harga, kuota, dan periode penjualan.
-- Katalog, pencarian kata kunci, detail event, dan filter dasar.
-- Checkout satu event, reservasi kuota, order, dan pembayaran sandbox.
+- Beberapa jenis tiket per event dengan harga, kuota, periode penjualan, serta tepat satu mode inventori: `GENERAL_ADMISSION`, `ZONED`, atau `RESERVED_SEATING`.
+- Authoring kategori/area, kursi bernomor, serta unggahan denah venue statis beserta legenda/teks alternatif.
+- Katalog, pencarian kata kunci, detail event, denah statis, serta filter kategori, lokasi, dan tanggal.
+- Rekomendasi event serupa yang aman dan kontekstual.
+- Pencarian event bahasa alami dengan parsing AI ke filter tervalidasi dan fallback pencarian standar.
+- AI poster scan yang hanya memberi saran draft terstruktur dengan human review.
+- Checkout satu event, reservasi kuota atau hold kursi 15 menit, order, dan pembayaran sandbox.
+- Poin loyalitas per organizer dengan reservasi dan ledger atomik.
 - Webhook pembayaran yang terverifikasi dan idempoten.
 - Penerbitan e-ticket QR setelah status Paid.
 - Daftar tiket pembeli.
 - Scanner online dan check-in atomik satu kali.
 - Dashboard minimum organizer dan admin.
+- Ekspor peserta/check-in CSV yang aman.
+- Notifikasi in-app, email transaksional, dan reminder event.
 - Audit log untuk moderasi, perubahan status pembayaran, pembatalan, refund, dan check-in.
-- Penanganan error utama: stok habis, order kedaluwarsa, webhook ganda, QR salah event, QR used, serta akses tanpa izin.
+- Penanganan error utama: stok habis, kursi tidak tersedia, mode inventori tidak cocok, order kedaluwarsa, webhook ganda, QR salah event, QR used, serta akses tanpa izin.
 
 ### 6.2 Should Have
 
-- Email konfirmasi pembayaran, tiket, dan pembatalan.
 - Petugas check-in terpisah yang dapat diberi/dicabut akses per event.
 - Input kode tiket manual saat kamera gagal.
-- Ekspor peserta dan check-in ke CSV.
-- Filter katalog berdasarkan kategori, lokasi, dan tanggal.
+- Gambar event melalui object storage.
 - Pencatatan refund sandbox dengan status lengkap.
 - Reset kata sandi.
 
@@ -134,14 +147,13 @@ Keputusan berikut menjadi baseline implementasi. Perubahan harus dicatat sebagai
 
 - Pratinjau event sebelum diajukan.
 - Grafik penjualan sederhana.
-- Reminder menjelang event.
 - Pencarian admin lintas entitas.
 - Penghentian penjualan per jenis tiket.
 
 ### 6.4 Won’t Have pada Rilis Ini
 
 - Transaksi uang nyata, payout, atau refund finansial nyata.
-- Kursi bernomor, kode promo, waiting list, resale, dan transfer tiket.
+- Editor denah interaktif, clickable map, orphan-seat optimization, kode promo, waiting list, resale, dan transfer tiket.
 - Event online/hybrid, aplikasi native, dan scanner offline.
 - Multi-bahasa, multi-mata uang, dan monetisasi.
 
@@ -173,22 +185,26 @@ Keputusan berikut menjadi baseline implementasi. Perubahan harus dicatat sebagai
 
 **MoSCoW:** Must Have
 
-- **Given** organizer Approved, **when** data wajib dan minimal satu jenis tiket valid disimpan, **then** event dapat diajukan.
+- **Given** organizer Approved, **when** data wajib, mode inventori, dan minimal satu jenis tiket valid disimpan, **then** event dapat diajukan.
 - **Given** event Pending Review, **when** admin menyetujui, **then** status menjadi Published dan event tampil di katalog.
 - **Given** event Rejected, **when** organizer membuka event, **then** alasan terlihat dan event dapat diperbaiki lalu diajukan ulang.
 - Event yang sudah memiliki order Paid tidak boleh dihapus; hanya dapat dibatalkan.
 
 ### US-04 — Inventori Tiket
 
-**Sebagai organizer, saya ingin menentukan harga, kuota, dan periode penjualan agar penjualan mengikuti kapasitas event.**
+**Sebagai organizer, saya ingin menentukan mode inventori, harga, kuota, kategori/kursi, dan periode penjualan agar penjualan mengikuti kapasitas event.**
 
 **MoSCoW:** Must Have
 
+- Setiap event memilih tepat satu mode: `GENERAL_ADMISSION`, `ZONED`, atau `RESERVED_SEATING`.
 - Harga berupa bilangan Rupiah ≥ 0 dan kuota berupa bilangan bulat positif.
 - Waktu mulai penjualan harus lebih awal daripada waktu selesai dan waktu event.
-- Ketersediaan dihitung sebagai `kuota - paid - reservasi_aktif`.
+- Ketersediaan kategori dihitung sebagai `kuota - paid - reservasi_aktif`.
+- Untuk `RESERVED_SEATING`, ketersediaan kursi adalah kursi tanpa hold aktif dan tanpa tiket Paid.
 - Perubahan harga tidak mengubah item order yang telah dibuat.
 - Penurunan kuota tidak boleh lebih kecil dari jumlah Paid dan reservasi aktif.
+- Mode inventori tidak boleh diubah setelah commerce dimulai.
+- Organizer mengunggah gambar denah statis beserta legenda/teks alternatif untuk `RESERVED_SEATING`; denah bukan peta klik.
 
 ### US-05 — Penemuan Event
 
@@ -198,18 +214,19 @@ Keputusan berikut menjadi baseline implementasi. Perubahan harus dicatat sebagai
 
 - Hanya event Published yang muncul di katalog.
 - Pencarian kata kunci mencocokkan minimal nama event.
-- Detail menampilkan organizer, deskripsi, waktu, lokasi, syarat, jenis tiket, harga, periode penjualan, dan status ketersediaan.
+- Detail menampilkan organizer, deskripsi, waktu, lokasi, syarat, jenis/kategori tiket, harga, periode penjualan, status ketersediaan, serta denah statis dan selector kursi jika mode `RESERVED_SEATING`.
 - Event Cancelled atau Completed tidak dapat memulai checkout.
 
 ### US-06 — Checkout dan Reservasi
 
-**Sebagai pembeli, saya ingin memilih tiket dan memperoleh waktu pembayaran agar kuota tidak direbut saat saya membayar.**
+**Sebagai pembeli, saya ingin memilih tiket atau kursi dan memperoleh waktu pembayaran agar kuota atau kursi tidak direbut saat saya membayar.**
 
 **MoSCoW:** Must Have
 
-- **Given** kuota tersedia, **when** checkout dibuat, **then** sistem membuat order Pending dan reservasi selama 15 menit.
-- **Given** sisa kuota tidak cukup, **when** checkout diproses, **then** sistem menolak tanpa membuat reservasi parsial.
-- **Given** order melewati 15 menit tanpa Paid, **when** proses kedaluwarsa berjalan, **then** status menjadi Expired dan kuota dilepas.
+- **Given** kuota atau kursi tersedia, **when** checkout dibuat, **then** sistem membuat order Pending dan reservasi/hold selama 15 menit.
+- **Given** sisa kuota tidak cukup atau kursi sudah di-hold/Paid, **when** checkout diproses, **then** sistem menolak tanpa membuat reservasi parsial.
+- **Given** dua pembeli memilih kursi yang sama, **when** keduanya checkout, **then** hanya satu hold aktif yang berhasil.
+- **Given** order melewati 15 menit tanpa Paid, **when** proses kedaluwarsa berjalan, **then** status menjadi Expired dan kuota/hold kursi dilepas.
 - Permintaan checkout ganda dengan idempotency key yang sama tidak membuat dua order.
 
 ### US-07 — Pembayaran Sandbox
@@ -232,7 +249,7 @@ Keputusan berikut menjadi baseline implementasi. Perubahan harus dicatat sebagai
 
 - Jumlah tiket Issued sama dengan jumlah unit pada order Paid.
 - Setiap QR menggunakan token acak/ditandatangani yang unik dan tidak mengekspos data pribadi.
-- Tiket menampilkan event, jenis tiket, pemilik order, dan status Unused/Used/Cancelled.
+- Tiket menampilkan event, jenis/kategori tiket, label kursi bila ada, pemilik order, dan status Unused/Used/Cancelled.
 - Order Pending, Failed, atau Expired tidak menghasilkan tiket.
 
 ### US-09 — Check-in
@@ -241,7 +258,7 @@ Keputusan berikut menjadi baseline implementasi. Perubahan harus dicatat sebagai
 
 **MoSCoW:** Must Have
 
-- QR Unused untuk event dan petugas yang benar menghasilkan Valid lalu berubah atomik menjadi Used.
+- QR Unused untuk event dan petugas yang benar menghasilkan Valid lalu berubah atomik menjadi Used; hasil menampilkan kategori/label kursi yang konsisten dengan tiket.
 - Dua pemindaian bersamaan terhadap tiket yang sama hanya menghasilkan satu keberhasilan.
 - QR Used menghasilkan Already Used beserta waktu penggunaan pertama.
 - QR event lain, tidak dikenal, Cancelled, atau terkait order tidak Paid ditolak dengan alasan yang sesuai.
@@ -254,7 +271,7 @@ Keputusan berikut menjadi baseline implementasi. Perubahan harus dicatat sebagai
 **MoSCoW:** Must Have
 
 - Organizer hanya dapat melihat event miliknya.
-- Ringkasan menampilkan order Paid, tiket terjual, pendapatan sandbox bruto, dan check-in.
+- Ringkasan menampilkan order Paid, tiket terjual, pendapatan sandbox bruto, check-in, serta penjualan per kategori/kursi sesuai mode event.
 - Angka ringkasan konsisten dengan data transaksi sumber.
 
 ### US-11 — Administrasi dan Audit
@@ -280,28 +297,76 @@ Keputusan berikut menjadi baseline implementasi. Perubahan harus dicatat sebagai
 - Catatan refund menyimpan nominal, alasan, status, admin, dan referensi provider bila ada.
 - Pengembalian uang nyata berada di luar cakupan.
 
+### US-13 — Rekomendasi Event Serupa
+
+**Sebagai pembeli, saya ingin melihat event serupa agar lebih mudah menemukan event relevan.**
+
+**MoSCoW:** Must Have
+
+- Kandidat hanya event Published dengan waktu event di masa depan.
+- Ranking menggunakan kategori, lokasi, organizer, dan—bila pengguna login—riwayat Order Paid milik pembeli tersebut.
+- Riwayat pembeli lain, order non-Paid, dan data lintas akun tidak boleh memengaruhi profil personal pembeli.
+- Tanpa riwayat Paid, sistem memberikan fallback kontekstual dari event/detail/filter yang sedang dilihat.
+
+### US-14 — Poin Loyalitas per Organizer
+
+**Sebagai pembeli, saya ingin memperoleh dan memakai poin organizer secara aman pada order berikutnya.**
+
+**MoSCoW:** Must Have
+
+- Saldo dipisahkan per pasangan pembeli–organizer; poin tidak dapat dipindahkan, diuangkan, atau dipakai pada organizer lain.
+- Pembeli memperoleh 1 poin per Rp1.000 net paid dan dapat redeem 1 poin senilai Rp10, maksimum 20% total order; seluruh perhitungan memakai integer dan poin tidak kedaluwarsa.
+- Checkout mereservasi poin secara atomik; order Pending yang Failed, Expired, atau Cancelled melepaskan reservasi.
+- Transisi pertama ke Paid mengubah reservasi menjadi debit ledger dan memberikan poin earned tepat satu kali.
+- Refund Completed membalik poin earned; full refund Completed memulihkan poin yang diredeem. Ledger bersifat append-only dengan entri kompensasi.
+
+### US-15 — Pemindaian Poster Event Berbantuan AI
+
+**Sebagai organizer, saya ingin memperoleh saran draft dari poster agar input event lebih cepat tanpa kehilangan kendali.**
+
+**MoSCoW:** Must Have
+
+- Gambar/teks poster diperlakukan sebagai input tidak tepercaya dan hanya menghasilkan saran terstruktur untuk field yang diizinkan.
+- Organizer melihat perbedaan, memilih saran yang diterapkan, lalu menyimpan draft secara eksplisit.
+- Sistem tidak pernah membuat submission moderasi atau mem-Published event secara otomatis.
+- Upload dan pemrosesan menerapkan validasi file, rate limit, timeout, redaksi PII/log, serta kebijakan retensi; kegagalan provider tidak merusak draft yang ada.
+
+### US-16 — Pencarian Event dengan Bahasa Alami Berbantuan AI
+
+**Sebagai pengunjung, saya ingin mencari event dengan bahasa alami agar kebutuhan saya diterjemahkan ke filter yang tepat.**
+
+**MoSCoW:** Must Have
+
+- AI hanya menghasilkan intent/filter dari schema dan allowlist yang tervalidasi, bukan SQL atau event.
+- PostgreSQL menjalankan query aplikasi dan hanya mengembalikan event Published.
+- Query/filter hasil parsing terlihat dan dapat diubah pengguna.
+- Timeout, output invalid, atau kegagalan provider beralih ke pencarian kata kunci/filter standar dengan pesan yang jelas.
+
 ## 8. Alur Utama dan Alur Kegagalan
 
 ### 8.1 Jalur Organizer
 
-`Daftar/Login → Ajukan organizer → Persetujuan admin → Buat event → Tambah jenis tiket → Ajukan event → Persetujuan admin → Published → Pantau penjualan/check-in`
+`Daftar/Login → Ajukan organizer → Persetujuan admin → Buat event atau scan poster menjadi saran draft → Review/apply/save → Pilih mode inventori → Tambah jenis tiket/kategori/kursi dan denah statis → Ajukan event → Persetujuan admin → Published → Pantau penjualan/check-in`
 
 Alur kegagalan:
 
 - Pengajuan ditolak → alasan tampil → organizer memperbaiki dan mengajukan ulang.
+- AI poster gagal/output invalid → draft lama tetap aman dan organizer melanjutkan input manual.
 - Event sudah memiliki order Paid → penghapusan ditolak → gunakan pembatalan.
 - Periode penjualan tidak valid → event tidak dapat diajukan.
 
 ### 8.2 Jalur Pembeli
 
-`Katalog → Detail event → Pilih tiket → Login → Reservasi 15 menit → Pembayaran sandbox → Webhook Paid → Tiket QR`
+`Katalog/filter/rekomendasi/AI search → Detail event → Pilih tiket atau kursi sesuai mode → Login → Pilih poin organizer → Reservasi inventori+poin 15 menit → Pembayaran sandbox → Webhook Paid → Ledger+poin earned → Tiket QR`
 
 Alur kegagalan:
 
-- Kuota habis saat checkout → order tidak dibuat dan pengguna diminta memilih ulang.
+- Kuota habis atau kursi tidak tersedia saat checkout → order tidak dibuat dan pengguna diminta memilih ulang.
 - Pembayaran gagal → order Failed dan kuota dilepas.
 - Waktu habis → order Expired dan pembeli harus checkout ulang.
+- Pembayaran gagal/expired/cancelled → reservasi poin, kuota, dan hold kursi dilepas tepat satu kali.
 - Callback terlambat setelah Expired → admin merekonsiliasi; tiket tidak diterbitkan otomatis.
+- AI search gagal → gunakan pencarian kata kunci/filter standar; jangan menghasilkan query SQL dari model.
 
 ### 8.3 Jalur Check-in
 
@@ -325,6 +390,7 @@ Alur kegagalan:
 | **Payment** | Created, Pending, Succeeded, Failed, Expired, Refunded |
 | **Ticket** | Unused, Used, Cancelled |
 | **Refund** | Requested, Approved, Rejected, Processing, Completed, Failed |
+| **LoyaltyPointReservation** | Active, Released, Consumed |
 
 Reservasi inventori adalah entitas/record terpisah yang terkait dengan Order, bukan status Ticket. Ticket baru dibuat setelah Order Paid.
 
@@ -337,6 +403,17 @@ Reservasi inventori adalah entitas/record terpisah yang terkait dengan Order, bu
 5. Organizer tidak dapat membaca data peserta event milik organizer lain.
 6. Event Cancelled tidak dapat kembali menjadi Published.
 7. Status berubah hanya melalui transisi yang diizinkan dan tercatat.
+8. Saldo poin terisolasi per pasangan pembeli–organizer dan tidak dapat dipindahkan, diuangkan, atau digunakan lintas organizer.
+9. Poin dihitung dengan integer: 1 poin per Rp1.000 net paid; redeem bernilai Rp10 per poin dan tidak boleh melebihi 20% total order.
+10. Reservasi poin dan order dibuat atomik; order Pending yang Failed, Expired, atau Cancelled melepaskan reservasi tepat satu kali.
+11. Transisi pertama ke Paid mengubah reservasi menjadi debit ledger tepat satu kali dan memberikan poin earned tepat satu kali.
+12. Refund Completed membalik poin earned secara proporsional; full refund Completed memulihkan seluruh poin yang diredeem, tanpa mengubah/menghapus entri ledger lama.
+13. Hanya event Published dengan waktu event di masa depan dapat direkomendasikan atau dikembalikan oleh pencarian AI.
+14. Output AI tidak pernah menjadi SQL, event, submission, atau publication; seluruh output harus diperlakukan tidak tepercaya dan divalidasi terhadap schema/allowlist.
+15. Setiap event memiliki tepat satu mode inventori; mode tidak boleh diubah setelah order, reservasi, atau tiket Paid ada.
+16. Satu `EventSeat` paling banyak memiliki satu hold aktif atau satu Ticket Paid.
+17. Checkout `RESERVED_SEATING` menahan kursi spesifik selama 15 menit; Failed/Expired/Cancelled melepaskan hold tepat satu kali.
+18. Request yang tidak sesuai mode event ditolak dengan `INVENTORY_MODE_MISMATCH`; kursi yang sudah di-hold atau Paid ditolak dengan `SEAT_UNAVAILABLE`.
 
 ## 10. Persyaratan Data
 
@@ -345,49 +422,61 @@ Reservasi inventori adalah entitas/record terpisah yang terkait dengan Order, bu
 | **User** | ID, nama, username, email, password hash/Google ID, status |
 | **Role/Permission** | user, organizer capability, admin, assignment petugas |
 | **OrganizerProfile** | owner, nama, kontak, deskripsi, status, alasan keputusan |
-| **Event** | organizer, nama, deskripsi, kategori, gambar, venue, alamat, waktu, status |
-| **TicketType** | event, nama, harga, kuota, jadwal penjualan, limit |
-| **Order/OrderItem** | pembeli, snapshot item/harga, total, expiry, status |
-| **InventoryReservation** | order, ticket type, jumlah, expiry, released timestamp |
+| **Event** | organizer, nama, deskripsi, kategori, gambar, venue, alamat, waktu, status, inventory mode |
+| **TicketType** | event, nama, harga, kuota, jadwal penjualan, limit; merepresentasikan kategori/area pada mode Zoned/Reserved |
+| **VenueSection** | event, nama area, urutan tampilan, kategori/harga terkait |
+| **SeatMapAsset** | event, object storage key, alt text/legenda, MIME/ukuran |
+| **EventSeat** | event, section, label kursi, status, hold/ticket reference |
+| **Order/OrderItem** | pembeli, snapshot item/harga/kategori/kursi, total, expiry, status |
+| **InventoryReservation** | order, ticket type, jumlah, expiry, released timestamp; hold kursi spesifik untuk Reserved Seating |
 | **Payment** | order, provider, external reference, metode, nominal, status, payload hash |
-| **Ticket** | order item, event, token hash, status, issued timestamp |
+| **Ticket** | order item, event, token hash, status, issued timestamp, snapshot kategori/label kursi |
 | **CheckInAttempt** | ticket nullable, event, petugas, hasil, timestamp |
 | **Refund** | order/payment, nominal, alasan, status, referensi provider |
 | **AuditLog** | aktor, aksi, entitas, before/after terfilter, timestamp |
 | **Notification** | penerima, tipe, isi, status baca/kirim |
+| **LoyaltyAccount** | pembeli, organizer, saldo terproyeksi dari ledger |
+| **LoyaltyLedgerEntry** | pembeli, organizer, order/refund, tipe earn/redeem/reversal/restore, jumlah integer, timestamp, idempotency reference |
+| **LoyaltyPointReservation** | pembeli, organizer, order, jumlah integer, status, expiry/released/consumed timestamp |
 
 Data kartu atau kredensial pembayaran tidak boleh disimpan.
+Poster, OCR, prompt, query bahasa alami, output model, dan saran AI tidak menjadi entitas bisnis persisten. Observability AI hanya menyimpan metadata operasional teredaksi sesuai kebijakan retensi.
 
 ## 11. Persyaratan Teknis dan Integrasi
 
 ### 11.1 Baseline Teknologi
 
-- **Aplikasi:** Next.js 14, React, dan TypeScript.
-- **Autentikasi:** NextAuth; username/kata sandi dan Google.
-- **Database:** PostgreSQL pada Neon; migrasi skema terversi.
-- **Hosting:** deployment web terkelola yang mendukung Next.js.
+- **Aplikasi:** API/transaksi Go 1.27; UI Next.js/React/TypeScript.
+- **Autentikasi:** sesi server-side Go (RFC-002); prototype NextAuth bukan target.
+- **Database:** PostgreSQL pada Neon; migrasi goose terversi.
+- **Hosting:** provider non-Vercel yang menjalankan binary Go dan UI Node.js.
 - **Payment:** satu adapter gateway sandbox agar provider dapat diganti tanpa mengubah domain Order.
+- **AI:** port provider-neutral untuk poster extraction dan intent parsing; domain tidak bergantung pada SDK/model tertentu.
 - **QR:** token minimal 128-bit entropy atau payload yang ditandatangani; database menyimpan hash token bila memungkinkan.
 
 ### 11.2 Komponen Infrastruktur
 
 | Komponen | Kebutuhan |
 |---|---|
-| **Web runtime** | Menjalankan UI, API, autentikasi, dan webhook |
+| **Web runtime** | UI Next.js plus API Go; webhook dan job di proses Go |
 | **PostgreSQL** | Transaksi atomik, constraint, indeks, backup |
 | **Object storage** | Gambar event; file tidak disimpan di filesystem runtime |
 | **Scheduler/cron** | Mengakhiri reservasi dan order yang melewati 15 menit |
 | **Payment sandbox** | Checkout, status, signature webhook, dan refund sandbox bila tersedia |
-| **Email provider** | Hanya untuk fitur Should Have |
+| **Email provider** | Konfirmasi transaksi dan reminder wajib; kegagalan tidak boleh membatalkan transaksi utama |
+| **AI provider** | Ekstraksi saran poster dan parsing intent; dipilih melalui decision gate dengan fake deterministik untuk test |
 | **Observability** | Structured log, error tracking, health check, dan metrik webhook |
 
 ### 11.3 Transaksi Kritis
 
-- Reservasi kuota menggunakan transaksi database dan atomic conditional update/locking.
+- Reservasi kuota dan hold kursi menggunakan transaksi database dan atomic conditional update/locking.
 - Penerbitan tiket berjalan dalam transaksi yang terikat pada perubahan pertama Order ke Paid.
 - Check-in menggunakan conditional update `Unused → Used`; hasil update nol berarti tiket sudah digunakan/tidak valid.
 - Webhook disimpan dengan event ID unik untuk idempotensi dan audit.
 - Job kedaluwarsa aman dijalankan berulang.
+- Reservasi poin dilakukan dalam transaksi yang sama dengan pembuatan order; release dan konversi memakai conditional update/idempotency key.
+- Ledger loyalitas bersifat append-only; koreksi dilakukan dengan entri kompensasi, bukan update/delete histori.
+- Perhitungan earn, redeem, reversal, dan restore hanya menggunakan integer Rupiah/poin dengan aturan pembulatan yang terdokumentasi.
 
 ## 12. Persyaratan Non-Fungsional
 
@@ -422,6 +511,9 @@ Target availability produksi tidak ditetapkan untuk demo akademik. Pilot komersi
 - Verifikasi signature webhook dan rotasi rahasia melalui environment variable.
 - QR tidak memuat PII dan tidak dapat ditebak.
 - Audit log untuk aksi sensitif; payload webhook/log disensor dari rahasia dan PII.
+- Gambar poster dan teks OCR/AI diperlakukan sebagai input tidak tepercaya; validasi MIME/ukuran, cegah prompt injection memengaruhi aksi/otorisasi, redaksi PII, rate limit, dan terapkan kebijakan retensi.
+- Prompt, gambar poster, output model mentah, dan natural-language query tidak boleh dicatat utuh bila memuat PII/rahasia; log hanya metadata aman yang diperlukan.
+- Output AI dibatasi schema/allowlist dan tidak boleh mengeksekusi SQL, membuat event, mengajukan moderasi, menerbitkan event, atau melewati ownership/RBAC.
 - Tidak ada temuan Critical/High yang terbuka pada dependency scan dan review sebelum rilis.
 
 ### 12.4 Privasi, Regulasi, dan Aksesibilitas
@@ -442,6 +534,9 @@ Target availability produksi tidak ditetapkan untuk demo akademik. Pilot komersi
 - `payment_succeeded/payment_failed/webhook_rejected`
 - `ticket_issued/ticket_viewed`
 - `checkin_succeeded/checkin_rejected` dengan reason code
+- `recommendation_viewed/selected` tanpa mengekspos riwayat pembelian
+- `loyalty_points_reserved/released/earned/redeemed/reversed/restored`
+- `ai_poster_processed/applied/rejected` dan `ai_search_parsed/fallback` dengan metadata teredaksi
 
 Event analitik tidak boleh mengirim token QR, password, atau data pribadi yang tidak diperlukan.
 
@@ -452,7 +547,7 @@ Event analitik tidak boleh mengirim token QR, password, atau data pribadi yang t
 | Kelulusan Must Have | UAT dan test report | 100% |
 | Task completion | Minimal 5 peserta menjalankan tugas inti | ≥ 90% tugas selesai tanpa bantuan langsung |
 | SUS | Kuesioner setelah uji | ≥ 68 |
-| Overselling | Concurrent integration test | 0 |
+| Overselling | Concurrent integration test termasuk dua pembeli pada kursi yang sama | 0 |
 | Check-in ganda | Concurrent integration test | 0 |
 | Akurasi webhook | Skenario sukses, gagal, expired, duplikat, signature salah | 100% skenario wajib lulus |
 | Defect blocker/critical | Defect log | 0 terbuka |
@@ -464,8 +559,10 @@ Metrik adopsi dan pendapatan tidak digunakan untuk menilai MVP akademik karena t
 
 | Tingkat | Fokus |
 |---|---|
-| **Unit** | Perhitungan ketersediaan, transisi status, expiry, dan otorisasi |
-| **Integration** | Transaksi kuota, webhook replay, penerbitan tiket, check-in atomik |
+| **Unit** | Perhitungan ketersediaan, transisi status, expiry, otorisasi, dan ketersediaan kursi |
+| **Integration** | Transaksi kuota, hold kursi bersamaan, webhook replay, penerbitan tiket, check-in atomik |
+| **Loyalty** | Reservasi/release/konversi poin, ledger append-only, refund reversal/restore, dan konkurensi saldo |
+| **AI contract/security** | Schema output, invalid/untrusted input, prompt injection, timeout/rate limit, redaksi, provider failure, dan deterministic fake |
 | **End-to-end** | Organizer → admin → pembeli → payment sandbox → QR → check-in |
 | **Security** | RBAC/ownership, brute force, input, signature webhook, kebocoran QR/PII |
 | **Performance** | Profil uji pembeli dan scanner |
@@ -489,7 +586,7 @@ Data pengujian harus dapat di-reset dan tidak bergantung pada akun pribadi penge
 - Build, typecheck, automated test, dan security scan lulus.
 - Environment variable wajib tervalidasi saat startup/deploy.
 - Health check aplikasi dan koneksi database berhasil.
-- Skenario smoke test login, publish event, checkout, webhook, tiket, dan check-in lulus.
+- Skenario smoke test login, publish event, checkout termasuk kursi bernomor, webhook, tiket, dan check-in lulus.
 - Prosedur rollback aplikasi dan migrasi kompatibel terdokumentasi.
 
 ### 15.3 Monitoring Minimum
@@ -512,27 +609,27 @@ Baseline rencana mengasumsikan:
 | **Pembimbing/reviewer** | Review metodologi dan milestone | Sesuai jadwal akademik |
 | **Peserta uji** | Uji kegunaan pembeli/organizer/petugas | Minimal 5 orang |
 
-**Anggaran baseline:** gunakan free tier/academic tier, gateway sandbox, dan data uji. Biaya domain, email, object storage, atau peningkatan kapasitas harus disetujui terpisah. Jika kapasitas engineer kurang dari asumsi, fitur Should/Could harus dipotong sebelum menurunkan kualitas transaksi Must Have.
+**Anggaran baseline:** gunakan free tier/academic tier, gateway sandbox, dan data uji. Biaya domain, email, AI, object storage, atau peningkatan kapasitas harus disetujui terpisah. Jika kapasitas engineer kurang dari asumsi, fitur Should/Could harus dipotong sebelum menurunkan kualitas transaksi Must Have. Seluruh 57 Must Have tetap wajib; perubahan target 12 minggu atau scope Must memerlukan persetujuan Product Owner.
 
 ## 17. Urutan Implementasi dan Jalur Kritis
 
 Jalur kritis:
 
-`Keputusan gateway & model data → Role/ownership → Event & ticket type → Reservasi/order → Webhook pembayaran → Penerbitan tiket → Check-in atomik → UAT`
+`Keputusan gateway/AI & model data → Role/ownership → Event, ticket type, section/seat & AI draft → Katalog/filter/AI search → Reservasi order+poin/hold kursi → Webhook pembayaran+ledger → Penerbitan tiket → Check-in atomik → Rekomendasi/notifikasi/ekspor/reminder → UAT`
 
 | Fase | Minggu | Deliverable | Exit Criteria |
 |---|---|---|---|
-| Scope dan desain | 1 | Keputusan gateway, data model, wireframe, test plan | Decision gate ditutup |
+| Scope dan desain | 1 | Keputusan gateway/AI, data model termasuk loyalty, wireframe, test plan | Decision gate ditutup |
 | Fondasi akses | 2 | Role, ownership, organizer application, migrasi | Uji akses lulus |
-| Event dan inventori | 3–4 | Moderasi event, ticket type, katalog | Event dapat Published |
-| Order dan reservasi | 5 | Checkout, atomic inventory, expiry job | Uji overselling lulus |
-| Payment sandbox | 6–7 | Adapter, checkout provider, webhook idempoten | Skenario webhook lulus |
+| Event dan discovery | 3–4 | Moderasi event, ticket type, section/seat, denah statis, katalog/filter, AI poster draft, AI natural-language search | Event dapat Published; output AI tetap berupa saran draft atau filter |
+| Order dan reservasi | 5 | Checkout, atomic inventory/poin/hold kursi, expiry job | Uji overselling, kursi bersamaan, dan konkurensi poin lulus |
+| Payment sandbox | 6–7 | Adapter, checkout provider, webhook idempoten, ledger loyalty | Skenario webhook dan ledger lulus |
 | Ticket dan check-in | 8–9 | QR, wallet, scanner, atomic check-in | Uji double scan lulus |
-| Dashboard dan hardening | 10 | Ringkasan, audit, pembatalan/refund sandbox | Must Have lengkap |
-| Verifikasi | 11 | E2E, security, load, usability | Release gate lulus |
+| Dashboard dan hardening | 10 | Rekomendasi berbasis histori Paid, ekspor termasuk label kursi, email/reminder, audit, pembatalan/refund sandbox | 57 Must Have lengkap |
+| Verifikasi | 11 | E2E, security AI, loyalty concurrency, load, usability | Release gate lulus |
 | Rilis akademik | 12 | Deployment, laporan hasil, demo | Definition of Done terpenuhi |
 
-Fitur Should/Could dikerjakan hanya jika jalur kritis tidak tertunda.
+Target tetap 12 minggu, tetapi penambahan kapabilitas wajib membuat risiko jadwal **tinggi**. Fitur Should/Could dikerjakan hanya jika jalur kritis tidak tertunda; Must Have tidak boleh dipindahkan ke fase pasca-MVP tanpa scope change baru.
 
 ## 18. Dependensi Pihak Ketiga
 
@@ -541,22 +638,26 @@ Fitur Should/Could dikerjakan hanya jika jalur kritis tidak tertunda.
 | **Neon/PostgreSQL** | Database dan transaksi | Gunakan lingkungan terpisah dan backup |
 | **NextAuth/Google OAuth** | Login | Username/password tetap tersedia |
 | **Payment gateway sandbox** | Metode bayar, webhook, refund test | Adapter provider dan simulator webhook untuk test |
-| **Object storage** | Gambar event | Placeholder gambar bila belum dipilih |
-| **Email provider** | Notifikasi Should Have | In-app notification sebagai fallback |
+| **Object storage** | Gambar event dan denah venue statis | Placeholder gambar bila belum dipilih |
+| **Email provider** | Email transaksi dan reminder Must Have | Adapter, retry terbatas, dan fake deterministik; provider dipilih pada decision gate |
+| **AI provider** | F76 poster extraction dan F77 intent parsing | Port provider-neutral, timeout/fallback, rate limit, dan fake deterministik; tanpa SDK sebelum gate |
 | **Browser camera API** | Scanner | Input kode manual sebagai Should Have |
 
 ## 19. Risiko dan Mitigasi
 
 | Risiko | Dampak | Probabilitas | Mitigasi |
 |---|---|---|---|
-| Cakupan terlalu besar untuk satu engineer | Tinggi | Tinggi | Kunci Must Have; potong Should/Could |
+| Cakupan 57 Must Have terlalu besar untuk satu engineer/12 minggu | Tinggi | Tinggi | Potong Should/Could, spike lebih awal, integrasikan per jalur kritis, dan eskalasi kapasitas/deadline tanpa menurunkan Must secara diam-diam |
 | Gateway sandbox sulit diakses/dikonfigurasi | Tinggi | Sedang | Pilih pada minggu 1; sediakan adapter dan simulator |
-| Overselling akibat race condition | Tinggi | Sedang | Transaksi, constraint, dan concurrent test |
+| Overselling kuota atau kursi akibat race condition | Tinggi | Sedang | Transaksi, constraint, hold 15 menit, dan concurrent test dua pembeli pada kursi yang sama |
 | Webhook terlambat atau duplikat | Tinggi | Tinggi | Idempotensi, event log, rekonsiliasi |
 | QR digunakan ulang | Tinggi | Sedang | Token aman dan conditional update atomik |
 | Koneksi venue buruk | Sedang | Sedang | Pesan error jelas dan kode manual; offline di luar MVP |
 | Data pribadi bocor | Tinggi | Rendah–Sedang | Data uji, minimisasi, RBAC, log redaction |
 | Target kinerja tidak sesuai hosting gratis | Sedang | Sedang | Ukur awal; dokumentasikan batas platform |
+| Race condition reservasi atau refund poin | Tinggi | Sedang | Transaction/locking, ledger append-only, idempotensi, dan concurrent integration test |
+| Output AI salah atau prompt injection dari poster/query | Tinggi | Sedang | Output schema/allowlist, treat input as untrusted, human review untuk poster, PostgreSQL-only retrieval, redaksi, dan security test |
+| Provider AI/email tidak tersedia atau biaya melebihi tier | Tinggi | Sedang | Decision gate minggu 1, adapter provider-neutral, fake untuk test, fallback standar untuk AI search, dan error yang tidak merusak transaksi |
 
 ## 20. Decision Gates dan Pertanyaan Terbuka
 
@@ -564,8 +665,10 @@ Fitur Should/Could dikerjakan hanya jika jalur kritis tidak tertunda.
 
 1. **Gateway sandbox:** provider, akses akun, metode yang benar-benar tersedia, dan format webhook.
 2. **Object storage:** provider atau keputusan menggunakan placeholder selama MVP.
-3. **Tanggal kalender dan kapasitas engineer:** konfirmasi apakah baseline 12 minggu realistis.
-4. **Pemilik keputusan:** siapa yang menyetujui perubahan scope dan hasil UAT.
+3. **Provider AI:** pilih provider/model yang memenuhi ekstraksi terstruktur, intent parsing, retensi/redaksi, rate limit, biaya tier akademik, timeout, dan observability; pertahankan kontrak provider-neutral dan jangan pilih SDK sebelum gate disetujui.
+4. **Email provider:** pilih provider, domain/sender sandbox, quota, retry, dan batas deliverability untuk notifikasi serta reminder wajib.
+5. **Tanggal kalender dan kapasitas engineer:** konfirmasi mitigasi risiko 57 Must Have tanpa mengubah target baseline 12 minggu.
+6. **Pemilik keputusan:** siapa yang menyetujui perubahan scope dan hasil UAT.
 
 ### Wajib Diputuskan Sebelum Pilot dengan Pengguna/Data Nyata
 
@@ -582,12 +685,15 @@ MVP selesai jika:
 
 1. Seluruh Must Have memiliki bukti acceptance test dan lulus.
 2. Jalur organizer, pembeli, admin, dan petugas dapat didemonstrasikan end-to-end.
-3. Uji overselling, webhook replay, dan double scan lulus tanpa pelanggaran invarian.
-4. Tidak ada defect blocker/critical atau temuan security Critical/High terbuka.
-5. Target kinerja diukur pada profil uji dan hasilnya dilaporkan.
-6. Uji kegunaan dilaksanakan, task completion dan SUS dihitung.
-7. Migrasi, environment, seed/reset data, deployment, monitoring, dan rollback terdokumentasi.
-8. Batas sandbox dan larangan penggunaan uang/data nyata terlihat jelas pada demo serta dokumentasi.
+3. Uji overselling, hold kursi bersamaan, webhook replay, dan double scan lulus tanpa pelanggaran invarian.
+4. Uji loyalty membuktikan isolasi buyer–organizer, batas redeem 20%, reservasi/release/konversi atomik, ledger append-only, serta reversal/restore refund yang idempoten.
+5. F74 hanya merekomendasikan Published future event dan F77 selalu menggunakan filter tervalidasi dengan PostgreSQL sebagai sumber hasil serta fallback standar.
+6. F76 terbukti tidak dapat auto-submit/publish dan seluruh saran memerlukan review/apply/save manusia.
+7. Tidak ada defect blocker/critical atau temuan security Critical/High terbuka, termasuk prompt injection, retensi/redaksi, dan abuse path AI.
+8. Target kinerja diukur pada profil uji dan hasilnya dilaporkan.
+9. Uji kegunaan dilaksanakan, task completion dan SUS dihitung.
+10. Migrasi, environment, seed/reset data, deployment, monitoring, provider fake, dan rollback terdokumentasi.
+11. Batas sandbox, tidak adanya nilai tunai poin, serta larangan penggunaan uang/data nyata terlihat jelas pada demo dan dokumentasi.
 
 ## 22. Matriks Ketertelusuran Ringkas
 
@@ -595,7 +701,11 @@ MVP selesai jika:
 |---|---|---|
 | Organizer mengelola event | US-02, US-03, US-04, US-10 | E2E organizer dan UAT |
 | Pembeli membeli tiket | US-05, US-06, US-07, US-08 | E2E checkout dan webhook |
-| Mencegah overselling | US-04, US-06 | Concurrent integration test |
+| Mencegah overselling | US-04, US-06 | Concurrent integration test kuota dan kursi yang sama |
 | Mencegah tiket ganda | US-08, US-09 | Concurrent check-in test |
 | Admin mengendalikan operasi | US-02, US-03, US-11, US-12 | UAT admin dan audit inspection |
+| Nilai tambah discovery | US-05, US-13, US-16 | Test rekomendasi/filter dan fallback AI search |
+| Loyalitas per organizer | US-14 | Concurrent integration test ledger/reservasi/refund |
+| Bantuan draft organizer | US-15 | Contract/security test dan UAT human review |
+| Kursi bernomor dan denah statis | US-04, US-05, US-06, US-08, US-09 | Concurrent seat hold, a11y selector, dan snapshot tiket |
 | Membuktikan kegunaan | Seluruh alur utama | Task completion dan SUS |

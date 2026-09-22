@@ -1,10 +1,10 @@
-# AGENTS.md — Panduan Coding Agent TicketIn
+# AGENTS.md — Panduan Coding Agent MyTicketIn
 
 Dokumen ini berlaku untuk seluruh repository. Gunakan sebagai petunjuk operasional ringkas; detail kebutuhan dan standar tetap berada pada dokumen sumber.
 
 ## 1. Misi Proyek
 
-TicketIn adalah aplikasi web tiket event tatap muka untuk pembeli, organizer, petugas check-in, dan admin.
+MyTicketIn adalah aplikasi web tiket event tatap muka untuk pembeli, organizer, petugas check-in, dan admin.
 
 Target aktif adalah **MVP akademik**:
 
@@ -12,7 +12,10 @@ Target aktif adalah **MVP akademik**:
 - Tidak menerima uang nyata.
 - Tidak mengaktifkan payout atau refund finansial produksi.
 - Deployment belum tersedia dan provider harus non-Vercel.
+- Runtime transaksi target adalah Go; UI memakai Next.js.
 - Implementasi mengikuti RFC-001–RFC-014 secara ketat dan sekuensial.
+- Baseline produk `prd-improved.md` 2.2 memiliki 77 fitur: 57 Must, 5 Should, 4 Could, dan 11 Won’t; cakupan aktif MVP adalah 66 fitur.
+- F20, F46, F49, F50, F51, F65, serta F74–F77 wajib. F42, F63–F64, dan F66–F73 tetap Won’t Have.
 
 RFC-015–RFC-020 adalah rancangan komersial **Deferred**. Jangan merencanakan atau mengimplementasikannya sebelum Commercial Entry Gate disetujui eksplisit.
 
@@ -35,10 +38,11 @@ Gunakan `RFC/RFCS.md` untuk menentukan urutan dan dependensi. Jangan menganggap 
 
 Sampai terdapat bukti RFC-001 selesai, perlakukan repository sebagai prototype pre-RFC:
 
-- Next.js 14, React 18, TypeScript 5, dan Tailwind CSS 3.
-- Auth username/password serta Google tersedia sebagian.
+- Next.js 14, React 18, TypeScript 5, dan Tailwind CSS 3 pada UI prototype.
+- Backend Go target belum menggantikan persistence runtime.
+- Auth username/password serta Google tersedia sebagian (NextAuth prototype).
 - Persistence masih menggunakan raw SQL dan fallback JSON.
-- Prisma schema belum menjadi source of truth runtime.
+- Prisma schema prototype bukan source of truth dan tidak dilanjutkan.
 - Runtime DDL, seed credential, ID berbasis waktu, dan fallback secret harus dianggap technical/security debt.
 - Domain event, order, payment, ticket, dan check-in belum tersedia.
 
@@ -49,7 +53,7 @@ Jangan menyatakan suatu fitur selesai hanya karena UI atau sebagian prototype su
 ### Sebelum Mengubah Kode
 
 1. Identifikasi RFC dan ID fitur yang diminta.
-2. Baca RFC aktif, bagian terkait dalam `features.md`, `RULES.md`, dan kode terdampak.
+2. Baca RFC aktif, `prd-improved.md` 2.2, bagian terkait dalam `features.md`, `RULES.md`, dan kode terdampak.
 3. Pastikan seluruh predecessor RFC telah selesai.
 4. Jelaskan scope, file terdampak, migration, endpoint, test, dan risiko.
 5. Tanyakan hanya keputusan yang benar-benar memblokir atau berdampak pada produk, keamanan, data, biaya, atau deployment.
@@ -62,7 +66,7 @@ Jangan menyatakan suatu fitur selesai hanya karena UI atau sebagian prototype su
 - Pertahankan perubahan pengguna yang tidak terkait.
 - Perbaiki komponen yang sudah ada sebelum membuat duplikat.
 - Jangan melakukan major upgrade bersama perubahan fitur.
-- Jangan menambah package atau provider SDK tanpa kebutuhan dan decision gate.
+- Jangan menambah package atau provider SDK—termasuk AI—tanpa kebutuhan dan decision gate.
 - Jangan mengubah PRD, prioritas MoSCoW, invariant, atau state machine secara sepihak.
 
 ### Setelah Mengubah Kode
@@ -85,11 +89,11 @@ Presentation → Application Service → Domain → Ports
 
 Aturan boundary:
 
-- Page, Client Component, Server Action, dan Route Handler harus tipis.
-- Application service mengorkestrasi use case dan transaction.
+- Page, Client Component, dan BFF Next.js harus tipis; transaksi domain hanya di Go.
+- Application service Go mengorkestrasi use case dan transaction.
 - Domain berisi invariant serta transisi status dan tidak mengimpor framework.
-- Repository mengenkapsulasi Prisma/PostgreSQL.
-- Provider adapter mengenkapsulasi payment, storage, email, analytics, dan scheduler.
+- Repository mengenkapsulasi PostgreSQL melalui sqlc/pgx.
+- Provider adapter mengenkapsulasi payment, storage, email, analytics, scheduler, dan AI.
 - Module lain menggunakan public application contract, bukan infrastructure internal.
 
 Gunakan React Server Components secara default. `"use client"` hanya untuk interaksi browser seperti scanner, form dinamis, dan dialog.
@@ -97,35 +101,17 @@ Gunakan React Server Components secara default. `"use client"` hanya untuk inter
 ## 6. Struktur Kode Target
 
 ```text
+backend/
+  cmd/api/
+  internal/platform/
+  internal/modules/
+  migrations/
+  queries/
 app/
 components/
   ui/
   shared/
-modules/
-  auth/
-  audit/
-  organizers/
-  events/
-  catalog/
-  inventory/
-  orders/
-  payments/
-  refunds/
-  tickets/
-  check-in/
-  reporting/
-  notifications/
-lib/
-  db/
-  env/
-  errors/
-  logger/
-  security/
-prisma/
-  schema.prisma
-  migrations/
 tests/
-  integration/
   e2e/
 ```
 
@@ -138,7 +124,7 @@ Di dalam module, gunakan `domain/`, `application/`, `infrastructure/`, dan `ui/`
 - Fungsi/variabel: `camelCase`.
 - Type/interface/class: `PascalCase`.
 - Konstanta dan environment variable: `UPPER_SNAKE_CASE`.
-- Database: `snake_case`, dipetakan melalui Prisma.
+- Database: `snake_case`, dipetakan melalui sqlc.
 - Kode dan error code: Bahasa Inggris.
 - UI, pesan pengguna, dan dokumentasi produk: Bahasa Indonesia.
 - TypeScript `strict`; jangan gunakan `any` atau menonaktifkan pemeriksaan untuk melewati error.
@@ -155,15 +141,17 @@ Dilarang:
 - ID berbasis `Date.now()`.
 - Uang menggunakan floating point.
 - Hard-delete transaksi, ticket, audit, atau check-in.
+- Update/delete histori ledger loyalitas.
 
 Gunakan:
 
-- Prisma 7.10 dan migration terversi.
+- goose dan sqlc/pgx; migrasi terversi.
 - CUID/UUID non-predictable.
 - Integer Rupiah.
 - UTC/`TIMESTAMPTZ`.
-- Snapshot harga/nama pada OrderItem.
+- Snapshot harga/nama/kategori/kursi pada OrderItem.
 - Transaction, unique/check constraint, dan conditional update.
+- Ledger loyalitas append-only serta entry kompensasi.
 
 Invariant wajib:
 
@@ -175,17 +163,29 @@ Invariant wajib:
 6. Satu Ticket memiliki paling banyak satu check-in berhasil.
 7. Event Cancelled tidak kembali Published.
 8. Organizer hanya mengakses data event miliknya.
+9. Poin terisolasi per buyer–organizer, tidak dapat dipindahkan/diuangkan, tidak kedaluwarsa, dan tidak memiliki nilai tunai.
+10. Earn 1 poin per Rp1.000 net paid; redeem Rp10 per poin maksimum 20% order; seluruh aritmetika integer.
+11. Order dan reservasi poin dibuat atomik; Failed/Expired/Cancelled melepaskan reservasi tepat satu kali.
+12. Paid mengonversi reservasi menjadi ledger debit dan memberikan earned points tepat satu kali.
+13. Refund Completed membalik earned points; full Refund Completed memulihkan redeemed points melalui entry kompensasi.
+14. Rekomendasi dan AI search hanya mengembalikan event Published yang akan datang.
+15. AI tidak menghasilkan SQL/event dan tidak boleh auto-submit, auto-approve, atau auto-publish.
+16. Setiap event memiliki tepat satu mode inventori yang immutable setelah commerce.
+17. Satu `EventSeat` paling banyak memiliki satu hold aktif atau satu Ticket Paid; hold berlangsung 15 menit.
 
 ## 9. API dan State
 
 - Validasi seluruh boundary menggunakan Zod.
-- Periksa session, role, capability, ownership, dan status domain pada server.
+- Periksa session, role, capability, ownership, **portal login**, dan status domain pada server.
+- Portal `buyer` \| `organizer` \| `admin` adalah intent UI, bukan role database. Pendaftaran hanya pembeli. Pengajuan organizer setelah masuk sebagai pembeli. Portal `organizer` hanya profil `APPROVED`.
 - Gunakan typed error dan envelope standar dari `RULES.md`.
 - Gunakan pagination untuk koleksi yang dapat tumbuh.
 - Gunakan idempotency key untuk checkout, webhook, dan operasi sensitif.
 - URL adalah source of truth untuk filter/search/page.
 - PostgreSQL adalah source of truth untuk inventory/order/payment/ticket.
-- Optimistic update dilarang untuk inventory, payment, refund, dan check-in.
+- PostgreSQL adalah source of truth untuk event, recommendation candidates, dan loyalty; AI hanya menghasilkan saran draft atau filter tervalidasi.
+- Optimistic update dilarang untuk inventory, seat hold, payment, refund, dan check-in.
+- Optimistic update juga dilarang untuk saldo/reservasi poin.
 - Katalog publik boleh di-cache dengan invalidation; state transaksi tidak boleh.
 
 ## 10. Security Non-Negotiables
@@ -195,21 +195,25 @@ Invariant wajib:
 - Jangan memakai dangerous automatic OAuth account linking.
 - Hash password secara asynchronous dengan adaptive cost.
 - Terapkan rate limit pada auth, checkout, webhook, scanner, dan reset password.
+- Terapkan rate limit/quota pada AI poster scan dan natural-language search.
 - Verifikasi signature webhook dari payload yang benar.
 - QR harus opaque, tidak memuat PII, dan divalidasi pada server.
 - Jangan log password, cookie, token OAuth, token QR, atau connection string.
+- Jangan log gambar poster, OCR/prompt/output mentah, natural-language query, atau data ledger yang memuat PII/rahasia.
 - Terapkan RBAC serta object-level authorization pada setiap mutasi/query sensitif.
+- Perlakukan gambar poster, OCR, teks pencarian, dan output AI sebagai input tidak tepercaya; validasi MIME/ukuran/schema/allowlist dan cegah prompt injection memicu tool, SQL, atau mutasi.
+- F76 hanya memberi saran terstruktur untuk human review/apply/save; F77 hanya memetakan intent ke filter dan wajib fallback ke search standar saat AI gagal.
 - Jangan memakai credential payment produksi pada MVP.
 - Jangan melakukan operasi git/database destruktif tanpa persetujuan.
 
-Jika menemukan credential bocor, broken authorization, atau invariant finansial yang dapat dilanggar, hentikan pekerjaan terkait dan laporkan sebagai blocker.
+Jika menemukan credential bocor, broken authorization, invariant finansial/loyalty yang dapat dilanggar, kebocoran lintas buyer–organizer, atau AI yang dapat melakukan SQL/mutasi tanpa validasi, hentikan pekerjaan terkait dan laporkan sebagai blocker.
 
 ## 11. Testing dan Quality Gates
 
 Minimal:
 
-- Unit test untuk policy, perhitungan, dan transisi status.
-- Integration test PostgreSQL untuk transaction dan authorization.
+- Unit test untuk policy, perhitungan integer loyalty, AI filter/schema, dan transisi status.
+- Integration test PostgreSQL untuk transaction, authorization, loyalty, recommendation, dan Published-only retrieval.
 - E2E untuk alur lintas module.
 - Contract test serta deterministic fake untuk provider.
 - Regression test untuk setiap bug fix.
@@ -217,17 +221,23 @@ Minimal:
 Coverage:
 
 - Global: minimal 80% lines/functions dan 75% branches.
-- Inventory, order, payment, ticket, check-in, dan authorization: minimal 90% branches.
+- Inventory, order, payment, loyalty, ticket, check-in, dan authorization: minimal 90% branches.
 
 Kasus kritis:
 
-- Checkout bersamaan pada tiket terakhir.
+- Checkout bersamaan pada tiket terakhir atau kursi yang sama.
 - Checkout retry/idempotency.
 - Webhook invalid, duplikat, terlambat, dan out-of-order.
 - Ticket issuance tepat satu kali.
 - Dua scan tiket yang sama secara bersamaan.
 - Akses lintas organizer.
 - Expiry beradu dengan webhook sukses.
+- Dua checkout mereservasi poin yang sama; release/convert poin beradu dengan expiry/webhook.
+- Replay Paid/refund tidak menggandakan loyalty debit, earn, reversal, atau restore.
+- Full refund memulihkan redeemed points; completed refund membalik earned points.
+- Rekomendasi dengan/tanpa riwayat Paid dan tidak pernah memuat event non-Published/past.
+- Poster/query berbahaya, output AI invalid, prompt injection, timeout/rate limit, redaksi, serta provider failure/fallback.
+- F76 terbukti tidak auto-submit/publish; F77 tidak menghasilkan SQL dan PostgreSQL tetap memilih hasil.
 
 Merge dilarang jika lint, typecheck, test terkait, migration check, atau build gagal.
 
@@ -242,16 +252,18 @@ Merge dilarang jika lint, typecheck, test terkait, migration check, atau build g
 - Katalog/detail p95 ≤ 2 detik.
 - Check-in p95 ≤ 1,5 detik.
 - Overselling dan check-in berhasil ganda harus nol.
+- Denah venue memakai alt text/legenda; selector kursi terpisah harus dapat digunakan dengan keyboard.
 
 ## 13. Deployment dan Provider
 
 - Deployment belum tersedia.
 - Vercel bukan target.
 - Provider non-Vercel dipilih pada RFC-001.
-- Provider harus mendukung Node.js/Next.js penuh, HTTPS, webhook, secret, health check, migration, logging, dan rollback.
+- Provider harus mendukung binary Go, UI Next.js, HTTPS, webhook, secret, health check, migration, logging, dan rollback.
 - Scheduler harus eksternal atau disediakan platform; timer in-process dilarang.
 - Development, Preview/Test, dan Production Demo harus terisolasi.
-- Jangan memilih payment, storage, scheduler, email, atau analytics SDK sebelum gate terkait disetujui.
+- Jangan memilih payment, storage, scheduler, email, analytics, atau AI SDK sebelum gate terkait disetujui.
+- AI harus menggunakan port provider-neutral. Gate AI mencakup model/provider, structured output, retensi/penghapusan, PII redaction, rate limit/quota, biaya, timeout, dan observability.
 
 ## 14. Urutan RFC
 
@@ -267,7 +279,7 @@ Jalur komersial:
 Commercial Entry Gate → RFC-015 → ... → RFC-020 → Commercial GA
 ```
 
-RFC-015–020 tetap Deferred. F42 dan F65–F72 tetap tidak memiliki RFC implementasi.
+RFC-015–020 tetap Deferred. F42, F63–F64, dan F66–F73 tetap Won’t Have. F65 dimiliki RFC-008 dengan fondasi authoring di RFC-005. F76 dimiliki RFC-005, F77 RFC-007, F75 dibangun lintas RFC-008–009, dan F74 diselesaikan RFC-012 setelah histori Paid tersedia. Pemetaan ini bukan izin memilih SDK/provider AI tanpa gate.
 
 ## 15. Definition of Done
 
@@ -278,10 +290,13 @@ Fitur dianggap selesai jika:
 3. Happy path, failure path, authorization, dan edge case ditangani.
 4. Test proporsional tersedia dan lulus.
 5. Invariant database tetap terjaga.
-6. Logging/analytics tidak membocorkan data sensitif.
-7. UI yang relevan telah diperiksa untuk mobile dan accessibility.
-8. Migration, dokumentasi, dan rollback diperbarui.
-9. Tidak ada TODO, placeholder, hardcoded secret, debug code, atau defect kritis.
+6. Fitur loyalty membuktikan isolasi, konkurensi reservasi, idempotensi ledger, dan reversal/restore refund.
+7. Fitur AI membuktikan output validation, human control/fallback, rate limit, retensi/redaksi, serta provider contract dengan fake deterministik.
+8. Fitur kursi bernomor membuktikan hold 15 menit, satu kursi satu hold/Paid, snapshot label, denah statis aksesibel, dan concurrent same-seat test.
+9. Logging/analytics tidak membocorkan data sensitif.
+10. UI yang relevan telah diperiksa untuk mobile dan accessibility.
+11. Migration, dokumentasi, dan rollback diperbarui.
+12. Tidak ada TODO, placeholder, hardcoded secret, debug code, atau defect kritis.
 
 ## 16. Format Handoff
 

@@ -1,91 +1,83 @@
-# TicketIn — Login Prototipe
+# MyTicketIn — Login Prototipe + fondasi Go
 
-Proyek ini memakai **Next.js 14 + TypeScript**.
+Prototype UI saat ini masih **Next.js 14 + TypeScript**. Runtime transaksi target adalah **Go 1.27** (API) dengan PostgreSQL/Neon. Jangan anggap login prototype sebagai produk selesai.
 
-Akun disimpan di **PostgreSQL (Neon)**. Tabel `users` dibuat otomatis saat aplikasi pertama kali terhubung.
+## Stack target (RFC-001)
 
-## 1. Buat database Neon (gratis)
+- API: `backend/cmd/api` (Go, chi, pgx, goose, sqlc)
+- UI: Next.js tipis yang memanggil `NEXT_PUBLIC_API_BASE_URL`
+- Database: PostgreSQL (lokal untuk development; Neon untuk deployment)
 
-1. Buka [https://console.neon.tech](https://console.neon.tech) lalu daftar/masuk (boleh pakai GitHub).
-2. **New Project**
-   - Name: `ticketin` (bebas)
-   - Region: pilih yang dekat, misalnya **Singapore** atau **Asia**
-3. Setelah project siap, buka **Dashboard** → **Connection string**.
-4. Pilih **Pooled connection** (ada kata `pooler` di host).
-5. Copy URL yang diawali `postgresql://...`
+## 1. Database lokal vs Neon
 
-Contoh bentuknya (bukan nilai asli):
+Kode **tidak berubah** saat pindah lingkungan. Hanya `DATABASE_URL` dan `DATABASE_URL_UNPOOLED`.
 
-```text
-postgresql://neondb_owner:xxxx@ep-xxxx.ap-southeast-1.aws.neon.tech/neondb?sslmode=require
+### Pengembangan di Windows (disarankan sekarang)
+
+Postgres lokal lewat Docker (data tetap di mesin Anda):
+
+```bash
+docker compose up -d
 ```
 
-## 2. Hubungkan di komputer (lokal)
-
-1. Buka file `.env.local`.
-2. Tempel URL Neon ke `DATABASE_URL`:
+Lalu di `.env.local` (bukan Neon):
 
 ```env
-DATABASE_URL=postgresql://neondb_owner:xxxx@ep-xxxx.ap-southeast-1.aws.neon.tech/neondb?sslmode=require
+DATABASE_URL=postgresql://myticketin:myticketin_dev@127.0.0.1:5432/myticketin?sslmode=disable
+DATABASE_URL_UNPOOLED=postgresql://myticketin:myticketin_dev@127.0.0.1:5432/myticketin?sslmode=disable
 ```
 
-3. Simpan file, lalu di terminal:
+Lokal tidak memakai pooler, jadi kedua URL **sama**. Setelah itu:
+
+```bash
+cd backend
+go run ./cmd/migrate
+go run ./cmd/api
+```
+
+Jika memakai PostgreSQL Windows (bukan Docker), buat database `myticketin` lalu ganti user/password pada URL, tetap `127.0.0.1:5432` dan `sslmode=disable`.
+
+### Deployment (nanti)
+
+Di hosting, isi URL Neon: pooled → `DATABASE_URL`, direct (tanpa `-pooler`) → `DATABASE_URL_UNPOOLED`, `sslmode=require`. Jangan memakai localhost.
+
+## 2. Environment
+
+Salin `.env.example` ke `.env.local`. Isi secret; **jangan** commit `.env.local`. Simpan URL Neon di catatan terpisah agar tinggal ditukar saat deploy.
+
+## 3. Menjalankan UI dan API (RFC-001)
+
+Pasang [Go 1.27.1](https://go.dev/dl/). Auth memakai sesi opaque Go (bukan NextAuth).
 
 ```bash
 npm install
-npm run db-check
-npm run dev
+cd backend
+go mod download
+go run ./cmd/migrate
+go run ./cmd/api
 ```
 
-`npm run db-check` harus menampilkan `Koneksi PostgreSQL berhasil.`
-
-4. Buka [http://localhost:3000](http://localhost:3000), daftar akun baru.
-5. Cek datanya di Neon: project → **Tables** → `users`.
-
-Kalau `DATABASE_URL` masih kosong di lokal, aplikasi sementara memakai `data/users.json`. Di **Vercel** JSON tidak dipakai; database wajib.
-
-## 3. Hubungkan di Vercel
-
-File `.env.local` **tidak ikut ter-upload**. Semua variabel harus diisi di dashboard Vercel.
-
-1. Buka [https://vercel.com](https://vercel.com) → project aplikasi ini.
-2. **Settings** → **Environment Variables**.
-3. Tambahkan (centang Production, Preview, Development):
-
-| Nama | Nilai |
-|---|---|
-| `DATABASE_URL` | Connection string Neon yang sama dengan lokal |
-| `NEXTAUTH_SECRET` | string acak panjang (boleh sama dengan `.env.local`) |
-| `NEXTAUTH_URL` | URL produksi Vercel, contoh `https://NAMA-PROYEK.vercel.app` (tanpa `/` di akhir) |
-| `GOOGLE_CLIENT_ID` | dari Google Cloud Console |
-| `GOOGLE_CLIENT_SECRET` | dari Google Cloud Console |
-
-4. **Deployments** → **...** pada deploy terbaru → **Redeploy**.
-5. Setelah live, buka `https://DOMAIN-ANDA.vercel.app/api/health`.
-   - Berhasil: `{ "ok": true, "storage": "postgres", "users": ... }`
-6. Daftar di situs Vercel, lalu cek lagi tabel `users` di Neon. Baris baru harus muncul.
-
-## 4. Login Gmail di Vercel
-
-Di Google Cloud Console → OAuth client, isi:
-
-- Origin: `https://DOMAIN-ANDA.vercel.app`
-- Redirect: `https://DOMAIN-ANDA.vercel.app/api/auth/callback/google`
-
-Pakai domain yang sama dengan `NEXTAUTH_URL`, bukan URL deploy unik (`xxx-xxx.vercel.app`).
-
-## Akun uji (otomatis masuk ke tabel `users`)
-
-| Username | Kata sandi | Peran |
-|---|---|---|
-| demo | demo123 | Peserta |
-| admin | admin123 | Admin |
-| fajrunsh | 12345678 | Peserta |
-
-## Perintah lokal
+Di terminal lain:
 
 ```bash
-npm install
-npm run db-check
 npm run dev
 ```
+
+- UI: `http://localhost:3000` (rewrite `/api/*` ke proses Go)
+- Health: `GET http://localhost:8080/api/health`
+- Register/login: `POST /api/register` (hanya pembeli), `POST /api/auth/login` dengan `portal` (`buyer` \| `organizer` \| `admin`) + CSRF + cookie `mti_session`. Portal yang tidak cocok ditolak `AUTH_PORTAL_DENIED`.
+- Google: isi `GOOGLE_CLIENT_ID` dan `GOOGLE_CLIENT_SECRET` berpasangan; tombol disembunyikan jika kosong
+
+Migrasi `0002_identity_session_rbac` bersifat additive pada tabel `users` RFC-001. Jalankan goose pada cabang/database uji sebelum production-demo.
+
+`npm run db-check` hanya `SELECT 1`. Skema dibuat **hanya** oleh goose (`backend/migrations`), bukan request path.
+
+Strategi data RFC-001: **reset/tabel kosong**. Akun prototype tidak di-backfill. Jangan jalankan goose `0001` pada database yang sudah punya tabel `users` berbeda tanpa keputusan reset.
+
+```bash
+cd backend && go test ./...
+npm test
+npm run test:e2e
+```
+
+Tes integrasi repository membutuhkan `TEST_DATABASE_URL` (direct/unpooled, terisolasi dari production-demo).

@@ -1,8 +1,10 @@
-# Product Requirements Document (PRD) — TicketIn
+# Product Requirements Document (PRD) — MyTicketIn
+
+> **PEMBERITAHUAN DOKUMEN LAMA:** Dokumen versi 1.0 ini dipertahankan tanpa penulisan ulang sebagai riwayat awal dan bukan baseline implementasi aktif. Gunakan [`prd-improved.md`](./prd-improved.md) **versi 2.2** dan [`features.md`](./features.md) sebagai sumber kebutuhan saat ini. Stack implementasi aktif adalah **Go untuk API/transaksi** dan **Next.js untuk UI** (`RFC/RFC-001.md`). Jika terdapat konflik, baseline 2.2 berlaku—termasuk keputusan bahwa rekomendasi event (F74), poin loyalitas per organizer (F75), pemindaian poster event berbantuan AI (F76), pencarian event dengan bahasa alami berbantuan AI (F77), dan kursi bernomor dengan denah venue statis (F65) adalah Must Have MVP akademik. Dengan demikian, pengecualian “program loyalitas”, “sistem rekomendasi berbasis AI”, dan “kursi bernomor” pada bagian 4.2 di bawah telah dibatalkan untuk scope aktif; editor denah interaktif, clickable map, dan orphan-seat optimization tetap di luar MVP. Isi historis lainnya tetap dibaca sebagai konteks versi 1.0.
 
 | Atribut | Nilai |
 |---|---|
-| **Nama produk** | TicketIn |
+| **Nama produk** | MyTicketIn |
 | **Versi dokumen** | 1.0 |
 | **Status** | Draft untuk validasi pemangku kepentingan |
 | **Jenis rilis** | Minimum Viable Product (MVP) / proyek akademik |
@@ -14,11 +16,11 @@
 
 ## 1. Gambaran Umum
 
-TicketIn adalah platform tiket event berbasis web yang mempertemukan **penyelenggara event** dengan **pembeli tiket**. Penyelenggara dapat membuat dan mengelola beberapa event beserta jenis, harga, kuota, dan periode penjualan tiket. Pembeli dapat menemukan event, membayar tiket melalui metode pembayaran Indonesia, menerima e-ticket berkode QR, serta melihat status tiket yang dimiliki.
+MyTicketIn adalah platform tiket event berbasis web yang mempertemukan **penyelenggara event** dengan **pembeli tiket**. Penyelenggara dapat membuat dan mengelola beberapa event beserta jenis, harga, kuota, periode penjualan, serta satu mode inventori per event: general admission, zona/kategori, atau kursi bernomor. Pembeli dapat menemukan event, memilih tiket atau kursi sesuai mode, membayar melalui metode pembayaran Indonesia, menerima e-ticket berkode QR, serta melihat status tiket yang dimiliki.
 
 Pada hari pelaksanaan, penyelenggara memindai QR untuk memvalidasi tiket. Sistem harus mencegah tiket yang sama digunakan lebih dari satu kali. **Admin platform** bertanggung jawab atas verifikasi organizer dan event, pengawasan transaksi, serta penanganan pembatalan dan refund.
 
-Nilai utama TicketIn:
+Nilai utama MyTicketIn:
 
 - **Bagi organizer:** satu tempat untuk menerbitkan event, menjual tiket, memantau penjualan, dan melakukan check-in.
 - **Bagi pembeli:** proses pencarian hingga menerima tiket yang sederhana, aman, dan mudah dilacak.
@@ -34,7 +36,7 @@ Proses penjualan tiket yang tersebar melalui formulir, pesan pribadi, dan transf
 - Tiket digital yang tidak memiliki validasi terpusat mudah digunakan ulang.
 - Admin atau organizer sulit menelusuri status transaksi dan menyelesaikan sengketa.
 
-TicketIn menyelesaikan masalah tersebut melalui alur end-to-end dari publikasi event sampai check-in.
+MyTicketIn menyelesaikan masalah tersebut melalui alur end-to-end dari publikasi event sampai check-in.
 
 ## 3. Tujuan dan Sasaran
 
@@ -89,7 +91,7 @@ Target adopsi bisnis seperti jumlah organizer aktif, event terbit, dan nilai tra
 - Aplikasi mobile native.
 - Multiwilayah, multimata uang, dan bahasa selain Bahasa Indonesia.
 - Marketplace sekunder, penjualan ulang, transfer, atau gifting tiket.
-- Dynamic pricing, kursi bernomor, waiting list, kode promo, dan program loyalitas.
+- Dynamic pricing, waiting list, kode promo, dan program loyalitas. Editor denah interaktif serta clickable map tetap di luar MVP.
 - Keranjang yang menggabungkan tiket dari beberapa event.
 - Langganan organizer, biaya layanan, komisi, atau monetisasi lain.
 - Payout organizer otomatis dan rekonsiliasi keuangan tingkat enterprise.
@@ -99,7 +101,7 @@ Target adopsi bisnis seperti jumlah organizer aktif, event terbit, dan nilai tra
 
 ### 4.3 Kandidat Rilis Berikutnya
 
-1. Kursi bernomor dan denah venue.
+1. Editor denah interaktif, clickable map, dan orphan-seat optimization.
 2. Voucher, promosi, dan referral.
 3. Transfer tiket yang aman.
 4. Payout organizer otomatis.
@@ -115,14 +117,14 @@ Target adopsi bisnis seperti jumlah organizer aktif, event terbit, dan nilai tra
 | **Pembeli/Peserta** | Pengguna Indonesia yang mencari dan menghadiri event; mengakses melalui ponsel atau desktop | Menemukan event, membayar dengan metode yang familiar, dan menunjukkan tiket dengan cepat | Informasi tersebar, pembayaran tidak jelas, tiket sulit ditemukan, kekhawatiran tiket tidak valid |
 | **Organizer** | Individu atau organisasi yang menyelenggarakan satu atau beberapa event bertiket | Menerbitkan event, mengontrol kuota, memantau penjualan, dan memvalidasi peserta | Rekap manual, overselling, status pembayaran tidak sinkron, check-in lambat |
 | **Petugas Check-in** | Anggota tim organizer di lokasi event, umumnya menggunakan ponsel | Memindai tiket dengan cepat dan memperoleh hasil validasi yang tegas | Antrean, koneksi tidak stabil, QR duplikat, ketidakjelasan status tiket |
-| **Admin Platform** | Pengelola operasional dan kepatuhan TicketIn | Menjaga kualitas event, menangani masalah transaksi, refund, dan penyalahgunaan | Sulit menelusuri perubahan, kurangnya bukti audit, proses sengketa tidak konsisten |
+| **Admin Platform** | Pengelola operasional dan kepatuhan MyTicketIn | Menjaga kualitas event, menangani masalah transaksi, refund, dan penyalahgunaan | Sulit menelusuri perubahan, kurangnya bukti audit, proses sengketa tidak konsisten |
 
 ## 6. Prinsip dan Aturan Bisnis
 
 1. Hanya organizer yang telah disetujui admin yang dapat mengajukan event untuk dipublikasikan.
 2. Event harus berstatus **Published** agar terlihat dan dapat dibeli publik.
-3. Setiap jenis tiket memiliki harga, kuota, jadwal penjualan, dan batas pembelian per transaksi.
-4. Sistem tidak boleh menjual tiket melebihi kuota. Reservasi inventori saat pembayaran tertunda harus dilepas setelah waktu kedaluwarsa.
+3. Setiap event memilih tepat satu mode inventori: `GENERAL_ADMISSION`, `ZONED`, atau `RESERVED_SEATING`. Setiap jenis/kategori tiket memiliki harga, kuota, jadwal penjualan, dan batas pembelian per transaksi.
+4. Sistem tidak boleh menjual tiket melebihi kuota, dan satu kursi bernomor hanya boleh memiliki satu hold aktif atau satu tiket Paid. Reservasi inventori atau hold kursi saat pembayaran tertunda harus dilepas setelah waktu kedaluwarsa 15 menit.
 5. Pesanan baru dianggap dibayar setelah konfirmasi tepercaya dari payment gateway diterima.
 6. Callback pembayaran harus idempoten; callback yang dikirim ulang tidak boleh membuat tiket atau transaksi ganda.
 7. Satu unit tiket menghasilkan satu QR unik yang tidak mudah ditebak atau dipalsukan.
@@ -130,8 +132,10 @@ Target adopsi bisnis seperti jumlah organizer aktif, event terbit, dan nilai tra
 9. Check-in hanya dapat dilakukan oleh organizer pemilik event atau petugas yang diberi akses.
 10. Pembatalan event menghentikan penjualan baru dan memulai proses penanganan pesanan terdampak.
 11. Refund memerlukan pemeriksaan admin pada MVP dan harus mempunyai alasan serta jejak audit.
-12. Perubahan harga atau kuota tidak boleh mengubah transaksi dan tiket yang telah dibayar.
+12. Perubahan harga atau kuota tidak boleh mengubah transaksi dan tiket yang telah dibayar; snapshot kursi/kategori/harga tersimpan pada order item dan tiket.
 13. Seluruh waktu transaksi disimpan secara konsisten dan ditampilkan sesuai zona waktu event.
+14. Mode inventori event tidak boleh diubah setelah commerce (order, reservasi, atau tiket Paid) dimulai.
+15. Untuk `RESERVED_SEATING`, organizer mengunggah gambar denah statis beserta legenda/teks alternatif; pembeli memilih kursi melalui list/grid aksesibel yang terpisah, bukan peta klik.
 
 Nilai durasi reservasi, batas pembelian, dan batas waktu refund masih memerlukan keputusan produk.
 
@@ -176,8 +180,10 @@ Prioritas:
 | FR-TIX-02 | P0 | Setiap jenis tiket mempunyai nama, harga, kuota, periode penjualan, dan batas pembelian. |
 | FR-TIX-03 | P0 | Sistem menampilkan ketersediaan berdasarkan kuota terjual, tereservasi, dan tersisa. |
 | FR-TIX-04 | P0 | Sistem melakukan reservasi inventori selama pembayaran tertunda dan melepasnya saat kedaluwarsa/gagal. |
-| FR-TIX-05 | P0 | Sistem mencegah overselling saat beberapa pembeli checkout bersamaan. |
+| FR-TIX-05 | P0 | Sistem mencegah overselling saat beberapa pembeli checkout bersamaan, termasuk dua pembeli yang memilih kursi yang sama. |
 | FR-TIX-06 | P1 | Organizer dapat menghentikan penjualan suatu jenis tiket tanpa menghapus tiket yang telah dibeli. |
+| FR-TIX-07 | P0 | Event memilih tepat satu mode: general admission, zona/kategori, atau kursi bernomor. |
+| FR-TIX-08 | P0 | Organizer dapat mengelompokkan kursi bernomor per kategori/area dan harga, serta mengunggah denah statis dengan legenda/teks alternatif. |
 
 ### 7.4 Penemuan Event dan Checkout
 
@@ -185,9 +191,9 @@ Prioritas:
 |---|---|---|
 | FR-BUY-01 | P0 | Pengunjung dapat melihat daftar event Published tanpa harus login. |
 | FR-BUY-02 | P0 | Pengunjung dapat mencari event berdasarkan kata kunci dan menyaring berdasarkan kategori, lokasi, atau tanggal. |
-| FR-BUY-03 | P0 | Halaman detail menampilkan informasi event, organizer, jenis tiket, harga, jadwal, venue, dan ketersediaan. |
+| FR-BUY-03 | P0 | Halaman detail menampilkan informasi event, organizer, jenis/kategori tiket, harga, jadwal, venue, denah statis bila ada, dan ketersediaan. |
 | FR-BUY-04 | P0 | Pengguna harus login sebelum checkout. |
-| FR-BUY-05 | P0 | Pembeli dapat memilih jenis dan jumlah tiket sesuai kuota serta batas pembelian. |
+| FR-BUY-05 | P0 | Pembeli dapat memilih jenis dan jumlah tiket, atau kursi bernomor sesuai mode event, kuota, serta batas pembelian. |
 | FR-BUY-06 | P0 | Sistem menampilkan ringkasan biaya dan meminta persetujuan sebelum membuat pembayaran. |
 | FR-BUY-07 | P0 | Sistem membuat nomor pesanan unik dan menampilkan status pembayaran. |
 | FR-BUY-08 | P1 | Pembeli dapat melihat riwayat pesanan gagal, kedaluwarsa, dibayar, dibatalkan, dan direfund. |
@@ -211,7 +217,7 @@ Prioritas:
 |---|---|---|
 | FR-CHK-01 | P0 | Setiap tiket Paid memiliki identitas dan QR unik. |
 | FR-CHK-02 | P0 | Pembeli dapat membuka tiket dari dashboard pada perangkat mobile. |
-| FR-CHK-03 | P0 | Halaman tiket menampilkan event, pemilik tiket, jenis tiket, serta status penggunaan. |
+| FR-CHK-03 | P0 | Halaman tiket menampilkan event, pemilik tiket, jenis/kategori tiket, label kursi bila ada, serta status penggunaan. |
 | FR-CHK-04 | P0 | Petugas dapat memindai QR menggunakan kamera perangkat yang didukung browser. |
 | FR-CHK-05 | P0 | Sistem menampilkan hasil Valid, Already Used, Invalid, Cancelled/Refunded, atau Wrong Event. |
 | FR-CHK-06 | P0 | Validasi berhasil mengubah status tiket secara atomik menjadi Used dengan waktu dan petugas pemindai. |

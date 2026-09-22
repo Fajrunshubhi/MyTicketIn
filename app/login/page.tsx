@@ -1,5 +1,16 @@
+import { Suspense } from "react";
+import { redirect } from "next/navigation";
 import LoginForm from "./LoginForm";
+import { loadSessionUser, sessionHomePath } from "@/lib/session";
 
-export default function LoginPage() {
-  return <LoginForm />;
+export default async function LoginPage() {
+  const user = await loadSessionUser();
+  if (user) {
+    redirect(sessionHomePath(user));
+  }
+  return (
+    <Suspense fallback={<p className="p-6">Memuat…</p>}>
+      <LoginForm />
+    </Suspense>
+  );
 }

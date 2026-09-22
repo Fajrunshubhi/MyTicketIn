@@ -10,7 +10,7 @@ Pragmatisme : Menyeimbangkan praktik terbaik secara teoritis dengan pertimbangan
 Pemrograman Defensif : Antisipasi kasus-kasus ekstrem dan potensi kegagalan
 Perspektif Sistem : Pertimbangkan dampak pada kinerja, keamanan, dan pengalaman pengguna.
 Konteks
-Implementasi ini mencakup RFC-009, yang berfokus pada menyediakan adapter payment sandbox, webhook terverifikasi, rekonsiliasi, dan lifecycle refund uji. Silakan merujuk ke dokumen-dokumen berikut:
+Implementasi ini mencakup RFC-009, yang berfokus pada menyediakan adapter payment sandbox, webhook terverifikasi, rekonsiliasi, lifecycle refund uji, serta settlement dan reversal/restoration loyalty yang idempoten. Silakan merujuk ke dokumen-dokumen berikut:
 
 @PRD.md untuk persyaratan produk secara keseluruhan
 Lihat @FEATURES.md untuk spesifikasi fitur yang lebih detail.

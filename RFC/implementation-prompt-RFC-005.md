@@ -10,7 +10,7 @@ Pragmatisme : Menyeimbangkan praktik terbaik secara teoritis dengan pertimbangan
 Pemrograman Defensif : Antisipasi kasus-kasus ekstrem dan potensi kegagalan
 Perspektif Sistem : Pertimbangkan dampak pada kinerja, keamanan, dan pengalaman pengguna.
 Konteks
-Implementasi ini mencakup RFC-005, yang berfokus pada menyediakan multi-event draft, validasi pengajuan, tipe tiket, dan media event. Silakan merujuk ke dokumen-dokumen berikut:
+Implementasi ini mencakup RFC-005, yang berfokus pada menyediakan multi-event draft, validasi pengajuan, tipe tiket, media event, serta saran draft terstruktur AI/OCR dari poster yang wajib diterapkan dan disimpan eksplisit oleh organizer. Silakan merujuk ke dokumen-dokumen berikut:
 
 @PRD.md untuk persyaratan produk secara keseluruhan
 Lihat @FEATURES.md untuk spesifikasi fitur yang lebih detail.

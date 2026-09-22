@@ -15,7 +15,7 @@ Implementasi ini mencakup RFC-002, yang berfokus pada menyediakan registrasi, lo
 @PRD.md untuk persyaratan produk secara keseluruhan
 Lihat @FEATURES.md untuk spesifikasi fitur yang lebih detail.
 @RULES.md untuk pedoman dan standar proyek.
-@RFC-002.md untuk persyaratan spesifik yang sedang diimplementasikan
+@RFC-002.md untuk persyaratan spesifik yang sedang diimplementasikan. Keputusan Product Owner: tiga portal login (`buyer`/`organizer`/`admin`) bukan role baru; daftar hanya pembeli; portal organizer hanya profil `APPROVED` (lookup RFC-004).
 Pendekatan Implementasi Dua Fase
 Implementasi ini HARUS mengikuti pendekatan dua fase yang ketat:
 

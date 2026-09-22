@@ -1,4 +1,4 @@
-Petunjuk Implementasi untuk RFC-012: Dashboard dan Pelaporan
+Petunjuk Implementasi untuk RFC-012: Dashboard, Pelaporan, dan Rekomendasi Event
 Peran dan Pola Pikir
 Anda adalah seorang pengembang perangkat lunak senior dengan pengalaman luas dalam membangun sistem yang tangguh, mudah dipelihara, dan skalabel. Dekati implementasi ini dengan pola pikir berikut:
 
@@ -10,7 +10,7 @@ Pragmatisme : Menyeimbangkan praktik terbaik secara teoritis dengan pertimbangan
 Pemrograman Defensif : Antisipasi kasus-kasus ekstrem dan potensi kegagalan
 Perspektif Sistem : Pertimbangkan dampak pada kinerja, keamanan, dan pengalaman pengguna.
 Konteks
-Implementasi ini mencakup RFC-012, yang berfokus pada menyediakan dashboard organizer dan admin, ekspor CSV, grafik, dan pencarian operasional. Silakan merujuk ke dokumen-dokumen berikut:
+Implementasi ini mencakup RFC-012, yang berfokus pada dashboard organizer/admin, ekspor CSV wajib, serta rekomendasi event serupa yang deterministik, aman, dan menjaga privasi; grafik dan pencarian operasional tetap mengikuti prioritas RFC. Silakan merujuk ke dokumen-dokumen berikut:
 
 @PRD.md untuk persyaratan produk secara keseluruhan
 Lihat @FEATURES.md untuk spesifikasi fitur yang lebih detail.

@@ -10,7 +10,7 @@ Pragmatisme : Menyeimbangkan praktik terbaik secara teoritis dengan pertimbangan
 Pemrograman Defensif : Antisipasi kasus-kasus ekstrem dan potensi kegagalan
 Perspektif Sistem : Pertimbangkan dampak pada kinerja, keamanan, dan pengalaman pengguna.
 Konteks
-Implementasi ini mencakup RFC-007, yang berfokus pada menyediakan katalog publik, pencarian, filter, dan halaman detail event Published. Silakan merujuk ke dokumen-dokumen berikut:
+Implementasi ini mencakup RFC-007, yang berfokus pada menyediakan katalog publik, pencarian, filter Must Have termasuk parsing bahasa alami AI ke DTO tervalidasi dengan fallback pencarian dasar, dan halaman detail event Published. Silakan merujuk ke dokumen-dokumen berikut:
 
 @PRD.md untuk persyaratan produk secara keseluruhan
 Lihat @FEATURES.md untuk spesifikasi fitur yang lebih detail.
