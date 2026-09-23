@@ -10,7 +10,7 @@ async function main() {
 
   const sql = neon(url);
   await sql`SELECT 1 AS ok`;
-  console.log("Koneksi PostgreSQL berhasil. Skema hanya dibentuk oleh goose, bukan skrip ini.");
+  console.log("Koneksi PostgreSQL berhasil. Skema hanya dibentuk oleh npm run migrate, bukan skrip ini.");
 }
 
 main().catch((error: unknown) => {

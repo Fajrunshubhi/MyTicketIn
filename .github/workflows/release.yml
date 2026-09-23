@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
 
 env:
-  NEXT_PUBLIC_API_BASE_URL: http://127.0.0.1:8080
+  NEXT_PUBLIC_API_BASE_URL: http://127.0.0.1:3000
   EMAIL_PROVIDER: sandbox
   ALLOW_PARTIAL_ENV: "true"
 
@@ -13,18 +13,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
-        with:
-          go-version: "1.27.1"
-          cache-dependency-path: backend/go.sum
       - uses: actions/setup-node@v4
         with:
           node-version: "24"
           cache: npm
       - run: npm ci
-      - run: go test -C backend ./...
-      - run: go build -C backend -o bin/api ./cmd/api
+      - run: npx tsx scripts/verify-migrations.ts
       - run: npm run typecheck
+      - run: npm test
       - run: npm run build
       - name: Write release manifest
         run: |
@@ -37,7 +33,7 @@ jobs:
             buildId: process.env.GITHUB_RUN_ID,
             createdAt: new Date().toISOString(),
             nodeVersion: process.version,
-            migrationChecksums: 'goose-0017',
+            migrationChecksums: 'goose-0018',
             artifactDigest: process.env.GITHUB_SHA,
             sandboxOnly: true,
             gateResults: {

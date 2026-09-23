@@ -1,4 +1,4 @@
-import { formatDateTime, formatRupiah } from "@/lib/format";
+import { formatCheckInBefore, formatDateTime, formatRupiah } from "@/lib/format";
 import { SALE_LABEL, type PublicEvent } from "@/components/events/catalog-types";
 import { TicketTypeList } from "@/components/events/TicketTypeList";
 import { TicketSelector } from "@/components/events/TicketSelector";
@@ -11,8 +11,14 @@ import { EventLocationMap } from "@/components/events/EventLocationMap";
 export async function EventDetail({ event }: { event: PublicEvent }) {
   const user = await loadSessionUser();
   const canPurchase = Boolean(!user || user.access?.canBuy);
-  const price = event.ticketTypes[0] ? formatRupiah(event.ticketTypes[0].priceRupiah) : "menyusul";
-  const images = event.images && event.images.length > 0 ? event.images : [event.image];
+  const rawPrice = event.ticketTypes[0]?.priceRupiah;
+  const price =
+    rawPrice == null
+      ? "menyusul"
+      : Number.isInteger(rawPrice) && rawPrice >= 0
+        ? formatRupiah(rawPrice)
+        : "menyusul";
+  const images = event.images && event.images.length > 0 ? event.images : event.image ? [event.image] : [];
   return (
     <article className="space-y-8">
       <EventGallery images={images} title={event.title} className="w-full" />
@@ -37,6 +43,7 @@ export async function EventDetail({ event }: { event: PublicEvent }) {
             <br />
             sampai {formatDateTime(event.endsAt, event.timezone)}
           </p>
+          <p className="mt-2 text-sm font-medium text-ink/80">{formatCheckInBefore(event.startsAt, event.timezone)}</p>
           <p className="mt-3 text-sm text-ink/60">Mulai {price}</p>
           <div className="mt-3">
             {canPurchase ? (
@@ -98,7 +105,7 @@ export async function EventDetail({ event }: { event: PublicEvent }) {
               />
             </div>
           </section>
-          {event.tags && event.tags.length > 0 ? (
+          {Array.isArray(event.tags) && event.tags.length > 0 ? (
             <section>
               <h2 className="text-xl font-semibold text-ink">Tag</h2>
               <ul className="mt-3 flex flex-wrap gap-2">
@@ -121,7 +128,7 @@ export async function EventDetail({ event }: { event: PublicEvent }) {
               <figcaption className="mt-2 text-sm text-ink/60">{event.seatMap.legend}</figcaption>
             </figure>
           ) : null}
-          {event.seats.length > 0 ? (
+          {event.seats && event.seats.length > 0 ? (
             <ul className="grid grid-cols-2 gap-2" aria-label="Daftar kursi">
               {event.seats.map((seat) => (
                 <li key={seat.id} className="rounded-xl border border-stone-200 bg-white px-3 py-2 text-sm text-ink/80">

@@ -1,9 +1,17 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Icon } from "@/components/ui/Icon";
 
 export type GalleryImage = { url: string; alt: string };
+
+const FALLBACK = "/dummy-events/jazz-1.jpg";
+
+function markFallback(el: HTMLImageElement) {
+  if (el.dataset.fallback === "1") return;
+  el.dataset.fallback = "1";
+  el.src = FALLBACK;
+}
 
 export function EventGallery({
   images,
@@ -14,13 +22,25 @@ export function EventGallery({
   title: string;
   className?: string;
 }) {
-  const slides = images.length > 0 ? images : [{ url: "/placeholder-event.svg", alt: title }];
+  const [broken, setBroken] = useState<Record<string, true>>({});
+  const slides = useMemo(() => {
+    const mapped = (images.length > 0 ? images : [{ url: FALLBACK, alt: title }]).map((img) =>
+      broken[img.url] ? { ...img, url: FALLBACK } : img,
+    );
+    const seen = new Set<string>();
+    return mapped.filter((img) => {
+      if (seen.has(img.url)) return false;
+      seen.add(img.url);
+      return true;
+    });
+  }, [broken, images, title]);
   const [index, setIndex] = useState(0);
-  const current = slides[Math.min(index, slides.length - 1)];
+  const current = slides[Math.min(index, slides.length - 1)] || { url: FALLBACK, alt: title };
   const many = slides.length > 1;
 
   function go(next: number) {
     const len = slides.length;
+    if (len < 1) return;
     setIndex(((next % len) + len) % len);
   }
 
@@ -31,6 +51,11 @@ export function EventGallery({
           src={current.url}
           alt={current.alt || title}
           className="aspect-[16/9] h-auto w-full object-cover"
+          onError={(event) => {
+            const url = current.url;
+            markFallback(event.currentTarget);
+            if (url !== FALLBACK) setBroken((cur) => ({ ...cur, [url]: true }));
+          }}
         />
         {many ? (
           <>
@@ -67,7 +92,15 @@ export function EventGallery({
                 onClick={() => setIndex(i)}
                 className={`block overflow-hidden rounded-xl border-2 ${i === index ? "border-gold-400" : "border-transparent opacity-70"}`}
               >
-                <img src={slide.url} alt="" className="h-14 w-20 object-cover" />
+                <img
+                  src={slide.url}
+                  alt=""
+                  className="h-14 w-20 object-cover"
+                  onError={(event) => {
+                    markFallback(event.currentTarget);
+                    if (slide.url !== FALLBACK) setBroken((cur) => ({ ...cur, [slide.url]: true }));
+                  }}
+                />
               </button>
             </li>
           ))}

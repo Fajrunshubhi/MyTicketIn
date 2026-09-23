@@ -4,6 +4,7 @@ import { Suspense, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Alert } from "@/components/ui/Alert";
+import { formatCheckInBefore } from "@/lib/format";
 
 type TicketRow = {
   id: string;
@@ -19,6 +20,15 @@ const STATUS_LABEL: Record<string, string> = {
   USED: "Sudah digunakan",
   CANCELLED: "Dibatalkan",
 };
+
+function formatCheckInLine(iso?: string, tz?: string) {
+  if (!iso) return "";
+  try {
+    return formatCheckInBefore(iso, tz || "Asia/Jakarta");
+  } catch {
+    return "";
+  }
+}
 
 export default function TicketsRoute() {
   return (
@@ -105,6 +115,11 @@ function TicketsPage() {
                 <p className="text-sm text-ink/55">
                   {t.event?.venueName} · {t.event?.city}
                 </p>
+                {t.event?.startsAt ? (
+                  <p className="mt-1 text-sm text-ink/70">
+                    {formatCheckInLine(t.event.startsAt, t.event.timezone)}
+                  </p>
+                ) : null}
                 <p className="mt-1 text-gold-700 underline">Detail tiket {t.ticketNumber}</p>
               </Link>
             </li>

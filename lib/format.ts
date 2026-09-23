@@ -32,6 +32,10 @@ export function formatDateTime(
   return `${formatted} ${zoneLabels[timeZone] ?? timeZone}`;
 }
 
+export function formatCheckInBefore(isoOrDate: string | Date, timeZone = "Asia/Jakarta"): string {
+  return `Check-in sebelum ${formatDateTime(isoOrDate, timeZone)}.`;
+}
+
 export function formatRelativeId(iso: string): string {
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) {

@@ -1,12 +1,14 @@
-# MyTicketIn — Login Prototipe + fondasi Go
+# MyTicketIn — Next.js UI + API
 
-Prototype UI saat ini masih **Next.js 14 + TypeScript**. Runtime transaksi target adalah **Go 1.27** (API) dengan PostgreSQL/Neon. Jangan anggap login prototype sebagai produk selesai.
+UI dan HTTP API **Next.js 14** (`app/api` Route Handlers) pada PostgreSQL/Neon. Folder `backend/` Go adalah referensi perilaku sampai checklist RFC-021 §5; **runtime** tidak membutuhkan `cmd/api`.
 
-## Stack target (RFC-001)
+## Stack
 
-- API: `backend/cmd/api` (Go, chi, pgx, goose, sqlc)
-- UI: Next.js tipis yang memanggil `NEXT_PUBLIC_API_BASE_URL`
-- Database: PostgreSQL (lokal untuk development; Neon untuk deployment)
+- Runtime: Route Handler Next.js + Neon
+- Skema: SQL goose di `/migrations` (0001–0018)
+- Runner migrasi: `npm run migrate` (Node, tabel `goose_db_version` yang sama)
+
+Rencana paritas: `RFC/RFC-021.md`.
 
 ## 1. Database lokal vs Neon
 
@@ -30,10 +32,10 @@ DATABASE_URL_UNPOOLED=postgresql://myticketin:myticketin_dev@127.0.0.1:5432/myti
 Lokal tidak memakai pooler, jadi kedua URL **sama**. Setelah itu:
 
 ```bash
-cd backend
-go run ./cmd/migrate
-go run ./cmd/api
+npm run migrate
 ```
+
+Pakai host Neon **langsung** (`DATABASE_URL_UNPOOLED`), bukan hostname `-pooler`. API HTTP yang dijalankan adalah Next.js.
 
 Jika memakai PostgreSQL Windows (bukan Docker), buat database `myticketin` lalu ganti user/password pada URL, tetap `127.0.0.1:5432` dan `sslmode=disable`.
 
@@ -41,48 +43,37 @@ Jika memakai PostgreSQL Windows (bukan Docker), buat database `myticketin` lalu 
 
 Di hosting, isi URL Neon: pooled → `DATABASE_URL`, direct (tanpa `-pooler`) → `DATABASE_URL_UNPOOLED`, `sslmode=require`. Jangan memakai localhost.
 
-Vercel **hanya** menjalankan Next.js. Katalog, login, dan rewrite `/api/*` membutuhkan proses Go terpisah (Railway, Render, Fly, atau VM). Tanpa origin API HTTPS, halaman Vercel menampilkan “Katalog sedang tidak tersedia”.
+Vercel menjalankan Next.js (UI + `/api`). Isi `DATABASE_URL` (pooler Neon), `SESSION_SECRET` ≥32 karakter, dan secret QR/scheduler sesuai lingkungan. `NEXT_PUBLIC_API_BASE_URL` boleh dikosongkan (same-origin `/api`).
 
-1. Deploy `backend/` (Dockerfile) ke host yang mendukung binary Go. Jalankan migrasi sekali: `MIGRATIONS_DIR=/app/migrations /app/migrate`.
-2. Env **API**: `APP_ENV=preview`, `WEB_ORIGIN=https://myticketin.vercel.app`, `DATABASE_URL` (pooler Neon), `DATABASE_URL_UNPOOLED` (host Neon langsung), `SESSION_SECRET` ≥32 karakter, plus secret QR/scheduler sesuai `APP_ENV`.
-3. Env **Vercel** (Production, lalu Redeploy): `API_ORIGIN` dan `NEXT_PUBLIC_API_BASE_URL` = URL HTTPS API Go (tanpa slash akhir). Jangan `localhost`.
-4. Pastikan `WEB_ORIGIN` di API sama persis dengan URL situs Vercel (skema + host).
+1. Jalankan `npm run migrate` ke Neon sekali (URL unpooled).
+2. Env **Vercel**: `DATABASE_URL`, `SESSION_SECRET`, `WEB_ORIGIN` = URL situs. Jangan `localhost`.
 
 ## 2. Environment
 
 Salin `.env.example` ke `.env.local`. Isi secret; **jangan** commit `.env.local`. Simpan URL Neon di catatan terpisah agar tinggal ditukar saat deploy.
 
-## 3. Menjalankan UI dan API (RFC-001)
+## 3. Menjalankan aplikasi
 
-Pasang [Go 1.27.1](https://go.dev/dl/). Auth memakai sesi opaque Go (bukan NextAuth).
+Auth memakai sesi opaque cookie `mti_session` (bukan NextAuth).
 
 ```bash
 npm install
-cd backend
-go mod download
-go run ./cmd/migrate
-go run ./cmd/api
-```
-
-Di terminal lain:
-
-```bash
+npm run migrate
 npm run dev
 ```
 
-- UI: `http://localhost:3000` (rewrite `/api/*` ke proses Go)
-- Health: `GET http://localhost:8080/api/health`
+- Aplikasi: `http://localhost:3000`
+- Health: `GET http://localhost:3000/api/health`
 - Register/login: `POST /api/register` (hanya pembeli), `POST /api/auth/login` dengan `portal` (`buyer` \| `organizer` \| `admin`) + CSRF + cookie `mti_session`. Portal yang tidak cocok ditolak `AUTH_PORTAL_DENIED`.
 - Google: isi `GOOGLE_CLIENT_ID` dan `GOOGLE_CLIENT_SECRET` berpasangan; tombol disembunyikan jika kosong
 
-Migrasi `0002_identity_session_rbac` bersifat additive pada tabel `users` RFC-001. Jalankan goose pada cabang/database uji sebelum production-demo.
+Migrasi `0002_identity_session_rbac` bersifat additive pada tabel `users` RFC-001. Jalankan `npm run migrate` pada cabang/database uji sebelum production-demo.
 
-`npm run db-check` hanya `SELECT 1`. Skema dibuat **hanya** oleh goose (`backend/migrations`), bukan request path.
+`npm run db-check` hanya `SELECT 1`. Skema dibuat **hanya** oleh file di `/migrations`, bukan request path.
 
-Strategi data RFC-001: **reset/tabel kosong**. Akun prototype tidak di-backfill. Jangan jalankan goose `0001` pada database yang sudah punya tabel `users` berbeda tanpa keputusan reset.
+Strategi data RFC-001: **reset/tabel kosong**. Akun prototype tidak di-backfill. Jangan jalankan `0001` pada database yang sudah punya tabel `users` berbeda tanpa keputusan reset.
 
 ```bash
-cd backend && go test ./...
 npm test
 npm run test:e2e
 ```

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatDateTime, formatRupiah, naiveLocalToUtcIso, utcIsoToNaiveLocal } from "./format";
+import { formatDateTime, formatRupiah, formatCheckInBefore, naiveLocalToUtcIso, utcIsoToNaiveLocal } from "./format";
 
 describe("F55 formatters", () => {
   it("formats integer Rupiah without fractions", () => {
@@ -14,6 +14,11 @@ describe("F55 formatters", () => {
     const text = formatDateTime("2026-01-01T00:00:00.000Z", "Asia/Jakarta");
     expect(text).toMatch(/07/);
     expect(text.toUpperCase()).toMatch(/WIB|GMT\+7|\+07/);
+  });
+
+  it("states check-in deadline from the event start", () => {
+    expect(formatCheckInBefore("2026-01-01T00:00:00.000Z", "Asia/Jakarta")).toMatch(/^Check-in sebelum /);
+    expect(formatCheckInBefore("2026-01-01T00:00:00.000Z", "Asia/Jakarta")).toMatch(/07/);
   });
 
   it("round-trips naive local time in Asia/Jakarta", () => {

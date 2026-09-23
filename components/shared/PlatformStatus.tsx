@@ -70,7 +70,7 @@ export function PlatformStatus({ apiBaseUrl }: { apiBaseUrl: string }) {
   if (view === "error") {
     return (
       <Alert tone="error" title="API belum siap">
-        {health?.error?.message || "Tidak dapat menghubungi proses Go. Jalankan API di NEXT_PUBLIC_API_BASE_URL."}
+        {health?.error?.message || "Tidak dapat menghubungi API Next.js. Pastikan aplikasi berjalan dan DATABASE_URL tersedia."}
       </Alert>
     );
   }

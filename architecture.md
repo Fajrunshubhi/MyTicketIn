@@ -5,12 +5,12 @@
 | **Sistem** | MyTicketIn |
 | **Versi dokumen** | 1.1 |
 | **Status** | Arsitektur target MVP akademik |
-| **Gaya arsitektur** | Modular monolith berbasis domain, serverless deployment |
+| **Gaya arsitektur** | Modular monolith; transisi Go API → Next.js Route Handlers (RFC-021) |
 | **Platform** | Aplikasi web responsif |
 | **Pasar awal** | Indonesia, event tatap muka |
 | **Model pembayaran MVP** | Payment gateway sandbox, tanpa uang nyata |
-| **Target deployment** | Belum dipilih (TBD), non-Vercel |
-| **Rencana implementasi** | RFC-001 sampai RFC-014 secara sekuensial |
+| **Target deployment** | Vercel (Next.js) setelah paritas RFC-021; Go terpisah selama transisi |
+| **Rencana implementasi** | RFC-001 sampai RFC-014 (perilaku), RFC-021 (pindah runtime) |
 | **Ekstensi komersial** | RFC-015 sampai RFC-020, status Deferred |
 
 ## 1. Pendahuluan dan Tujuan Sistem
@@ -312,7 +312,7 @@ Versi target mengikuti `RULES.md` dan diverifikasi pada 19 September 2026.
 | Runtime transaksi | Go | 1.27.1 | Concurrent-safe, binary stateless, sesuai invariant ACID |
 | HTTP API | chi | v5 | Router ringan tanpa framework berat |
 | Driver DB | pgx | v5 | PostgreSQL native, transaksi eksplisit |
-| Migrasi | goose | v3 | SQL terversi, tanpa ORM magic |
+| Migrasi | goose SQL `/migrations` + `npm run migrate` | Node; tabel `goose_db_version` |
 | Query typed | sqlc | CLI | SQL eksplisit, struct ter-generate |
 | Logging | slog | stdlib | JSON terstruktur |
 | Presentation | Next.js App Router | 16.3.4 | UI/RSC/scanner browser |

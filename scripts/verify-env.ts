@@ -1,4 +1,4 @@
-const required = ["APP_ENV", "API_ADDR", "WEB_ORIGIN", "SESSION_SECRET", "DATABASE_URL", "DATABASE_URL_UNPOOLED"];
+const required = ["APP_ENV", "WEB_ORIGIN", "SESSION_SECRET", "DATABASE_URL", "DATABASE_URL_UNPOOLED"];
 const missing = required.filter((k) => !String(process.env[k] || "").trim());
 if (missing.length && process.env.ALLOW_PARTIAL_ENV !== "true") {
   console.error("missing", missing.join(","));

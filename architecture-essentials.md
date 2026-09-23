@@ -17,13 +17,13 @@ Status proyek:
 - **Target aktif:** MVP akademik dengan payment sandbox dan data uji.
 - **Cakupan aktif:** 66 dari 77 fitur (57 Must, 5 Should, 4 Could, 11 Won’t).
 - **Promosi Must:** F20, F46, F50, F51, dan F65; F49 tetap Must.
-- **Deployment:** belum tersedia; provider non-Vercel masih TBD.
-- **Rencana aktif:** RFC-001–RFC-014, lalu UAT akademik.
+- **Deployment:** UI dapat di Vercel; API Go terpisah sampai RFC-021 paritas, lalu satu proses Next.js.
+- **Rencana aktif:** RFC-001–RFC-014 (fungsional), RFC-021 (pindah runtime ke Next.js tanpa mengubah perilaku).
 - **Rencana komersial:** RFC-015–RFC-020 berstatus **Deferred**.
 
 ## 2. Keputusan Arsitektur
 
-Gunakan **modular monolith berbasis domain**: satu binary Go (API/job) plus Next.js sebagai UI.
+Gunakan **modular monolith berbasis domain**: selama transisi, binary Go (API) plus Next.js UI; target RFC-021 adalah **satu proses Next.js** (App Router + Route Handler) pada PostgreSQL yang sama.
 
 Alasan utama:
 
@@ -42,9 +42,9 @@ Presentation → Application Service → Domain → Ports
 
 Aturan:
 
-1. UI, Server Action, dan Route Handler harus tipis.
-2. Aturan bisnis berada pada application/domain service.
-3. Domain tidak mengimpor chi, pgx, React, Next.js, atau SDK provider.
+1. UI dan Client Component harus tipis.
+2. Aturan bisnis berada pada application/domain service (`backend` sekarang; `lib/server` setelah port RFC-021).
+3. Domain tidak mengimpor chi, pgx, React, atau SDK provider.
 4. PostgreSQL adalah satu-satunya source of truth.
 5. Integrasi eksternal selalu melalui port/adapter.
 6. Invariant transaksi dijaga pada database.
@@ -59,7 +59,7 @@ flowchart LR
   Organizer[Organizer]
   Staff[CheckInStaff]
   Admin[Admin]
-  App["MyTicketIn Go API + Next.js UI"]
+  App["MyTicketIn Next.js UI (+ Go API transisi)"]
   Database[(NeonPostgreSQL)]
   Google[GoogleOAuth]
   Gateway["Payment Gateway Sandbox"]
@@ -109,10 +109,11 @@ Seluruh sistem eksternal adalah trust boundary. Input dari browser, OAuth, webho
 Struktur target:
 
 ```text
-backend/cmd/api/
+migrations/            # goose SQL; npm run migrate
+backend/cmd/api/           # referensi transisi; bukan runtime Vercel
 backend/internal/{platform,modules}/
-backend/migrations/
-app/   # Next.js UI
+app/                   # Next.js UI + Route Handlers
+lib/server/
 components/
 tests/e2e/
 ```

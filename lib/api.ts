@@ -25,7 +25,9 @@ export async function apiFetch(path: string, init: RequestInit = {}): Promise<Re
 
 export function readApiError(payload: unknown, fallback: string): string {
   const body = payload as ApiError;
-  const base = body.error?.message || fallback;
+  const fields = body.error?.fieldErrors || {};
+  const fieldMsg = Object.values(fields).find((v) => Boolean(v));
+  const base = fieldMsg || body.error?.message || fallback;
   if (body.error?.correlationId && (body.error.code === "INTERNAL_ERROR" || body.error.code === "SERVICE_UNHEALTHY")) {
     return `${base} (ID ${body.error.correlationId})`;
   }

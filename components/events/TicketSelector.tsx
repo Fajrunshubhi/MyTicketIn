@@ -11,6 +11,7 @@ export function TicketSelector({ event }: { event: PublicEvent }) {
   const reserved = event.inventoryMode === "RESERVED_SEATING";
   const [qty, setQty] = useState<Record<string, number>>({});
   const [seats, setSeats] = useState<string[]>([]);
+  const seatList = event.seats || [];
 
   const eligible = event.ticketTypes.filter((t) => t.saleStatus === "AVAILABLE" && t.stockLabel !== "SOLD_OUT");
   const selected = useMemo(() => {
@@ -81,7 +82,7 @@ export function TicketSelector({ event }: { event: PublicEvent }) {
           <fieldset>
             <legend className="mb-2 text-sm font-medium text-ink">Pilih kursi</legend>
             <ul className="grid grid-cols-2 gap-2 sm:grid-cols-4" aria-label="Pilih kursi">
-              {event.seats.map((seat) => {
+              {seatList.map((seat) => {
                 const available = seat.saleStatus !== "UNAVAILABLE" && eligible.length > 0;
                 const on = seats.includes(seat.id);
                 return (

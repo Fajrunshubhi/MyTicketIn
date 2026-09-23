@@ -169,7 +169,7 @@ export default function CheckoutPage() {
     if (!draft || !eventId || !holdersReady) return;
     setBusy(true);
     setError("");
-    const key = crypto.randomUUID().replace(/-/g, "") + "checkout";
+    const key = crypto.randomUUID().replace(/-/g, "");
     const payload =
       (draft.seatIds || []).length > 0
         ? { attendees: seatHolders }
@@ -182,7 +182,7 @@ export default function CheckoutPage() {
           };
     const res = await apiFetch("/api/orders", {
       method: "POST",
-      headers: { "Content-Type": "application/json", "Idempotency-Key": key.slice(0, 32) },
+      headers: { "Content-Type": "application/json", "Idempotency-Key": key },
       body: JSON.stringify({
         eventId,
         items: payload.items || draft.items,
@@ -215,7 +215,7 @@ export default function CheckoutPage() {
         {!draft ? <p className="mt-6 text-ink/70">Tidak ada pilihan tiket. Pilih tiket dari halaman event.</p> : null}
         {summary ? (
           <section className="mt-6 space-y-4 rounded-2xl border border-stone-200 p-6">
-            <h2 className="font-display text-2xl text-ink">{summary.event.title}</h2>
+            <h2 className="font-display text-2xl text-ink">{summary.event?.title || "Checkout"}</h2>
             <ul className="space-y-2">
               {summary.items.map((it) => (
                 <li key={`${it.ticketTypeId}-${it.seatLabel || ""}`} className="text-ink/80">

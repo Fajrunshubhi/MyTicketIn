@@ -2,11 +2,26 @@ function trimOrigin(value: string): string {
   return value.trim().replace(/\/$/, "");
 }
 
-/** Origin of the Go API. Browser calls stay same-origin via Next rewrites. */
+/**
+ * Origin for server-side fetch to Route Handlers on this Next.js app.
+ * Browser traffic stays same-origin (`/api/...`).
+ */
 export function getPublicApiBaseUrl(): string {
-  const explicit = trimOrigin(String(process.env.API_ORIGIN || process.env.NEXT_PUBLIC_API_BASE_URL || ""));
-  if (explicit) {
-    return explicit;
+  const vercel = String(process.env.VERCEL_URL || "").trim();
+  if (vercel) {
+    return `https://${vercel.replace(/^https?:\/\//, "")}`;
   }
-  return "http://127.0.0.1:8080";
+  const web = trimOrigin(String(process.env.WEB_ORIGIN || process.env.APP_ORIGIN || ""));
+  if (web) {
+    return web;
+  }
+  return "http://127.0.0.1:3000";
+}
+
+export function appVersion(): string {
+  return String(process.env.APP_VERSION || process.env.npm_package_version || "0.1.0");
+}
+
+export function appEnv(): string {
+  return String(process.env.APP_ENV || process.env.NODE_ENV || "development");
 }

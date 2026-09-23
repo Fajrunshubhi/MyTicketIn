@@ -1,8 +1,11 @@
+# Build from repository root:
+#   docker build -f backend/Dockerfile .
 FROM golang:1.27-bookworm AS build
 WORKDIR /src
-COPY go.mod go.sum ./
+COPY backend/go.mod backend/go.sum ./
 RUN go mod download
-COPY . .
+COPY backend/ .
+COPY migrations ./migrations
 RUN CGO_ENABLED=0 GOOS=linux go build -o /out/api ./cmd/api \
  && CGO_ENABLED=0 GOOS=linux go build -o /out/migrate ./cmd/migrate
 

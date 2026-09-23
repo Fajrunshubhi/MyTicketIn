@@ -6,7 +6,7 @@ import { AppHeader } from "@/components/shared/AppHeader";
 import { Alert } from "@/components/ui/Alert";
 import { Container } from "@/components/ui/Container";
 import { LoadingState } from "@/components/ui/LoadingState";
-import { formatDateTime, formatRupiah } from "@/lib/format";
+import { formatCheckInBefore, formatDateTime, formatRupiah } from "@/lib/format";
 import { readApiError } from "@/lib/api";
 import { STATUS_LABEL, type EventRecord, type TicketTypeRecord } from "@/components/events/event-types";
 
@@ -59,6 +59,7 @@ export default function EventPreviewClient({ eventId }: { eventId: string }) {
             {" – "}
             <time dateTime={event.endsAt}>{formatDateTime(event.endsAt, event.timezone)}</time>
           </p>
+          <p className="text-sm font-medium text-ink/80">{formatCheckInBefore(event.startsAt, event.timezone)}</p>
           <h2 className="font-display text-2xl">Tiket</h2>
           <ul>
             {tickets.map((t) => (

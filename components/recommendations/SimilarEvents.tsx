@@ -8,12 +8,12 @@ type Item = {
   title: string;
   category: string;
   city: string;
-  province: string;
+  province?: string;
   startsAt: string;
   timezone: string;
-  organizer: { name: string };
-  image: { url: string; altText: string };
-  reason: string;
+  organizer?: { name?: string };
+  image?: { url?: string; altText?: string };
+  reason?: string;
 };
 
 export function SimilarEvents({ slug }: { slug: string }) {
@@ -50,10 +50,20 @@ export function SimilarEvents({ slug }: { slug: string }) {
       <ul className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {items.map((item) => (
           <li key={item.slug} className="overflow-hidden rounded-2xl border border-stone-200 bg-white shadow-card">
-            <img src={item.image.url} alt={item.image.altText} className="h-32 w-full object-cover" />
+            <img
+              src={item.image?.url || "/dummy-events/jazz-1.jpg"}
+              alt={item.image?.altText || item.title}
+              className="h-32 w-full object-cover"
+              onError={(event) => {
+                const el = event.currentTarget;
+                if (el.dataset.fallback === "1") return;
+                el.dataset.fallback = "1";
+                el.src = "/dummy-events/jazz-1.jpg";
+              }}
+            />
             <div className="p-4">
             <p className="font-semibold text-ink">{item.title}</p>
-            <p className="mt-1 text-sm text-ink/65">{item.organizer.name} · {item.city}, {item.province}</p>
+            <p className="mt-1 text-sm text-ink/65">{item.organizer?.name ? `${item.organizer.name} · ` : null}{item.city}{item.province ? `, ${item.province}` : ""}</p>
             <p className="mt-1 text-sm text-gold-800">{item.reason}</p>
             <p className="mt-3">
               <Link className="text-gold-700 underline" href={`/events/${item.slug}`}>Lihat event</Link>

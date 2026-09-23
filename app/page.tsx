@@ -5,18 +5,20 @@ import { SiteHeader } from "@/components/shared/SiteHeader";
 import { EventCard } from "@/components/events/EventCard";
 import { LandingToolbar } from "@/components/landing/LandingToolbar";
 import type { CatalogCard } from "@/components/events/catalog-types";
-import { getPublicApiBaseUrl } from "@/lib/env";
+import { listCatalog, listFilters } from "@/lib/server/catalog";
 import { loadSessionUser } from "@/lib/session";
 
 async function loadUpcoming(): Promise<{ items: CatalogCard[]; unavailable: boolean }> {
   try {
-    const res = await fetch(`${getPublicApiBaseUrl()}/api/events?limit=9`, { cache: "no-store" });
-    if (res.status === 503 || res.status === 429) {
-      return { items: [], unavailable: true };
-    }
-    if (!res.ok) return { items: [], unavailable: false };
-    const body = (await res.json()) as { data?: { items?: CatalogCard[] } };
-    return { items: body.data?.items || [], unavailable: false };
+    const result = await listCatalog({
+      q: "",
+      category: "",
+      city: "",
+      province: "",
+      tag: "",
+      limit: 9,
+    });
+    return { items: result.items, unavailable: false };
   } catch {
     return { items: [], unavailable: true };
   }
@@ -24,13 +26,9 @@ async function loadUpcoming(): Promise<{ items: CatalogCard[]; unavailable: bool
 
 async function loadFilterOptions(): Promise<{ categories: string[]; cities: string[] }> {
   try {
-    const res = await fetch(`${getPublicApiBaseUrl()}/api/events/filters`, { cache: "no-store" });
-    if (!res.ok) return { categories: [], cities: [] };
-    const body = (await res.json()) as {
-      data?: { categories?: string[]; locations?: { city: string }[] };
-    };
-    const cities = [...new Set((body.data?.locations || []).map((item) => item.city).filter(Boolean))];
-    return { categories: body.data?.categories || [], cities };
+    const data = await listFilters();
+    const cities = [...new Set((data.locations || []).map((item) => item.city).filter(Boolean))];
+    return { categories: data.categories || [], cities };
   } catch {
     return { categories: [], cities: [] };
   }

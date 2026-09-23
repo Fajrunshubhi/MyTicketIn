@@ -38,38 +38,42 @@ Versi target di bawah adalah versi stabil yang diverifikasi pada **19 September 
 
 | Area | Teknologi Target | Versi |
 |---|---|---:|
-| Runtime transaksi | Go | 1.27.1 |
-| HTTP API | chi | v5 |
-| Driver PostgreSQL | pgx | v5 |
-| Migrasi | goose | v3 |
-| Query typed | sqlc | CLI pin pada RFC-001 |
-| Logging API | `log/slog` | stdlib |
-| Password hashing | `golang.org/x/crypto/bcrypt` | modul x/crypto terkini stabil |
-| Presentation UI | Next.js App Router | 16.3.4 (upgrade dari prototype 14 pada RFC-001) |
-| UI runtime | React / React DOM | 19.2.8 |
-| Bahasa UI | TypeScript | 7.0.2 |
-| Styling | Tailwind CSS | 4.3.3 |
-| Package manager UI | npm | 12.0.2 |
-| Runtime UI | Node.js Active LTS | 24.20.0 |
+| Runtime transaksi (target RFC-021) | Next.js Route Handlers + PostgreSQL | 14.x (repo saat ini) |
+| Runtime transaksi (transisi) | Go API di `backend/` | 1.27.1 |
+| HTTP API (transisi) | chi | v5 |
+| Driver PostgreSQL (transisi) | pgx | v5 |
+| Driver PostgreSQL (target) | `@neondatabase/serverless` atau `pg` | sesuai RFC-021 |
+| Migrasi | goose SQL di `/migrations`, runner Node `npm run migrate` | v3 compatible |
+| Query typed (transisi) | sqlc | CLI pin pada RFC-001 |
+| Logging API (transisi) | `log/slog` | stdlib |
+| Password hashing (transisi) | `golang.org/x/crypto/bcrypt` | modul x/crypto terkini stabil |
+| Password hashing (target) | bcryptjs / bcrypt async | — |
+| Presentation UI | Next.js App Router | 14.x (jangan major upgrade diam-diam) |
+| UI runtime | React / React DOM | 18.x |
+| Bahasa UI | TypeScript | 5.x |
+| Styling | Tailwind CSS | 3.x |
+| Package manager UI | npm | 10+ |
+| Runtime UI | Node.js | 24 (CI) / lokal sesuai mesin |
 | Database | PostgreSQL pada Neon | Versi terkelola Neon |
-| Autentikasi | Sesi server-side Go (RFC-002); bukan NextAuth | — |
-| Validasi UI | Zod | 4.5.4 |
-| Validasi API | DTO Go + chi; schema setara Zod di boundary | — |
-| Generator QR | library Go terpilih pada RFC-010 atau render UI | — |
+| Autentikasi | Sesi server-side cookie `mti_session` (RFC-002); bukan NextAuth | — |
+| Validasi UI | Zod | — |
+| Validasi API | DTO Go (transisi); Zod di Route Handler (target) | — |
+| Generator QR | sesuai RFC-010 | — |
 | Scanner QR | `@zxing/browser` | 0.2.1 |
-| Unit/integration API | `go test` | stdlib |
-| Unit UI | Vitest | 5.0.0 |
-| End-to-end | Playwright | 1.63.0 |
-| Lint/format Go | gofmt, go vet, golangci-lint | pin pada RFC-001 |
-| Lint/format UI | ESLint / Prettier | 10.10.0 / 3.9.6 |
+| Unit/integration API (transisi) | `go test` | stdlib |
+| Unit/integration API (target) | Vitest + tes SQL | — |
+| Unit UI | Vitest | 3.x |
+| End-to-end | Playwright | 1.55.x |
+| Lint/format Go (transisi) | gofmt, go vet | — |
+| Lint/format UI | ESLint | 8.x |
 
-Prisma dan NextAuth **bukan** stack target. Prototype yang masih memakainya adalah debt sampai RFC-001/002 selesai.
+Prisma dan NextAuth **bukan** stack target. `backend/` Go **jangan dihapus** sampai RFC-021 §5 lulus.
 
 ### 3.2 Aturan Upgrade
 
-- Repository saat ini memakai Next.js 14, React 18, Tailwind 3, raw SQL, dan belum ada API Go. **Jangan melakukan major upgrade diam-diam.**
-- Buat perubahan migrasi stack terpisah dari implementasi fitur domain.
-- Sebelum upgrade, buat compatibility spike untuk Go+pgx+goose, UI Next.js, Neon pooled vs direct, build, dan deployment dua proses.
+- Repository saat ini memakai Next.js 14, React 18, Tailwind 3, dan API Go transisi. **Jangan melakukan major upgrade diam-diam.**
+- Buat perubahan migrasi stack terpisah dari implementasi fitur domain (RFC-021).
+- Sebelum menghapus Go, ikuti checklist paritas RFC-021.
 - Pin versi exact pada dependensi jalur kritis; commit `go.sum` dan `package-lock.json`.
 - Patch/minor upgrade tetap harus melewati build, test, dan smoke test.
 - Jangan memakai package baru jika stdlib Go atau dependensi yang sudah disetujui mencukupi.
@@ -137,9 +141,9 @@ Di dalam satu module, gunakan `domain/`, `application/`, `infrastructure/`, dan 
 - Gunakan React Server Components secara default untuk halaman.
 - Tambahkan `"use client"` hanya untuk state/interaksi browser, misalnya scanner, form interaktif, dan dialog.
 - Jangan mengirim secret, token QR mentah, atau data admin ke Client Component.
-- Fetch data halaman melalui API Go; jangan query PostgreSQL dari proses Node.
-- Webhook dan job wajib dilayani proses Go.
-- Form Next.js boleh memanggil API Go; jangan menaruh invariant di Server Action.
+- Fetch data halaman melalui Route Handler / `lib/server`; jangan query PostgreSQL dari Client Component.
+- Webhook dan job dilayani Route Handler Next (`/api/webhooks/...`, `/api/internal/jobs/...`).
+- Form Next.js memanggil `/api` same-origin; jangan menaruh invariant di Server Action.
 
 ## 5. Konvensi Kode
 
@@ -188,7 +192,7 @@ Gunakan istilah domain konsisten: `organizer`, `event`, `ticketType`, `venueSect
 ### 6.1 Sumber Data
 
 - PostgreSQL/Neon adalah satu-satunya source of truth.
-- Gunakan goose untuk migrasi terversi dan sqlc+pgx untuk query/transaksi.
+- Gunakan file goose di `/migrations` dan `npm run migrate`; query/transaksi di `lib/server` (selama transisi, sqlc+pgx di `backend/` tetap referensi).
 - `DATABASE_URL` pooled untuk request; `DATABASE_URL_UNPOOLED` untuk migrasi.
 - Dilarang Prisma, GORM auto-migrate, dan raw SQL yang di-concatenate.
 - Jangan gunakan JSON/file lokal sebagai fallback persistence.

@@ -6,14 +6,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   async rewrites() {
-    const api = (process.env.API_ORIGIN || process.env.NEXT_PUBLIC_API_BASE_URL || "http://127.0.0.1:8080").replace(
-      /\/$/,
-      "",
-    );
-    return [
-      { source: "/api/:path*", destination: `${api}/api/:path*` },
-      { source: "/uploads/:path*", destination: `${api}/uploads/:path*` },
-    ];
+    return [];
   },
   async redirects() {
     return [

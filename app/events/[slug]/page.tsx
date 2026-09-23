@@ -4,17 +4,18 @@ import { EventDetail } from "@/components/events/EventDetail";
 import { SiteFooter } from "@/components/shared/SiteFooter";
 import { SiteHeader } from "@/components/shared/SiteHeader";
 import { Container } from "@/components/ui/Container";
-import { getPublicApiBaseUrl } from "@/lib/env";
 import type { PublicEvent } from "@/components/events/catalog-types";
+import { getPublicEvent } from "@/lib/server/catalog";
+
+export const dynamic = "force-dynamic";
+export const fetchCache = "force-no-store";
 
 async function loadEvent(slug: string): Promise<PublicEvent | null> {
-  const res = await fetch(`${getPublicApiBaseUrl()}/api/events/${encodeURIComponent(slug)}`, {
-    next: { revalidate: 60 },
-  });
-  if (res.status === 404) return null;
-  if (!res.ok) throw new Error("catalog");
-  const body = (await res.json()) as { data?: { event?: PublicEvent } };
-  return body.data?.event || null;
+  try {
+    return (await getPublicEvent(slug)) as PublicEvent | null;
+  } catch {
+    return null;
+  }
 }
 
 export async function generateMetadata({ params }: { params: { slug: string } }): Promise<Metadata> {
@@ -24,9 +25,9 @@ export async function generateMetadata({ params }: { params: { slug: string } })
   }
   return {
     title: `${event.title} — MyTicketIn`,
-    description: event.description.slice(0, 160),
+    description: String(event.description || event.title).slice(0, 160),
     alternates: { canonical: `/events/${event.slug}` },
-    openGraph: { title: event.title, images: [{ url: event.image.url, alt: event.image.alt }] },
+    openGraph: { title: event.title, images: [{ url: event.image?.url || "/dummy-events/jazz-1.jpg", alt: event.image?.alt || event.title }] },
   };
 }
 

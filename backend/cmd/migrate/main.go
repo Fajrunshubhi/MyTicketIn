@@ -22,9 +22,17 @@ func main() {
 			slog.Error("workdir")
 			os.Exit(1)
 		}
-		dir = filepath.Join(wd, "migrations")
-		if _, err := os.Stat(dir); err != nil {
-			dir = filepath.Join(wd, "..", "..", "migrations")
+		candidates := []string{
+			filepath.Join(wd, "migrations"),
+			filepath.Join(wd, "..", "migrations"),
+			filepath.Join(wd, "..", "..", "migrations"),
+		}
+		dir = candidates[0]
+		for _, c := range candidates {
+			if _, err := os.Stat(c); err == nil {
+				dir = c
+				break
+			}
 		}
 	}
 	if err := db.MigrateUp(cfg.DatabaseURLUnpooled, dir); err != nil {

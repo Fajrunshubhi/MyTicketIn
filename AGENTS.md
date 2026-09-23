@@ -11,9 +11,9 @@ Target aktif adalah **MVP akademik**:
 - Payment gateway sandbox dan data uji.
 - Tidak menerima uang nyata.
 - Tidak mengaktifkan payout atau refund finansial produksi.
-- Deployment belum tersedia dan provider harus non-Vercel.
-- Runtime transaksi target adalah Go; UI memakai Next.js.
-- Implementasi mengikuti RFC-001–RFC-014 secara ketat dan sekuensial.
+- Deployment: Vercel untuk UI+API Next.js; migrasi SQL di `/migrations` dijalankan dengan `npm run migrate`.
+- Runtime transaksi target adalah **Next.js Route Handlers + PostgreSQL**. `backend/` Go tetap referensi sampai checklist RFC-021 §5; jangan dihapus lebih awal.
+- Implementasi fitur mengikuti RFC-001–RFC-014; pemindahan kode mengikuti RFC-021.
 - Baseline produk `prd-improved.md` 2.2 memiliki 77 fitur: 57 Must, 5 Should, 4 Could, dan 11 Won’t; cakupan aktif MVP adalah 66 fitur.
 - F20, F46, F49, F50, F51, F65, serta F74–F77 wajib. F42, F63–F64, dan F66–F73 tetap Won’t Have.
 
@@ -89,10 +89,11 @@ Presentation → Application Service → Domain → Ports
 
 Aturan boundary:
 
-- Page, Client Component, dan BFF Next.js harus tipis; transaksi domain hanya di Go.
-- Application service Go mengorkestrasi use case dan transaction.
-- Domain berisi invariant serta transisi status dan tidak mengimpor framework.
-- Repository mengenkapsulasi PostgreSQL melalui sqlc/pgx.
+- Page dan Client Component tetap tipis; use case dan transaksi pindah ke Route Handler Next.js (`lib/server/...`) mengikuti RFC-021.
+- Selama transisi, rewrite `/api` ke Go tetap default. Jangan daftarkan `app/api` yang menimpa path Go sebelum modul Next paritas.
+- Application service mengorkestrasi use case dan transaction (Go sekarang; Next.js setelah modul dipindah).
+- Domain berisi invariant serta transisi status dan tidak mengimpor framework UI.
+- Repository mengenkapsulasi PostgreSQL (pgx/sqlc di Go; driver Neon/`pg` di Next setelah port).
 - Provider adapter mengenkapsulasi payment, storage, email, analytics, scheduler, dan AI.
 - Module lain menggunakan public application contract, bukan infrastructure internal.
 
@@ -101,16 +102,14 @@ Gunakan React Server Components secara default. `"use client"` hanya untuk inter
 ## 6. Struktur Kode Target
 
 ```text
-backend/
+migrations/       # goose SQL 0001–0018; runner npm run migrate
+backend/          # referensi transisi RFC-021; jangan dihapus sebelum §5
   cmd/api/
-  internal/platform/
-  internal/modules/
-  migrations/
-  queries/
+  internal/...
 app/
+  api/            # Route Handler Next
+lib/server/
 components/
-  ui/
-  shared/
 tests/
   e2e/
 ```
@@ -124,7 +123,7 @@ Di dalam module, gunakan `domain/`, `application/`, `infrastructure/`, dan `ui/`
 - Fungsi/variabel: `camelCase`.
 - Type/interface/class: `PascalCase`.
 - Konstanta dan environment variable: `UPPER_SNAKE_CASE`.
-- Database: `snake_case`, dipetakan melalui sqlc.
+- Database: `snake_case`, dipetakan melalui sqlc (Go) atau query typed di `lib/server` (Next).
 - Kode dan error code: Bahasa Inggris.
 - UI, pesan pengguna, dan dokumentasi produk: Bahasa Indonesia.
 - TypeScript `strict`; jangan gunakan `any` atau menonaktifkan pemeriksaan untuk melewati error.
@@ -145,7 +144,7 @@ Dilarang:
 
 Gunakan:
 
-- goose dan sqlc/pgx; migrasi terversi.
+- File goose terversi di `/migrations` dan runner `npm run migrate` (tabel `goose_db_version`); query typed di `lib/server`.
 - CUID/UUID non-predictable.
 - Integer Rupiah.
 - UTC/`TIMESTAMPTZ`.

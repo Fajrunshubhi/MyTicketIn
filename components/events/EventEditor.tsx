@@ -94,6 +94,19 @@ export function EventEditor({ eventId }: { eventId: string }) {
     load();
   }, [load]);
 
+  useEffect(() => {
+    if (!detail?.event || saleStart || saleEnd) return;
+    const tz = detail.event.timezone;
+    try {
+      const eventStart = utcIsoToNaiveLocal(detail.event.startsAt, tz);
+      const now = utcIsoToNaiveLocal(new Date().toISOString(), tz);
+      setSaleStart(now < eventStart ? now : eventStart);
+      setSaleEnd(eventStart);
+    } catch {
+      /* keep empty until user fills */
+    }
+  }, [detail, saleEnd, saleStart]);
+
   async function mutate(path: string, method: string, body?: unknown, success?: { title: string; body: string }) {
     setError("");
     const res = await apiFetch(path, {
@@ -177,12 +190,33 @@ export function EventEditor({ eventId }: { eventId: string }) {
       setToast({ tone: "error", title: "Gagal", body: "Harga dan kuota harus bilangan bulat." });
       return;
     }
+    let saleStartsAt = "";
+    let saleEndsAt = "";
+    try {
+      saleStartsAt = naiveLocalToUtcIso(saleStart, tz);
+      saleEndsAt = naiveLocalToUtcIso(saleEnd, tz);
+    } catch {
+      setToast({ tone: "error", title: "Gagal", body: "Waktu penjualan tidak valid." });
+      return;
+    }
+    const start = new Date(saleStartsAt);
+    const end = new Date(saleEndsAt);
+    const eventStart = new Date(e.startsAt);
+    if (!(start < end)) {
+      setToast({ tone: "error", title: "Gagal", body: "Selesai jual harus setelah mulai jual." });
+      return;
+    }
+    if (end > eventStart) {
+      setToast({ tone: "error", title: "Gagal", body: "Penjualan harus berakhir sebelum event dimulai." });
+      return;
+    }
     await mutate(`/api/organizer/events/${eventId}/ticket-types`, "POST", {
       name: ticketName,
       priceRupiah,
       quota: q,
-      saleStartsAt: naiveLocalToUtcIso(saleStart, tz),
-      saleEndsAt: naiveLocalToUtcIso(saleEnd, tz),
+      maxPerAccount: q,
+      saleStartsAt,
+      saleEndsAt,
       sortOrder: current.ticketTypes.length,
     });
   }
@@ -305,6 +339,7 @@ export function EventEditor({ eventId }: { eventId: string }) {
             <Input label="Kuota" name="quota" inputMode="numeric" value={quota} onChange={(ev) => setQuota(ev.target.value)} />
             <Input label="Mulai jual" name="saleStartsAt" type="datetime-local" value={saleStart} onChange={(ev) => setSaleStart(ev.target.value)} />
             <Input label="Selesai jual" name="saleEndsAt" type="datetime-local" value={saleEnd} onChange={(ev) => setSaleEnd(ev.target.value)} />
+            <p className="text-sm text-ink/65">Selesai jual harus setelah mulai jual, dan sebelum waktu mulai event.</p>
             <Button type="button" onClick={addTicket}>Tambah jenis tiket</Button>
           </div>
         ) : null}

@@ -1,6 +1,7 @@
 import { cache } from "react";
 import { cookies } from "next/headers";
-import { getPublicApiBaseUrl } from "@/lib/env";
+import { accessFor, userPayload } from "@/lib/server/access";
+import { sessionFromToken } from "@/lib/server/session";
 
 export type PublicSessionUser = {
   id: string;
@@ -19,15 +20,10 @@ export const loadSessionUser = cache(async (): Promise<PublicSessionUser | null>
     return null;
   }
   try {
-    const res = await fetch(`${getPublicApiBaseUrl()}/api/auth/session`, {
-      headers: { Cookie: `mti_session=${token}` },
-      cache: "no-store",
-    });
-    if (!res.ok) {
-      return null;
-    }
-    const body = (await res.json()) as { user?: PublicSessionUser };
-    return body.user?.id ? body.user : null;
+    const sess = await sessionFromToken(token);
+    if (!sess) return null;
+    const acc = await accessFor(sess.user);
+    return userPayload(sess.user, acc.kind, acc, "");
   } catch {
     return null;
   }

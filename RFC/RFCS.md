@@ -6,6 +6,8 @@ Dokumen ini adalah peta implementasi sekuensial MyTicketIn. Setiap RFC merupakan
 
 **Jalur aktif MVP akademik:** implementasi wajib berjalan `RFC-001 → RFC-002 → ... → RFC-014 → UAT akademik`. Tidak ada RFC yang dikerjakan paralel atau dilompati.
 
+**Keputusan Product Owner (23 Sep 2026):** runtime target bergeser ke **Next.js Route Handlers** (satu proses UI+API). RFC-001–014 tetap acuan fungsional dan invariant. Kode Go di `backend/` bersifat **transisi**; jangan dihapus sampai RFC-021 §5 lulus. Rencana port: `RFC/RFC-021.md`.
+
 **Jalur komersial deferred:** `RFC-015 → ... → RFC-020` hanya boleh diaktifkan setelah MVP akademik selesai dan **Commercial Entry Gate** disetujui eksplisit. Penambahan dokumen ini tidak mengubah prioritas Won’t Have pada MVP dan bukan persetujuan untuk menerima uang/data nyata.
 
 **Baseline cakupan yang disetujui:** 77 ID fitur, terdiri dari 57 Must Have, 5 Should Have, 4 Could Have, dan 11 Won’t Have; 66 fitur aktif berada pada RFC-001–014. F20, F46, F50, F51, dan F65 dipromosikan menjadi Must Have; F49 tetap Must Have. F74–F77 adalah Must Have baru.
@@ -14,7 +16,7 @@ Dokumen ini adalah peta implementasi sekuensial MyTicketIn. Setiap RFC merupakan
 
 Kode jalur aktif sudah mencakup **RFC-001 sampai RFC-014** (hardening error/health/observability/CI). Email tetap `EMAIL_PROVIDER=sandbox`. Migrasi notifikasi goose **0014**; RFC-014 **tanpa migrasi baru**. Overlay Product Owner pada login: tiga portal UI, daftar hanya pembeli, pengajuan organizer setelah sesi pembeli, portal `organizer` hanya `APPROVED`. F77 memakai fake/disabled parser; `AI_CATALOG_FILTER_ENABLED` tetap false sampai gate AI. Scheduler expiry/reminder memakai HTTP job + `SCHEDULER_SECRET`. Adapter payment HMAC sandbox; secret `PAYMENT_WEBHOOK_SECRET`. Fingerprint attempt memakai `CHECKIN_FINGERPRINT_KEY` (development menurunkan dari `SESSION_SECRET`).
 
-**RFC berikutnya:** UAT dan Rilis Akademik. Jangan mulai RFC-015 sebelum Commercial Entry Gate. RFC-015–020 tetap Deferred.
+**RFC berikutnya:** selesaikan paritas RFC-021 §5 (tes invariant, E2E, webhook/QR), lalu UAT akademik. Jangan hapus `backend/` sebelum itu. Jangan mulai RFC-015 sebelum Commercial Entry Gate. RFC-015–020 tetap Deferred.
 
 Status metadata di berkas RFC bernomor masih “Diusulkan”; jangan mengklaim Definition of Done formal tanpa quality gate lengkap (coverage, E2E, merge gate) untuk setiap RFC.
 
