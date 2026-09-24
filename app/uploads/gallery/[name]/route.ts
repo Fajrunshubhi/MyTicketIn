@@ -1,10 +1,20 @@
 import { readFile } from "fs/promises";
 import { NextRequest, NextResponse } from "next/server";
 import { AppError, jsonError } from "@/lib/server/http";
-import { galleryFilePath } from "@/lib/server/gallery";
+import { galleryFilePath, localUploadsAvailable } from "@/lib/server/gallery";
+
+function dummyRedirect(req: NextRequest): NextResponse {
+  const url = req.nextUrl.clone();
+  url.pathname = "/dummy-events/jazz-1.jpg";
+  url.search = "";
+  return NextResponse.redirect(url, 307);
+}
 
 export async function GET(req: NextRequest, { params }: { params: { name: string } }) {
   try {
+    if (!localUploadsAvailable()) {
+      return dummyRedirect(req);
+    }
     const filePath = galleryFilePath(params.name);
     const bytes = await readFile(filePath);
     const lower = params.name.toLowerCase();
@@ -15,8 +25,8 @@ export async function GET(req: NextRequest, { params }: { params: { name: string
     });
   } catch (err) {
     if ((err as NodeJS.ErrnoException).code === "ENOENT") {
-      return jsonError(new AppError("NOT_FOUND", "Berkas tidak ditemukan.", {}, 404), req);
+      return dummyRedirect(req);
     }
-    return jsonError(err, req);
+    return jsonError(err instanceof AppError ? err : err, req);
   }
 }

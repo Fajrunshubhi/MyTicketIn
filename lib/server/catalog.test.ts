@@ -141,4 +141,15 @@ describe("publicImageSrc", () => {
     expect(publicImageSrc("/uploads/gallery/missingfile.jpg", "/dummy-events/jazz-1.jpg")).toBe("/dummy-events/jazz-1.jpg");
     expect(publicImageSrc("/dummy-events/theater-1.jpg", "/x")).toBe("/dummy-events/theater-1.jpg");
   });
+
+  it("does not serve local uploads on Vercel", () => {
+    const prev = process.env.VERCEL;
+    process.env.VERCEL = "1";
+    try {
+      expect(publicImageSrc("/uploads/gallery/abc123.jpg", "/dummy-events/jazz-1.jpg")).toBe("/dummy-events/jazz-1.jpg");
+    } finally {
+      if (prev === undefined) delete process.env.VERCEL;
+      else process.env.VERCEL = prev;
+    }
+  });
 });

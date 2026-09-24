@@ -19,6 +19,14 @@ function detectExt(buf: Buffer): { mime: string; ext: string } {
 }
 
 export async function saveGalleryFile(bytes: Buffer): Promise<string> {
+  if (!localUploadsAvailable()) {
+    throw new AppError(
+      "VALIDATION_ERROR",
+      "Unggah galeri tidak tersedia di Vercel. Gunakan foto dummy atau jalankan secara lokal.",
+      {},
+      400,
+    );
+  }
   if (!bytes.length || bytes.length > MAX_BYTES) {
     throw new AppError("VALIDATION_ERROR", "Ukuran gambar maksimal 5 MB.", {}, 400);
   }
@@ -38,11 +46,16 @@ export function galleryFilePath(name: string): string {
   return path.join(process.cwd(), "uploads", "gallery", base);
 }
 
+export function localUploadsAvailable(): boolean {
+  return process.env.VERCEL !== "1";
+}
+
 /** Local gallery files live on disk; skip URLs whose file is gone so the UI never shows a broken image. */
 export function publicImageSrc(url: string, fallback: string): string {
   const trimmed = String(url || "").trim();
   if (!trimmed) return fallback;
   if (!trimmed.startsWith("/uploads/gallery/")) return trimmed;
+  if (!localUploadsAvailable()) return fallback;
   try {
     const filePath = galleryFilePath(trimmed.slice("/uploads/gallery/".length));
     return existsSync(filePath) ? trimmed : fallback;

@@ -2,9 +2,30 @@ import { createCipheriv, createDecipheriv, randomBytes, createHash } from "crypt
 import { AppError, execute, newId, query, randomToken, tokenHash } from "@/lib/server/http";
 import type { AuthUser } from "@/lib/server/access";
 
-function qrKey(): Buffer {
-  const raw = String(process.env.QR_ENCRYPTION_KEYS || process.env.SESSION_SECRET || "dev-session-secret-minimum-32-chars!!");
+function qrKeyMaterial(): string[] {
+  const candidates = [
+    process.env.QR_ENCRYPTION_KEYS,
+    process.env.SESSION_SECRET,
+    process.env.NEXTAUTH_SECRET,
+    "dev-session-secret-minimum-32-chars!!",
+  ];
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const raw of candidates) {
+    const value = String(raw || "").trim();
+    if (!value || seen.has(value)) continue;
+    seen.add(value);
+    out.push(value);
+  }
+  return out;
+}
+
+function hashKey(raw: string): Buffer {
   return createHash("sha256").update(raw).digest();
+}
+
+function qrKey(): Buffer {
+  return hashKey(qrKeyMaterial()[0]);
 }
 
 export function encryptToken(raw: string): { hash: string; ciphertext: Buffer; nonce: Buffer; tag: Buffer } {
@@ -16,20 +37,38 @@ export function encryptToken(raw: string): { hash: string; ciphertext: Buffer; n
 }
 
 export function decryptToken(ciphertext: Buffer, nonce: Buffer, tag: Buffer): string {
-  const decipher = createDecipheriv("aes-256-gcm", qrKey(), nonce);
-  decipher.setAuthTag(tag);
-  return Buffer.concat([decipher.update(ciphertext), decipher.final()]).toString("utf8");
+  let last: unknown;
+  for (const material of qrKeyMaterial()) {
+    try {
+      const decipher = createDecipheriv("aes-256-gcm", hashKey(material), nonce);
+      decipher.setAuthTag(tag);
+      return Buffer.concat([decipher.update(ciphertext), decipher.final()]).toString("utf8");
+    } catch (err) {
+      last = err;
+    }
+  }
+  throw last instanceof Error ? last : new Error("TICKET_CRYPTO_FAILED");
 }
 
-function asBuffer(value: unknown): Buffer {
+export function asBuffer(value: unknown): Buffer {
   if (Buffer.isBuffer(value)) return value;
   if (value instanceof Uint8Array) return Buffer.from(value);
   if (typeof value === "string") {
-    if (value.startsWith("\\x")) return Buffer.from(value.slice(2), "hex");
+    const hex = value.startsWith("\\x") ? value.slice(2) : value;
+    if (/^[0-9a-fA-F]+$/.test(hex) && hex.length % 2 === 0) return Buffer.from(hex, "hex");
     return Buffer.from(value, "utf8");
   }
-  if (value && typeof value === "object" && Array.isArray((value as { data?: unknown }).data)) {
-    return Buffer.from((value as { data: number[] }).data);
+  if (value && typeof value === "object") {
+    const rec = value as { data?: unknown };
+    if (Array.isArray(rec.data)) return Buffer.from(rec.data as number[]);
+    const keys = Object.keys(value as object);
+    if (keys.length && keys.every((k) => /^\d+$/.test(k))) {
+      const bytes = keys
+        .map((k) => Number(k))
+        .sort((a, b) => a - b)
+        .map((k) => Number((value as Record<string, number>)[String(k)]));
+      return Buffer.from(bytes);
+    }
   }
   return Buffer.from([]);
 }
@@ -131,11 +170,13 @@ export async function ticketQrPayload(user: AuthUser, id: string): Promise<strin
     token_auth_tag: Buffer | string;
     status: string;
   }>(
-    `SELECT owner_user_id, token_ciphertext, token_nonce, token_auth_tag, status::text AS status FROM tickets WHERE id=$1 LIMIT 1`,
+    `SELECT owner_user_id, encode(token_ciphertext, 'hex') AS token_ciphertext, encode(token_nonce, 'hex') AS token_nonce,
+            encode(token_auth_tag, 'hex') AS token_auth_tag, status::text AS status
+     FROM tickets WHERE id=$1 LIMIT 1`,
     [id],
   );
   const t = rows[0];
-  if (!t || (t.owner_user_id !== user.id && user.role !== "ADMIN")) {
+  if (!t || (String(t.owner_user_id) !== user.id && user.role !== "ADMIN")) {
     throw new AppError("NOT_FOUND", "Tiket tidak ditemukan.", {}, 404);
   }
   if (t.status !== "UNUSED") {
@@ -147,7 +188,11 @@ export async function ticketQrPayload(user: AuthUser, id: string): Promise<strin
   if (ct.length === 0 || nonce.length !== 12 || tag.length !== 16) {
     throw new AppError("TICKET_CRYPTO_FAILED", "Kode QR tidak dapat ditampilkan.", {}, 500);
   }
-  return decryptToken(ct, nonce, tag);
+  try {
+    return decryptToken(ct, nonce, tag);
+  } catch {
+    throw new AppError("TICKET_CRYPTO_FAILED", "Kode QR tidak dapat ditampilkan.", {}, 500);
+  }
 }
 
 export async function issueTicketsForPaidOrder(orderId: string, buyer: AuthUser) {
