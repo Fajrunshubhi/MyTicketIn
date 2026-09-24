@@ -1,3 +1,5 @@
+import { dummyCover } from "@/lib/server/catalog";
+import { publicImageSrc } from "@/lib/server/gallery";
 import { AppError, execute, newId, query } from "@/lib/server/http";
 
 const EVENT_COLS = `id, organizer_profile_id, slug, title, description, category, venue_name, address_line, city, province,
@@ -64,13 +66,39 @@ export function eventDto(e: OrgEvent) {
 
 export async function listOrganizerEvents(orgId: string, status: string, limit: number) {
   const st = status.trim().toUpperCase();
-  return query<OrgEvent>(
+  const rows = await query<OrgEvent>(
     `SELECT ${EVENT_COLS} FROM events
      WHERE organizer_profile_id = $1 AND ($2 = '' OR status::text = $2)
      ORDER BY updated_at DESC, id DESC
      LIMIT $3`,
     [orgId, st, Math.min(Math.max(limit || 25, 1), 50)],
   );
+  return attachGalleryUrls(rows);
+}
+
+async function attachGalleryUrls(events: OrgEvent[]): Promise<OrgEvent[]> {
+  if (!events.length) return events;
+  const ids = events.map((e) => e.id);
+  const rows = await query<{ event_id: string; image_url: string }>(
+    `SELECT event_id, image_url FROM event_gallery_images
+     WHERE event_id = ANY($1::text[])
+     ORDER BY sort_order ASC, id ASC`,
+    [ids],
+  );
+  const byEvent = new Map<string, string[]>();
+  for (const row of rows) {
+    const list = byEvent.get(row.event_id) || [];
+    const src = publicImageSrc(row.image_url, "");
+    if (src) list.push(src);
+    byEvent.set(row.event_id, list);
+  }
+  return events.map((e) => {
+    const urls = byEvent.get(e.id) || [];
+    return {
+      ...e,
+      galleryUrls: urls.length ? urls : [dummyCover(String(e.category || ""), String(e.title || ""))],
+    };
+  });
 }
 
 export async function getOwnedEvent(orgId: string, id: string): Promise<OrgEvent> {

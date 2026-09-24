@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import { Fraunces, Outfit } from "next/font/google";
 import { SkipLink } from "@/components/ui/SkipLink";
+import { AppLoadingProvider } from "@/components/ui/AppLoading";
 import "./globals.css";
 
 const outfit = Outfit({
@@ -24,7 +25,9 @@ export default function RootLayout({ children }: { children: ReactNode }) {
     <html lang="id">
       <body className={`${outfit.variable} ${fraunces.variable} font-sans antialiased`}>
         <SkipLink />
-        <div id="konten-utama">{children}</div>
+        <AppLoadingProvider>
+          <div id="konten-utama">{children}</div>
+        </AppLoadingProvider>
       </body>
     </html>
   );

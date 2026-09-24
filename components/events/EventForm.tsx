@@ -7,7 +7,9 @@ import { naiveLocalToUtcIso, utcIsoToNaiveLocal } from "@/lib/format";
 import { eventMapQuery, googleMapsEmbedUrl, googleMapsSearchUrl } from "@/lib/maps";
 import { FloatingAlert } from "@/components/ui/FloatingAlert";
 import { Button } from "@/components/ui/Button";
+import { FormFieldWide, FormSection } from "@/components/ui/FormSection";
 import { Input } from "@/components/ui/Input";
+import { Select } from "@/components/ui/Select";
 import { TIMEZONES, type EventRecord, type InventoryMode } from "@/components/events/event-types";
 
 type Values = {
@@ -194,155 +196,152 @@ export function EventForm({
   const disabled = readOnly || loading;
 
   return (
-    <form onSubmit={onSubmit} className="grid max-w-3xl gap-4">
+    <form onSubmit={onSubmit} className="grid max-w-4xl gap-5">
       {toast ? (
         <FloatingAlert tone={toast.tone} title={toast.title} onClose={() => setToast(null)}>
           {toast.body}
         </FloatingAlert>
       ) : null}
-      <fieldset className="grid gap-4" disabled={disabled}>
-        <legend className="font-semibold text-ink">Informasi</legend>
-        <Input label="Judul" name="title" value={values.title} onChange={(e) => set("title", e.target.value)} error={fieldErrors.title} required />
-        <div>
-          <label htmlFor="description" className="mb-1 block text-sm font-medium">Deskripsi</label>
-          <textarea id="description" name="description" rows={5} className="min-h-11 w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-sm" value={values.description} onChange={(e) => set("description", e.target.value)} required />
-          {fieldErrors.description ? <p className="mt-1 text-sm text-red-700" role="alert">{fieldErrors.description}</p> : null}
-        </div>
-        <Input label="Kategori" name="category" value={values.category} onChange={(e) => set("category", e.target.value)} error={fieldErrors.category} required />
-      </fieldset>
-      <fieldset className="grid gap-4" disabled={disabled}>
-        <legend className="font-semibold text-ink">Lokasi</legend>
-        <Input label="Nama venue" name="venueName" value={values.venueName} onChange={(e) => set("venueName", e.target.value)} error={fieldErrors.venueName} required />
-        <Input label="Alamat" name="addressLine" value={values.addressLine} onChange={(e) => set("addressLine", e.target.value)} error={fieldErrors.addressLine} required />
-        <Input label="Kota" name="city" value={values.city} onChange={(e) => set("city", e.target.value)} error={fieldErrors.city} required />
-        <Input label="Provinsi" name="province" value={values.province} onChange={(e) => set("province", e.target.value)} error={fieldErrors.province} required />
-        <p className="text-sm text-ink/65">
-          Buka Google Maps, klik kanan titik venue, lalu salin angka lintang dan bujur ke isian di bawah.
-        </p>
-        <a
-          className="text-sm font-medium text-gold-800 underline-offset-2 hover:underline"
-          href={googleMapsSearchUrl(eventMapQuery({ venueName: values.venueName, addressLine: values.addressLine, city: values.city, province: values.province }))}
-          target="_blank"
-          rel="noreferrer"
-        >
-          Cari alamat ini di Google Maps
-        </a>
-        <div className="grid gap-4 sm:grid-cols-2">
+      <fieldset disabled={disabled} className="contents">
+        <FormSection title="Informasi event" description="Judul dan deskripsi tampil di katalog publik.">
+          <FormFieldWide>
+            <Input label="Judul" name="title" value={values.title} onChange={(e) => set("title", e.target.value)} error={fieldErrors.title} required />
+          </FormFieldWide>
+          <FormFieldWide>
+            <label htmlFor="description" className="mb-1 block text-sm font-medium">Deskripsi</label>
+            <textarea id="description" name="description" rows={5} className="min-h-11 w-full rounded-xl border border-stone-300 bg-white px-3 py-2 text-sm" value={values.description} onChange={(e) => set("description", e.target.value)} required />
+            {fieldErrors.description ? <p className="mt-1 text-sm text-red-700" role="alert">{fieldErrors.description}</p> : null}
+          </FormFieldWide>
+          <Input label="Kategori" name="category" value={values.category} onChange={(e) => set("category", e.target.value)} error={fieldErrors.category} required />
+        </FormSection>
+        <FormSection title="Lokasi" description="Koordinat wajib agar peta dan filter kota akurat.">
+          <Input label="Nama venue" name="venueName" value={values.venueName} onChange={(e) => set("venueName", e.target.value)} error={fieldErrors.venueName} required />
+          <Input label="Alamat" name="addressLine" value={values.addressLine} onChange={(e) => set("addressLine", e.target.value)} error={fieldErrors.addressLine} required />
+          <Input label="Kota" name="city" value={values.city} onChange={(e) => set("city", e.target.value)} error={fieldErrors.city} required />
+          <Input label="Provinsi" name="province" value={values.province} onChange={(e) => set("province", e.target.value)} error={fieldErrors.province} required />
+          <FormFieldWide>
+            <p className="text-sm text-ink/65">
+              Buka Google Maps, klik kanan titik venue, lalu salin angka lintang dan bujur.
+            </p>
+            <a
+              className="text-sm font-medium text-gold-800 underline-offset-2 hover:underline"
+              href={googleMapsSearchUrl(eventMapQuery({ venueName: values.venueName, addressLine: values.addressLine, city: values.city, province: values.province }))}
+              target="_blank"
+              rel="noreferrer"
+            >
+              Cari alamat ini di Google Maps
+            </a>
+          </FormFieldWide>
           <Input label="Lintang (latitude)" name="latitude" inputMode="decimal" value={values.latitude} onChange={(e) => set("latitude", e.target.value)} error={fieldErrors.latitude} required />
           <Input label="Bujur (longitude)" name="longitude" inputMode="decimal" value={values.longitude} onChange={(e) => set("longitude", e.target.value)} error={fieldErrors.longitude} required />
-        </div>
-        {values.latitude.trim() !== "" && values.longitude.trim() !== "" && Number.isFinite(Number(values.latitude.replace(",", "."))) && Number.isFinite(Number(values.longitude.replace(",", "."))) ? (
-          <iframe
-            title="Pratinjau peta venue"
-            src={googleMapsEmbedUrl(`${values.latitude.replace(",", ".")},${values.longitude.replace(",", ".")}`)}
-            className="h-48 w-full rounded-2xl border border-stone-200"
-            loading="lazy"
-            referrerPolicy="no-referrer-when-downgrade"
-          />
-        ) : null}
-        <div>
-          <label htmlFor="tagDraft" className="mb-1 block text-sm font-medium">Tag pencarian</label>
-          <p className="mb-2 text-sm text-ink/65">Maksimal 8 tag. Gunakan huruf, angka, dan tanda hubung. Tag ikut dicari di katalog.</p>
-          <div className="flex flex-wrap gap-2">
-            {values.tags.map((tag) => (
-              <button
-                key={tag}
-                type="button"
-                className="inline-flex min-h-11 items-center rounded-full border border-stone-200 bg-white px-3 text-sm"
-                onClick={() => setValues((cur) => ({ ...cur, tags: cur.tags.filter((item) => item !== tag) }))}
-                aria-label={`Hapus tag ${tag}`}
-              >
-                {tag} ×
-              </button>
-            ))}
-          </div>
-          <div className="mt-2 flex gap-2">
-            <input
-              id="tagDraft"
-              className="min-h-11 flex-1 rounded-md border border-stone-300 bg-white px-3 text-sm"
-              value={tagDraft}
-              onChange={(e) => setTagDraft(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" || e.key === ",") {
-                  e.preventDefault();
-                  addTag();
-                }
-              }}
-              placeholder="contoh: jakarta-events"
-              disabled={disabled}
-            />
-            <button type="button" className="min-h-11 rounded-full border border-stone-300 px-4 text-sm font-medium" onClick={addTag} disabled={disabled}>
-              Tambah
-            </button>
-          </div>
-          {fieldErrors.tags ? <p className="mt-1 text-sm text-red-700" role="alert">{fieldErrors.tags}</p> : null}
-        </div>
-        <div>
-          <label htmlFor="galleryFiles" className="mb-1 block text-sm font-medium">Galeri gambar</label>
-          <p className="mb-2 text-sm text-ink/65">Unggah hingga 8 foto (JPEG, PNG, atau WebP, maks. 5 MB). Judul event tampil di bawah galeri, bukan di atas foto.</p>
-          <ul className="grid gap-2 sm:grid-cols-4">
-            {values.galleryUrls.map((url) => (
-              <li key={url} className="relative overflow-hidden rounded-xl border border-stone-200">
-                <img src={url} alt="" className="h-20 w-full object-cover" />
+          {values.latitude.trim() !== "" && values.longitude.trim() !== "" && Number.isFinite(Number(values.latitude.replace(",", "."))) && Number.isFinite(Number(values.longitude.replace(",", "."))) ? (
+            <FormFieldWide>
+              <iframe
+                title="Pratinjau peta venue"
+                src={googleMapsEmbedUrl(`${values.latitude.replace(",", ".")},${values.longitude.replace(",", ".")}`)}
+                className="h-48 w-full rounded-2xl border border-stone-200"
+                loading="lazy"
+                referrerPolicy="no-referrer-when-downgrade"
+              />
+            </FormFieldWide>
+          ) : null}
+        </FormSection>
+        <FormSection title="Pencarian dan galeri">
+          <FormFieldWide>
+            <label htmlFor="tagDraft" className="mb-1 block text-sm font-medium">Tag pencarian</label>
+            <p className="mb-2 text-sm text-ink/65">Maksimal 8 tag. Huruf, angka, dan tanda hubung.</p>
+            <div className="flex flex-wrap gap-2">
+              {values.tags.map((tag) => (
                 <button
+                  key={tag}
                   type="button"
-                  className="absolute right-1 top-1 rounded-full bg-white/90 px-2 text-xs"
-                  onClick={() => setValues((cur) => ({ ...cur, galleryUrls: cur.galleryUrls.filter((item) => item !== url) }))}
-                  aria-label="Hapus gambar"
+                  className="inline-flex min-h-11 items-center rounded-full border border-stone-200 bg-white px-3 text-sm"
+                  onClick={() => setValues((cur) => ({ ...cur, tags: cur.tags.filter((item) => item !== tag) }))}
+                  aria-label={`Hapus tag ${tag}`}
                 >
-                  ×
+                  {tag} ×
                 </button>
-              </li>
-            ))}
-          </ul>
-          <input
-            id="galleryFiles"
-            className="mt-2 block w-full text-sm file:mr-3 file:min-h-11 file:rounded-full file:border file:border-stone-300 file:bg-white file:px-4 file:text-sm file:font-medium"
-            type="file"
-            accept="image/jpeg,image/png,image/webp"
-            multiple
-            disabled={disabled || galleryBusy || values.galleryUrls.length >= 8}
-            onChange={(e) => {
-              void addGalleryFiles(e.target.files);
-              e.target.value = "";
-            }}
-          />
-          {galleryBusy ? <p className="mt-1 text-sm text-ink/65">Mengunggah gambar…</p> : null}
-          {fieldErrors.galleryUrls ? <p className="mt-1 text-sm text-red-700" role="alert">{fieldErrors.galleryUrls}</p> : null}
-        </div>
-      </fieldset>
-      <fieldset className="grid gap-4" disabled={disabled}>
-        <legend className="font-semibold text-ink">Jadwal</legend>
-        <div>
-          <label htmlFor="timezone" className="mb-1 block text-sm font-medium">Zona waktu</label>
-          <select id="timezone" className="min-h-11 w-full rounded-md border border-stone-300 bg-white px-3 text-sm" value={values.timezone} onChange={(e) => set("timezone", e.target.value)}>
+              ))}
+            </div>
+            <div className="mt-2 flex gap-2">
+              <input
+                id="tagDraft"
+                className="min-h-11 flex-1 rounded-xl border border-stone-300 bg-white px-3 text-sm"
+                value={tagDraft}
+                onChange={(e) => setTagDraft(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === ",") {
+                    e.preventDefault();
+                    addTag();
+                  }
+                }}
+                placeholder="contoh: jakarta-events"
+                disabled={disabled}
+              />
+              <Button type="button" variant="secondary" onClick={addTag} disabled={disabled}>
+                Tambah
+              </Button>
+            </div>
+            {fieldErrors.tags ? <p className="mt-1 text-sm text-red-700" role="alert">{fieldErrors.tags}</p> : null}
+          </FormFieldWide>
+          <FormFieldWide>
+            <label htmlFor="galleryFiles" className="mb-1 block text-sm font-medium">Galeri gambar</label>
+            <p className="mb-2 text-sm text-ink/65">Hingga 8 foto JPEG, PNG, atau WebP, maks. 5 MB.</p>
+            <ul className="grid gap-2 sm:grid-cols-4">
+              {values.galleryUrls.map((url) => (
+                <li key={url} className="relative overflow-hidden rounded-xl border border-stone-200">
+                  <img src={url} alt="" className="h-20 w-full object-cover" />
+                  <button
+                    type="button"
+                    className="absolute right-1 top-1 rounded-full bg-white/90 px-2 text-xs"
+                    onClick={() => setValues((cur) => ({ ...cur, galleryUrls: cur.galleryUrls.filter((item) => item !== url) }))}
+                    aria-label="Hapus gambar"
+                  >
+                    ×
+                  </button>
+                </li>
+              ))}
+            </ul>
+            <input
+              id="galleryFiles"
+              className="mt-2 block w-full text-sm file:mr-3 file:min-h-11 file:rounded-full file:border file:border-stone-300 file:bg-white file:px-4 file:text-sm file:font-medium"
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              multiple
+              disabled={disabled || galleryBusy || values.galleryUrls.length >= 8}
+              onChange={(e) => {
+                void addGalleryFiles(e.target.files);
+                e.target.value = "";
+              }}
+            />
+            {fieldErrors.galleryUrls ? <p className="mt-1 text-sm text-red-700" role="alert">{fieldErrors.galleryUrls}</p> : null}
+          </FormFieldWide>
+        </FormSection>
+        <FormSection title="Jadwal">
+          <Select id="timezone" label="Zona waktu" value={values.timezone} onChange={(e) => set("timezone", e.target.value)}>
             {TIMEZONES.map((tz) => (
               <option key={tz} value={tz}>{tz}</option>
             ))}
-          </select>
-        </div>
-        <Input label="Mulai" name="startsAt" type="datetime-local" value={values.startsAt} onChange={(e) => set("startsAt", e.target.value)} error={fieldErrors.startsAt} required />
-        <Input label="Selesai" name="endsAt" type="datetime-local" value={values.endsAt} onChange={(e) => set("endsAt", e.target.value)} error={fieldErrors.endsAt} required />
-      </fieldset>
-      <fieldset className="grid gap-4" disabled={disabled}>
-        <legend className="font-semibold text-ink">Ketentuan</legend>
-        <div>
-          <label htmlFor="terms" className="mb-1 block text-sm font-medium">Syarat</label>
-          <textarea id="terms" name="terms" rows={4} className="min-h-11 w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-sm" value={values.terms} onChange={(e) => set("terms", e.target.value)} required />
-        </div>
-        <Input label="Email kontak" name="contactEmail" type="email" value={values.contactEmail} onChange={(e) => set("contactEmail", e.target.value)} error={fieldErrors.contactEmail} required />
-        <Input label="Telepon (opsional)" name="contactPhone" value={values.contactPhone} onChange={(e) => set("contactPhone", e.target.value)} error={fieldErrors.contactPhone} />
-        <div>
-          <label htmlFor="inventoryMode" className="mb-1 block text-sm font-medium">Mode inventori</label>
-          <select id="inventoryMode" disabled={lockInventory} className="min-h-11 w-full rounded-md border border-stone-300 bg-white px-3 text-sm" value={values.inventoryMode} onChange={(e) => set("inventoryMode", e.target.value as InventoryMode)}>
+          </Select>
+          <Input label="Mulai" name="startsAt" type="datetime-local" value={values.startsAt} onChange={(e) => set("startsAt", e.target.value)} error={fieldErrors.startsAt} required />
+          <Input label="Selesai" name="endsAt" type="datetime-local" value={values.endsAt} onChange={(e) => set("endsAt", e.target.value)} error={fieldErrors.endsAt} required />
+        </FormSection>
+        <FormSection title="Ketentuan dan inventori">
+          <FormFieldWide>
+            <label htmlFor="terms" className="mb-1 block text-sm font-medium">Syarat</label>
+            <textarea id="terms" name="terms" rows={4} className="min-h-11 w-full rounded-xl border border-stone-300 bg-white px-3 py-2 text-sm" value={values.terms} onChange={(e) => set("terms", e.target.value)} required />
+          </FormFieldWide>
+          <Input label="Email kontak" name="contactEmail" type="email" value={values.contactEmail} onChange={(e) => set("contactEmail", e.target.value)} error={fieldErrors.contactEmail} required />
+          <Input label="Telepon (opsional)" name="contactPhone" value={values.contactPhone} onChange={(e) => set("contactPhone", e.target.value)} error={fieldErrors.contactPhone} />
+          <Select id="inventoryMode" label="Mode inventori" disabled={lockInventory} value={values.inventoryMode} onChange={(e) => set("inventoryMode", e.target.value as InventoryMode)}>
             <option value="GENERAL_ADMISSION">Masuk umum</option>
             <option value="ZONED">Zona</option>
             <option value="RESERVED_SEATING">Kursi bernomor</option>
-          </select>
-        </div>
+          </Select>
+        </FormSection>
       </fieldset>
       {readOnly ? null : (
-        <Button type="submit" disabled={loading}>
+        <Button type="submit" loading={loading} className="w-full sm:w-auto">
           {initial?.status === "PUBLISHED" ? "Simpan perubahan" : initial ? "Simpan draf" : "Buat draf"}
         </Button>
       )}

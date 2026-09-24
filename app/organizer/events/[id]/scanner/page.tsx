@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/Button";
 import { Container } from "@/components/ui/Container";
 import { Input } from "@/components/ui/Input";
 import { apiFetch, readApiError } from "@/lib/api";
+import { TicketHolderBiodata, type TicketHolder } from "@/components/checkin/TicketHolderBiodata";
 
 type Access = {
   event?: { id: string; title: string; startsAt: string; timezone: string; venueName: string };
@@ -21,7 +22,14 @@ type CheckResult = {
   reasonCode: string;
   message: string;
   firstUsedAt?: string;
-  ticket?: { ticketNumberMasked?: string; ticketTypeName?: string; sectionName?: string; seatLabel?: string };
+  ticket?: {
+    ticketNumber?: string;
+    ticketNumberMasked?: string;
+    ticketTypeName?: string;
+    sectionName?: string;
+    seatLabel?: string;
+    holder?: TicketHolder | null;
+  };
   serverTime: string;
 };
 
@@ -43,9 +51,10 @@ function newKey(): string {
 export default function ScannerPage() {
   const params = useParams<{ id: string }>();
   const pathname = usePathname();
-  const embedded = pathname.startsWith("/dashboard");
   const eventId = params.id;
-  const eventHref = `/dashboard/event/${eventId}`;
+  const staffMode = pathname.startsWith("/petugas");
+  const embedded = pathname.startsWith("/dashboard") || staffMode;
+  const eventHref = staffMode ? `/petugas/event/${eventId}` : `/dashboard/event/${eventId}`;
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const readerRef = useRef<{ stop: () => void } | null>(null);
@@ -62,7 +71,7 @@ export default function ScannerPage() {
   const [camMsg, setCamMsg] = useState("");
 
   useEffect(() => {
-    fetch(`/api/events/${eventId}/scanner-access`, { credentials: "include", cache: "no-store" })
+    apiFetch(`/api/events/${eventId}/scanner-access`)
       .then(async (res) => {
         const body = await res.json().catch(() => ({}));
         if (!res.ok) {
@@ -194,11 +203,11 @@ export default function ScannerPage() {
         <section className="mt-6 space-y-4">
           <video ref={videoRef} className="aspect-square w-full max-w-sm rounded-xl bg-black" playsInline muted aria-label="Pratinjau kamera scanner" />
           {state === "IDLE" || state === "REQUESTING_PERMISSION" ? (
-            <Button onClick={startCamera} disabled={state === "REQUESTING_PERMISSION"}>
+            <Button onClick={startCamera} loading={state === "REQUESTING_PERMISSION"}>
               Aktifkan kamera
             </Button>
           ) : null}
-          <Button onClick={() => setShowManual(true)}>Masukkan kode manual</Button>
+          <Button variant="secondary" onClick={() => setShowManual(true)}>Masukkan kode manual</Button>
         </section>
         {showManual ? (
           <form
@@ -208,44 +217,63 @@ export default function ScannerPage() {
               void submit("MANUAL_CODE", manual, false);
             }}
           >
-            <Input id="manual-code" label="Kode cadangan 16 karakter" value={manual} onChange={(e) => setManual(e.target.value)} autoComplete="off" />
-            <Button type="submit">Kirim kode</Button>
+            <Input
+              id="manual-code"
+              label="Kode cadangan 16 karakter"
+              value={manual}
+              onChange={(e) => setManual(e.target.value)}
+              autoComplete="off"
+              placeholder="Contoh: A5943CACA9C778F1"
+            />
+            <p className="text-xs text-ink/55">Gunakan kode cadangan pada tiket, bukan nomor tiket yang berawalan T.</p>
+            <Button type="submit" loading={state === "SUBMITTING"}>Kirim kode</Button>
           </form>
         ) : null}
         {result && state === "SHOWING_RESULT" ? (
-          <div
-            className={`mt-6 rounded-2xl border p-6 ${
-              result.result === "VALID"
-                ? "border-emerald-300 bg-emerald-50"
-                : result.result === "ALREADY_USED"
-                  ? "border-amber-300 bg-amber-50"
-                  : "border-red-300 bg-red-50"
-            }`}
-            role="alert"
-            aria-live="assertive"
-          >
-            <p className="text-2xl font-semibold text-ink">
-              {result.result === "VALID" ? "✓ " : result.result === "ALREADY_USED" ? "! " : "✕ "}
-              {RESULT_LABEL[result.result]}
-            </p>
-            <p className="mt-2 text-ink/85">{result.message}</p>
-            {result.ticket ? (
-              <p className="mt-2 text-sm text-ink/70">
-                {result.ticket.ticketNumberMasked} · {result.ticket.ticketTypeName}
-                {result.ticket.seatLabel ? ` · ${result.ticket.seatLabel}` : ""}
-              </p>
-            ) : null}
-            {result.firstUsedAt ? <p className="text-sm text-ink/60">Pertama digunakan {result.firstUsedAt}</p> : null}
-            <Button className="mt-4" onClick={resetScan}>
-              Pindai berikutnya
-            </Button>
+          <div className="fixed inset-0 z-[80] flex items-center justify-center bg-ink/50 p-4" role="alertdialog" aria-modal="true">
+            <div
+              className={`w-full max-w-md rounded-2xl border p-6 shadow-lg ${
+                result.result === "VALID"
+                  ? "border-emerald-300 bg-white"
+                  : result.result === "ALREADY_USED"
+                    ? "border-amber-300 bg-white"
+                    : "border-red-300 bg-white"
+              }`}
+            >
+              <Alert
+                tone={result.result === "VALID" ? "success" : result.result === "ALREADY_USED" ? "warning" : "error"}
+                title={
+                  result.result === "ALREADY_USED"
+                    ? "Anda sudah check-in"
+                    : result.result === "VALID"
+                      ? "Check-in berhasil"
+                      : RESULT_LABEL[result.result]
+                }
+              >
+                {result.message || (result.result === "ALREADY_USED" ? "Tiket sudah digunakan." : "")}
+              </Alert>
+              {result.ticket ? (
+                <div className="mt-3">
+                  <p className="text-sm text-ink/70">
+                    {result.ticket.ticketNumberMasked || result.ticket.ticketNumber} · {result.ticket.ticketTypeName}
+                    {result.ticket.seatLabel ? ` · ${result.ticket.seatLabel}` : ""}
+                  </p>
+                  <TicketHolderBiodata holder={result.ticket.holder} />
+                </div>
+              ) : null}
+              <Button className="mt-4 w-full" onClick={resetScan}>
+                Pindai berikutnya
+              </Button>
+            </div>
           </div>
         ) : null}
-        <p className="mt-6">
-          <Link className="text-gold-700 underline" href={`${eventHref}/check-in-attempts`}>
-            Riwayat check-in
-          </Link>
-        </p>
+        {staffMode ? null : (
+          <p className="mt-6">
+            <Link className="text-gold-700 underline" href={`${eventHref}/check-in-attempts`}>
+              Riwayat check-in
+            </Link>
+          </p>
+        )}
     </>
   );
 

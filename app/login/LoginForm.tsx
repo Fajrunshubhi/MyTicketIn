@@ -7,6 +7,8 @@ import { useEffect, useState } from "react";
 import BrandMark from "@/components/BrandMark";
 import GoogleButton from "@/components/GoogleButton";
 import { PortalChoice, googleCallbackForPortal, type AuthPortal } from "@/components/auth/PortalChoice";
+import { Button } from "@/components/ui/Button";
+import { Select } from "@/components/ui/Select";
 import { apiFetch, readApiError } from "@/lib/api";
 
 const oauthMessages: Record<string, string> = {
@@ -22,10 +24,11 @@ const portalDeniedReasons: Record<string, string> = {
   admin_only: "Akun admin harus masuk melalui portal Admin aplikasi.",
   organizer_only: "Akun ini adalah penyelenggara event. Masuk melalui portal Penyelenggara event.",
   apply_after_login: "Masuk sebagai pembeli tiket. Pengajuan sebagai penyelenggara dilakukan setelah Anda masuk.",
+  staff_mismatch: "Akun petugas tidak terdaftar pada penyelenggara ini.",
 };
 
 function parsePortal(raw: string | null): AuthPortal {
-  if (raw === "organizer" || raw === "admin" || raw === "buyer") {
+  if (raw === "organizer" || raw === "admin" || raw === "buyer" || raw === "staff") {
     return raw;
   }
   return "buyer";
@@ -47,18 +50,12 @@ type SessionUser = {
 function sessionAllowsPortal(user: SessionUser, portal: AuthPortal): boolean {
   const admin = Boolean(user.access?.isAdmin || user.role === "ADMIN");
   const organizer = Boolean(user.access?.canOrganize);
-  if (portal === "admin") {
-    return admin;
-  }
-  if (admin) {
-    return false;
-  }
-  if (portal === "buyer") {
-    return !organizer;
-  }
-  if (portal === "organizer") {
-    return organizer;
-  }
+  const staff = user.access?.kind === "staff";
+  if (portal === "admin") return admin;
+  if (admin) return false;
+  if (portal === "staff") return staff;
+  if (portal === "buyer") return !organizer && !staff;
+  if (portal === "organizer") return organizer;
   return false;
 }
 
@@ -71,6 +68,8 @@ export default function LoginForm() {
   const [portal, setPortal] = useState<AuthPortal>(() => parsePortal(params.get("portal")));
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [organizerId, setOrganizerId] = useState("");
+  const [organizers, setOrganizers] = useState<{ id: string; name: string }[]>([]);
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -83,7 +82,11 @@ export default function LoginForm() {
     const code = params.get("error") || "";
     if (code === "AUTH_PORTAL_DENIED") {
       const reason = params.get("reason") || "";
-      setError(portalDeniedReasons[reason] || oauthMessages.AUTH_PORTAL_DENIED);
+      if (/petugas tidak terdaftar/i.test(reason)) {
+        setError(portalDeniedReasons.staff_mismatch);
+        return;
+      }
+      setError(portalDeniedReasons[reason] || reason || oauthMessages.AUTH_PORTAL_DENIED);
       return;
     }
     if (code && oauthMessages[code]) {
@@ -92,13 +95,23 @@ export default function LoginForm() {
   }, [params]);
 
   useEffect(() => {
+    if (portal !== "staff") return;
+    apiFetch("/api/public/organizers")
+      .then(async (res) => {
+        const body = await res.json().catch(() => ({}));
+        setOrganizers((body.data?.items || []) as { id: string; name: string }[]);
+      })
+      .catch(() => setOrganizers([]));
+  }, [portal]);
+
+  useEffect(() => {
     fetch("/api/auth/session", { credentials: "include", cache: "no-store" })
       .then((res) => res.json())
       .then((data: { user?: SessionUser }) => {
         if (!data.user?.id) {
           return;
         }
-        const fallback = data.user.access?.isAdmin ? "/dashboard" : "/";
+        const fallback = data.user.access?.kind === "staff" ? "/petugas" : data.user.access?.isAdmin ? "/dashboard" : "/";
         const next = data.user.nextPath || fallback;
         router.replace(next.startsWith("/") && !next.startsWith("//") ? next : fallback);
       })
@@ -108,34 +121,46 @@ export default function LoginForm() {
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError("");
-    setLoading(true);
     const selected = parsePortal(String(new FormData(event.currentTarget).get("portal") || portal));
     setPortal(selected);
+    if (selected === "staff" && !organizerId) {
+      setError("Pilih penyelenggara terlebih dahulu.");
+      return;
+    }
+    setLoading(true);
     const callbackUrl = params.get("callbackUrl") || "";
     const response = await apiFetch("/api/auth/login", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ username, password, portal: selected, callbackUrl }),
+      body: JSON.stringify({
+        username,
+        password,
+        portal: selected,
+        callbackUrl,
+        organizerId: selected === "staff" ? organizerId : undefined,
+      }),
     });
     const payload: unknown = await response.json().catch(() => ({}));
     setLoading(false);
     if (!response.ok) {
-      setError(readApiError(payload, "Username atau kata sandi salah."));
+      setError(readApiError(payload, selected === "staff" ? portalDeniedReasons.staff_mismatch : "Username atau kata sandi salah."));
       return;
     }
     const data = (payload as { data?: LoginData }).data;
     if (!sessionAllowsPortal({ role: data?.role, access: data?.access }, selected)) {
       await apiFetch("/api/auth/signout", { method: "POST" }).catch(() => undefined);
       const reason =
-        selected === "organizer"
-          ? portalDeniedReasons.apply_after_login
-          : selected === "admin"
-            ? portalDeniedReasons.not_admin
-            : portalDeniedReasons.organizer_only;
+        selected === "staff"
+          ? portalDeniedReasons.staff_mismatch
+          : selected === "organizer"
+            ? portalDeniedReasons.apply_after_login
+            : selected === "admin"
+              ? portalDeniedReasons.not_admin
+              : portalDeniedReasons.organizer_only;
       setError(reason);
       return;
     }
-    const fallback = selected === "admin" ? "/dashboard" : "/";
+    const fallback = selected === "admin" ? "/dashboard" : selected === "staff" ? "/petugas" : "/";
     const next = data?.nextPath || fallback;
     router.push(next.startsWith("/") && !next.startsWith("//") ? next : fallback);
     router.refresh();
@@ -148,9 +173,7 @@ export default function LoginForm() {
         <div>
           <p className="mb-3 text-md font-medium uppercase tracking-[0.28em] text-white/70">Aplikasi MyTicketIn</p>
           <h1 className="max-w-xl text-5xl font-semibold leading-tight tracking-tight">Ticketing Event untuk Pemesanan, Pembayaran, dan Validasi Peserta</h1>
-          <p className="mt-4 max-w-lg text-base text-white/75">
-          Masuk untuk mulai menggunakan MyTicketIn
-          </p>
+          <p className="mt-4 max-w-lg text-base text-white/75">Masuk untuk mulai menggunakan MyTicketIn</p>
         </div>
         <p className="text-sm text-white/50">@ 2026 MYTICKETIN. Hak Cipta dilindungi undang-undang</p>
       </section>
@@ -161,26 +184,40 @@ export default function LoginForm() {
             <BrandMark compact />
           </div>
           <h2 className="text-2xl font-semibold tracking-tight text-ink pt2">Masuk</h2>
-          <p className="mt-1 text-sm text-ink/60">Pilih portal, gunakan akun gmail atau username dan kata sandi.</p>
+          <p className="mt-1 text-sm text-ink/60">
+            {portal === "staff"
+              ? "Portal petugas hanya untuk masuk. Pendaftaran dilakukan oleh penyelenggara."
+              : "Pilih portal, gunakan akun gmail atau username dan kata sandi."}
+          </p>
           <form onSubmit={handleSubmit} className="mt-4 grid gap-2.5" noValidate>
-            <PortalChoice
-              name="portal"
-              legend="Masuk sebagai"
-              includeAdmin
-              value={portal}
-              onChange={setPortal}
-            />
-            <GoogleButton
-              portal={portal}
-              callbackUrl={params.get("callbackUrl") || googleCallbackForPortal(portal)}
-            />
-            <div className="flex items-center gap-3 text-[10px] uppercase tracking-[0.2em] text-ink/45">
-              <span className="h-px flex-1 bg-stone-300" />
-              atau
-              <span className="h-px flex-1 bg-stone-300" />
-            </div>
+            <PortalChoice name="portal" legend="Masuk sebagai" includeAdmin value={portal} onChange={setPortal} />
+            {portal === "staff" ? (
+              <Select
+                label="Penyelenggara"
+                name="organizerId"
+                value={organizerId}
+                onChange={(event) => setOrganizerId(event.target.value)}
+                required
+              >
+                <option value="">Pilih penyelenggara</option>
+                {organizers.map((org) => (
+                  <option key={org.id} value={org.id}>
+                    {org.name}
+                  </option>
+                ))}
+              </Select>
+            ) : (
+              <GoogleButton portal={portal} callbackUrl={params.get("callbackUrl") || googleCallbackForPortal(portal)} />
+            )}
+            {portal === "staff" ? null : (
+              <div className="flex items-center gap-3 text-[10px] uppercase tracking-[0.2em] text-ink/45">
+                <span className="h-px flex-1 bg-stone-300" />
+                atau
+                <span className="h-px flex-1 bg-stone-300" />
+              </div>
+            )}
             <label className="block">
-              <span className="mb-1 block text-sm text-ink/70">Username atau email</span>
+              <span className="mb-1 block text-sm text-ink/70">{portal === "staff" ? "Username petugas" : "Username atau email"}</span>
               <input
                 value={username}
                 onChange={(event) => setUsername(event.target.value)}
@@ -205,32 +242,31 @@ export default function LoginForm() {
                 <input type="checkbox" checked={showPassword} onChange={() => setShowPassword((v) => !v)} />
                 Tampilkan kata sandi
               </label>
-              <Link href="/forgot-password" className="text-gold-700 underline">
-                Lupa kata sandi?
-              </Link>
+              {portal === "staff" ? null : (
+                <Link href="/forgot-password" className="text-gold-700 underline">
+                  Lupa kata sandi?
+                </Link>
+              )}
             </div>
             {error ? (
-              <p className="line-clamp-2 rounded-xl border border-red-400/20 bg-red-500/10 px-3 py-1.5 text-sm text-red-700" role="alert">
+              <p className="line-clamp-3 rounded-xl border border-red-400/20 bg-red-500/10 px-3 py-1.5 text-sm text-red-700" role="alert">
                 {error}
               </p>
             ) : null}
-            <p aria-live="polite" className="sr-only">
-              {loading ? "Memeriksa kredensial" : ""}
-            </p>
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full min-h-11 rounded-full bg-gold-500 px-4 font-semibold text-white transition hover:bg-gold-600 disabled:opacity-60"
-            >
-              {loading ? "Memeriksa..." : "Masuk"}
-            </button>
+            <Button type="submit" loading={loading} className="w-full">
+              Masuk
+            </Button>
           </form>
-          <p className="mt-3 text-center text-sm text-ink/60">
-            Belum punya akun?{" "}
-            <Link href="/register" className="font-semibold text-gold-700 hover:text-gold-800">
-              Daftar
-            </Link>
-          </p>
+          {portal === "staff" ? (
+            <p className="mt-3 text-center text-sm text-ink/60">Petugas tidak dapat mendaftar sendiri.</p>
+          ) : (
+            <p className="mt-3 text-center text-sm text-ink/60">
+              Belum punya akun?{" "}
+              <Link href="/register" className="font-semibold text-gold-700 hover:text-gold-800">
+                Daftar
+              </Link>
+            </p>
+          )}
         </div>
       </section>
     </main>

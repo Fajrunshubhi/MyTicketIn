@@ -10,6 +10,9 @@ export default async function DashboardLayout({ children }: { children: ReactNod
   if (!user) {
     redirect("/login?callbackUrl=/dashboard");
   }
+  if (user.access?.kind === "staff") {
+    redirect("/petugas");
+  }
   if (user.access?.canOrganize) {
     return <OrganizerShell>{children}</OrganizerShell>;
   }

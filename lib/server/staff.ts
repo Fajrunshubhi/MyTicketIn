@@ -1,11 +1,14 @@
 import { AppError, execute, newId, query } from "@/lib/server/http";
 import { getOwnedEvent } from "@/lib/server/events-organizer";
 
-function maskEmail(email: string): string {
-  const [local, domain] = email.split("@");
-  if (!domain) return "•••";
-  const head = local.slice(0, 2);
-  return `${head}•••@${domain}`;
+async function organizerOwnerId(profileId: string): Promise<string> {
+  const rows = await query<{ owner_user_id: string }>(
+    `SELECT owner_user_id FROM organizer_profiles WHERE id = $1 LIMIT 1`,
+    [profileId],
+  );
+  const id = rows[0]?.owner_user_id;
+  if (!id) throw new AppError("FORBIDDEN", "Anda tidak memiliki akses.", {}, 403);
+  return id;
 }
 
 export async function listStaff(orgId: string, eventId: string) {
@@ -13,13 +16,14 @@ export async function listStaff(orgId: string, eventId: string) {
   const rows = await query<{
     id: string;
     display_name: string;
-    email: string;
+    username: string;
     status: string;
     version: number;
   }>(
-    `SELECT a.id, u.name AS display_name, u.email, a.status::text AS status, a.version
+    `SELECT a.id, u.name AS display_name, COALESCE(s.username, u.username) AS username, a.status::text AS status, a.version
      FROM event_staff_assignments a
      JOIN users u ON u.id=a.user_id
+     LEFT JOIN organizer_staff_accounts s ON s.user_id = a.user_id
      WHERE a.event_id=$1
      ORDER BY a.assigned_at DESC, a.id DESC`,
     [eventId],
@@ -27,35 +31,40 @@ export async function listStaff(orgId: string, eventId: string) {
   return rows.map((r) => ({
     id: r.id,
     displayName: r.display_name,
-    maskedEmail: maskEmail(r.email),
+    username: r.username,
     status: r.status,
     version: r.version,
   }));
 }
 
-export async function searchStaffCandidates(q: string) {
+export async function searchStaffCandidates(orgId: string, q: string) {
+  const ownerId = await organizerOwnerId(orgId);
   const term = q.trim().toLowerCase();
-  if ([...term].length < 3) throw new AppError("NOT_FOUND", "Pengguna tidak ditemukan.", {}, 404);
-  const rows = await query<{ id: string; name: string; email: string }>(
-    `SELECT id, name, email FROM users
-     WHERE status='ACTIVE' AND role='USER'
-       AND (lower(name) LIKE $1 OR username LIKE $1 OR email LIKE $1)
-     ORDER BY name ASC, id ASC LIMIT 20`,
-    [`%${term}%`],
+  const rows = await query<{ id: string; name: string; username: string }>(
+    `SELECT s.user_id AS id, u.name, s.username
+     FROM organizer_staff_accounts s
+     JOIN users u ON u.id = s.user_id
+     WHERE s.organizer_user_id = $1 AND s.status = 'ACTIVE'
+       AND ($2 = '' OR s.username LIKE $3 OR lower(u.name) LIKE $3)
+     ORDER BY u.name ASC, s.username ASC
+     LIMIT 50`,
+    [ownerId, term, `%${term}%`],
   );
-  return rows.map((r) => ({ id: r.id, displayName: r.name, maskedEmail: maskEmail(r.email) }));
+  return rows.map((r) => ({ id: r.id, displayName: r.name, username: r.username }));
 }
 
 export async function assignStaff(orgId: string, eventId: string, actorId: string, userId: string) {
   await getOwnedEvent(orgId, eventId);
-  const users = await query<{ id: string; role: string; status: string }>(
-    `SELECT id, role::text AS role, status::text AS status FROM users WHERE id=$1 LIMIT 1`,
-    [userId],
+  const ownerId = await organizerOwnerId(orgId);
+  const staff = await query<{ user_id: string }>(
+    `SELECT user_id FROM organizer_staff_accounts
+     WHERE organizer_user_id = $1 AND user_id = $2 AND status = 'ACTIVE'
+     LIMIT 1`,
+    [ownerId, userId],
   );
-  const u = users[0];
-  if (!u) throw new AppError("NOT_FOUND", "Pengguna tidak ditemukan.", {}, 404);
-  if (u.role === "ADMIN") throw new AppError("FORBIDDEN", "Admin tidak dapat ditugaskan sebagai petugas.", {}, 403);
-  if (u.status !== "ACTIVE") throw new AppError("FORBIDDEN", "Pengguna tidak aktif.", {}, 403);
+  if (!staff[0]) {
+    throw new AppError("FORBIDDEN", "Hanya akun petugas milik penyelenggara ini yang dapat ditugaskan.", {}, 403);
+  }
   const existing = await query<{ id: string; status: string; version: number }>(
     `SELECT id, status::text AS status, version FROM event_staff_assignments WHERE event_id=$1 AND user_id=$2 LIMIT 1`,
     [eventId, userId],
@@ -63,7 +72,7 @@ export async function assignStaff(orgId: string, eventId: string, actorId: strin
   if (existing[0]?.status === "ACTIVE") throw new AppError("CONFLICT", "Petugas sudah ditugaskan.", {}, 409);
   if (existing[0]) {
     await execute(
-    `UPDATE event_staff_assignments SET status='ACTIVE'::event_staff_assignment_status, assigned_by_user_id=$1, assigned_at=CURRENT_TIMESTAMP,
+      `UPDATE event_staff_assignments SET status='ACTIVE'::event_staff_assignment_status, assigned_by_user_id=$1, assigned_at=CURRENT_TIMESTAMP,
               revoked_at=NULL, revoked_by_user_id=NULL, revocation_reason=NULL, updated_at=CURRENT_TIMESTAMP, version=version+1
        WHERE id=$2`,
       [actorId, existing[0].id],
@@ -76,7 +85,7 @@ export async function assignStaff(orgId: string, eventId: string, actorId: strin
     );
   }
   const items = await listStaff(orgId, eventId);
-  return items[0];
+  return items.find((item) => item.status === "ACTIVE") || items[0];
 }
 
 export async function revokeStaff(orgId: string, eventId: string, assignmentId: string, actorId: string, reason: string, expectedVersion: number) {

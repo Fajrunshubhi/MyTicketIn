@@ -2,6 +2,7 @@ import { Suspense } from "react";
 import { redirect } from "next/navigation";
 import RegisterForm from "./RegisterForm";
 import { loadSessionUser, sessionHomePath } from "@/lib/session";
+import { RouteLoading } from "@/components/ui/AppLoading";
 
 export default async function RegisterPage() {
   const user = await loadSessionUser();
@@ -9,7 +10,7 @@ export default async function RegisterPage() {
     redirect(sessionHomePath(user));
   }
   return (
-    <Suspense fallback={<p className="p-6">Memuat…</p>}>
+    <Suspense fallback={<RouteLoading />}>
       <RegisterForm />
     </Suspense>
   );

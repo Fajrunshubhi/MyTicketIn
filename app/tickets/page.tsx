@@ -4,6 +4,7 @@ import { Suspense, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Alert } from "@/components/ui/Alert";
+import { RouteLoading } from "@/components/ui/AppLoading";
 import { formatCheckInBefore } from "@/lib/format";
 
 type TicketRow = {
@@ -32,7 +33,7 @@ function formatCheckInLine(iso?: string, tz?: string) {
 
 export default function TicketsRoute() {
   return (
-    <Suspense fallback={<p className="p-6 text-ink/70">Memuat tiket…</p>}>
+    <Suspense fallback={<RouteLoading />}>
       <TicketsPage />
     </Suspense>
   );

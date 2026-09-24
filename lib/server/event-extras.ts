@@ -1,4 +1,5 @@
 import { AppError, execute, newId, query } from "@/lib/server/http";
+import { publicImageSrc } from "@/lib/server/gallery";
 import { detailsEditable, getOwnedEvent, markEventCancelled, normalizeTicketInput, type OrgEvent } from "@/lib/server/events-organizer";
 
 function iso(v: unknown): string {
@@ -73,7 +74,7 @@ export async function listGalleryUrls(eventId: string): Promise<string[]> {
     `SELECT image_url FROM event_gallery_images WHERE event_id=$1 ORDER BY sort_order, id`,
     [eventId],
   );
-  return rows.map((r) => r.image_url);
+  return rows.map((r) => publicImageSrc(r.image_url, "")).filter(Boolean);
 }
 
 export async function replaceGalleryUrls(eventId: string, urls: string[]) {

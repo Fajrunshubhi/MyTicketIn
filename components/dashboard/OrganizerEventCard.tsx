@@ -3,13 +3,25 @@ import { Icon } from "@/components/ui/Icon";
 import { type EventRecord, STATUS_LABEL } from "@/components/events/event-types";
 import { formatClock, formatEventDay } from "@/lib/format";
 
+const FALLBACK = "/dummy-events/jazz-1.jpg";
+
 export function OrganizerEventCard({ event }: { event: EventRecord }) {
-  const cover = event.galleryUrls?.[0] || "/placeholder-event.svg";
+  const cover = event.galleryUrls?.[0] || FALLBACK;
   const place = [event.venueName, event.city].filter(Boolean).join(" · ") || "Lokasi belum diisi";
   return (
     <Link href={`/dashboard/event/${event.id}`} className="block overflow-hidden rounded-2xl border border-stone-100 bg-[#fbfcff]">
       {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img src={cover} alt="" className="aspect-[16/10] w-full bg-stone-100 object-cover" />
+      <img
+        src={cover}
+        alt={event.title}
+        className="aspect-[16/10] w-full bg-stone-100 object-cover"
+        onError={(ev) => {
+          const el = ev.currentTarget;
+          if (el.dataset.fallback === "1") return;
+          el.dataset.fallback = "1";
+          el.src = FALLBACK;
+        }}
+      />
       <div className="p-4">
         <div className="flex flex-wrap items-center gap-2">
           <p className="inline-flex rounded-full bg-sky-50 px-3 py-1 text-xs font-medium text-sky-700">

@@ -125,8 +125,44 @@ export async function findUserByIdentifier(identifier: string): Promise<(AuthUse
   return { ...mapUser(row), passwordHash: row.password_hash };
 }
 
-export async function loginWithPassword(identifier: string, password: string, portalRaw: string) {
+export async function loginWithPassword(
+  identifier: string,
+  password: string,
+  portalRaw: string,
+  organizerId = "",
+) {
   const dummy = "$2a$10$abcdefghijklmnopqrstuuABCDEFGHIJKLMNOPQRSTUVWX12";
+  const portalHint = portalRaw.trim().toLowerCase();
+  if (portalHint === "staff") {
+    if (!identifier.trim() || !password || !organizerId.trim()) {
+      await bcrypt.compare(password || "x", dummy);
+      throw new AppError("AUTH_INVALID_CREDENTIALS", "Username atau kata sandi salah.", {}, 401);
+    }
+    const { findStaffForLogin } = await import("@/lib/server/staff-accounts");
+    const row = await findStaffForLogin(organizerId.trim(), identifier);
+    if (!row || !row.password_hash) {
+      await bcrypt.compare(password, dummy);
+      throw new AppError(
+        "AUTH_PORTAL_DENIED",
+        "Akun petugas tidak terdaftar pada penyelenggara ini.",
+        {},
+        403,
+      );
+    }
+    const ok = await bcrypt.compare(password, row.password_hash);
+    if (!ok) throw new AppError("AUTH_INVALID_CREDENTIALS", "Username atau kata sandi salah.", {}, 401);
+    if (row.staff_status !== "ACTIVE" || row.status !== "ACTIVE") {
+      throw new AppError("FORBIDDEN", "Akun petugas dinonaktifkan.", {}, 403);
+    }
+    const user = mapUser(row);
+    const acc = await accessFor(user);
+    const { authorizePortal, resolvePortal } = await import("@/lib/server/access");
+    const portal = resolvePortal(portalRaw, acc);
+    const denied = authorizePortal(portal, acc);
+    if (denied) throw new AppError("AUTH_PORTAL_DENIED", denied, {}, 403);
+    const issued = await issueSession(user);
+    return { user, acc, portal, ...issued };
+  }
   if (!identifier.trim() || !password) {
     await bcrypt.compare(password || "x", dummy);
     throw new AppError("AUTH_INVALID_CREDENTIALS", "Username atau kata sandi salah.", {}, 401);

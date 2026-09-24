@@ -34,6 +34,17 @@ export async function accessFor(user: AuthUser): Promise<Access> {
     acc.canApplyOrganizer = false;
     return acc;
   }
+  const staff = await query<{ n: string }>(
+    `SELECT COUNT(*)::text AS n FROM organizer_staff_accounts WHERE user_id = $1 AND status = 'ACTIVE'`,
+    [user.id],
+  );
+  if (Number(staff[0]?.n || 0) > 0) {
+    acc.kind = "staff";
+    acc.canBuy = false;
+    acc.canApplyOrganizer = false;
+    acc.canOrganize = false;
+    return acc;
+  }
   const rows = await query<{ status: string }>(
     `SELECT status::text AS status FROM organizer_profiles WHERE owner_user_id = $1 LIMIT 1`,
     [user.id],
@@ -53,18 +64,18 @@ export async function accessFor(user: AuthUser): Promise<Access> {
 export function parsePortal(raw: string): string {
   const v = raw.trim().toLowerCase();
   if (!v) return "buyer";
-  if (v === "buyer" || v === "organizer" || v === "admin") return v;
+  if (v === "buyer" || v === "organizer" || v === "admin" || v === "staff") return v;
   throw new AppError("VALIDATION_ERROR", "Periksa kembali isian formulir.", {
-    portal: "Pilih pembeli tiket, penyelenggara, atau admin aplikasi.",
+    portal: "Pilih pembeli tiket, penyelenggara, petugas, atau admin aplikasi.",
   });
 }
 
 export function parseRegisterIntent(raw: string): string {
   const v = raw.trim().toLowerCase();
   if (!v || v === "buyer" || v === "organizer") return "buyer";
-  if (v === "admin") {
+  if (v === "admin" || v === "staff") {
     throw new AppError("VALIDATION_ERROR", "Periksa kembali isian formulir.", {
-      intent: "Admin aplikasi tidak didaftarkan melalui formulir ini.",
+      intent: "Admin dan petugas tidak didaftarkan melalui formulir ini.",
     });
   }
   throw new AppError("VALIDATION_ERROR", "Periksa kembali isian formulir.", {
@@ -83,11 +94,18 @@ export function authorizePortal(portal: string, acc: Access): string | null {
   }
   if (portal === "organizer") {
     if (acc.isAdmin) return "Akun admin harus masuk melalui portal Admin aplikasi.";
+    if (acc.kind === "staff") return "Akun petugas harus masuk melalui portal Petugas check-in.";
     if (!acc.canOrganize) return "Masuk sebagai pembeli tiket. Pengajuan sebagai penyelenggara dilakukan setelah Anda masuk.";
+    return null;
+  }
+  if (portal === "staff") {
+    if (acc.isAdmin) return "Akun admin harus masuk melalui portal Admin aplikasi.";
+    if (acc.kind !== "staff") return "Akun petugas tidak terdaftar pada penyelenggara ini.";
     return null;
   }
   if (portal === "buyer") {
     if (acc.isAdmin) return "Akun admin harus masuk melalui portal Admin aplikasi.";
+    if (acc.kind === "staff") return "Akun petugas harus masuk melalui portal Petugas check-in.";
     if (acc.canOrganize) return "Akun ini adalah penyelenggara event. Masuk melalui portal Penyelenggara event.";
     return null;
   }
@@ -97,6 +115,7 @@ export function authorizePortal(portal: string, acc: Access): string | null {
 export function portalNextPath(portal: string, acc: Access, callback: string): string {
   let fallback = "/";
   if (portal === "admin") fallback = "/dashboard";
+  if (portal === "staff") fallback = "/petugas";
   const path = safeCallback(callback, fallback);
   if (!portalAllowsPath(portal, path)) return fallback;
   return path;
@@ -123,7 +142,10 @@ function portalAllowsPath(portal: string, path: string): boolean {
       path === "/organizer/dashboard"
     );
   }
-  if (path.startsWith("/admin") || path.startsWith("/organizer/events")) return false;
+  if (portal === "staff") {
+    return path === "/petugas" || path.startsWith("/petugas/");
+  }
+  if (path.startsWith("/admin") || path.startsWith("/organizer/events") || path.startsWith("/petugas")) return false;
   return true;
 }
 

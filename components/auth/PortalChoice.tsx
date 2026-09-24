@@ -2,7 +2,7 @@
 
 import { Icon, type IconName } from "@/components/ui/Icon";
 
-export type AuthPortal = "buyer" | "organizer" | "admin";
+export type AuthPortal = "buyer" | "organizer" | "admin" | "staff";
 
 const options: { id: AuthPortal; title: string; hint: string; admin?: boolean }[] = [
   {
@@ -16,6 +16,11 @@ const options: { id: AuthPortal; title: string; hint: string; admin?: boolean }[
     hint: "Hanya untuk penyelenggara yang sudah disetujui admin.",
   },
   {
+    id: "staff",
+    title: "Petugas check-in",
+    hint: "Hanya login. Pilih penyelenggara lalu username petugas yang dibuat penyelenggara.",
+  },
+  {
     id: "admin",
     title: "Admin aplikasi",
     hint: "Moderasi organizer dan event. Bukan pendaftaran publik.",
@@ -27,6 +32,7 @@ const portalIcon: Record<AuthPortal, IconName> = {
   buyer: "ticket",
   organizer: "building",
   admin: "shield",
+  staff: "devices",
 };
 
 type Props = {
@@ -52,7 +58,7 @@ export function PortalChoice({ value, onChange, includeAdmin, includeOrganizer =
   return (
     <fieldset>
       <legend className="mb-1.5 text-sm text-ink/70">{legend}</legend>
-      <div className="grid grid-cols-3 gap-1.5">
+      <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-4">
         {visible.map((item) => {
           const id = `${name}-${item.id}`;
           const selected = value === item.id;
@@ -86,5 +92,6 @@ export function PortalChoice({ value, onChange, includeAdmin, includeOrganizer =
 
 export function googleCallbackForPortal(portal: AuthPortal): string {
   if (portal === "admin") return "/dashboard";
+  if (portal === "staff") return "/petugas";
   return "/";
 }

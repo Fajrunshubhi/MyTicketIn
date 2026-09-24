@@ -17,7 +17,12 @@ export const POST = routeHandler(async (req: NextRequest) => {
   }
   const portal = String(form.get("portal") || "");
   try {
-    const result = await loginWithPassword(String(form.get("username") || ""), String(form.get("password") || ""), portal);
+    const result = await loginWithPassword(
+      String(form.get("username") || ""),
+      String(form.get("password") || ""),
+      portal,
+      String(form.get("organizerId") || ""),
+    );
     const next = portalNextPath(result.portal, result.acc, String(form.get("callbackUrl") || ""));
     const res = NextResponse.redirect(`${origin}${next}`, 302);
     setAuthCookies(res, result.raw, result.csrf);

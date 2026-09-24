@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Suspense } from "react";
 import BrandMark from "@/components/BrandMark";
+import { RouteLoading } from "@/components/ui/AppLoading";
 import { apiFetch, readApiError } from "@/lib/api";
 
 function ResetForm() {
@@ -59,7 +60,7 @@ export default function ResetPasswordPage() {
   return (
     <main className="auth-shell min-h-screen p-6">
       <BrandMark />
-      <Suspense fallback={<p>Memuat…</p>}>
+      <Suspense fallback={<RouteLoading />}>
         <ResetForm />
       </Suspense>
     </main>

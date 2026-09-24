@@ -7,13 +7,18 @@ import { SiteNav, type SiteNavItem } from "@/components/shared/SiteNav";
 export async function SiteHeader() {
   const user = await loadSessionUser();
   const items: SiteNavItem[] = user
-    ? [
-        { href: "/events", label: "Katalog", icon: "catalog" },
-        { href: "/dashboard", label: "Dashboard", icon: "dashboard", emphasis: true },
-      ]
+    ? user.access?.kind === "staff"
+      ? [
+          { href: "/petugas", label: "Scanner", icon: "devices", emphasis: true },
+        ]
+      : [
+          { href: "/events", label: "Katalog", icon: "catalog" },
+          { href: "/dashboard", label: "Dashboard", icon: "dashboard", emphasis: true },
+        ]
     : [
         { href: "/events", label: "Katalog", icon: "catalog" },
         { href: "/login?portal=buyer", label: "Masuk pembeli", icon: "login" },
+        { href: "/login?portal=staff", label: "Masuk petugas", icon: "devices" },
         { href: "/register", label: "Daftar", icon: "userPlus", emphasis: true },
       ];
 

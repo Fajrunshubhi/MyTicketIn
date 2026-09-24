@@ -7,7 +7,9 @@ import { Alert } from "@/components/ui/Alert";
 import { FloatingAlert } from "@/components/ui/FloatingAlert";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
+import { Select } from "@/components/ui/Select";
 import { EventForm } from "@/components/events/EventForm";
+import { FormFieldWide, FormSection } from "@/components/ui/FormSection";
 import {
   MODE_LABEL,
   STATUS_LABEL,
@@ -65,7 +67,7 @@ export function EventEditor({ eventId }: { eventId: string }) {
 
   const load = useCallback(() => {
     setLoading(true);
-    fetch(`/api/organizer/events/${eventId}`, { credentials: "include", cache: "no-store" })
+    apiFetch(`/api/organizer/events/${eventId}`)
       .then(async (res) => {
         const body = await res.json().catch(() => ({}));
         if (!res.ok) {
@@ -333,15 +335,16 @@ export function EventEditor({ eventId }: { eventId: string }) {
           ))}
         </ul>
         {canAuthorTickets ? (
-          <div className="grid max-w-xl gap-3">
+          <FormSection title="Tambah jenis tiket" description="Selesai jual harus setelah mulai jual, dan sebelum event dimulai.">
             <Input label="Nama jenis" name="ticketName" value={ticketName} onChange={(ev) => setTicketName(ev.target.value)} />
             <Input label="Harga (Rupiah, integer)" name="priceRupiah" inputMode="numeric" value={price} onChange={(ev) => setPrice(ev.target.value)} />
             <Input label="Kuota" name="quota" inputMode="numeric" value={quota} onChange={(ev) => setQuota(ev.target.value)} />
             <Input label="Mulai jual" name="saleStartsAt" type="datetime-local" value={saleStart} onChange={(ev) => setSaleStart(ev.target.value)} />
             <Input label="Selesai jual" name="saleEndsAt" type="datetime-local" value={saleEnd} onChange={(ev) => setSaleEnd(ev.target.value)} />
-            <p className="text-sm text-ink/65">Selesai jual harus setelah mulai jual, dan sebelum waktu mulai event.</p>
-            <Button type="button" onClick={addTicket}>Tambah jenis tiket</Button>
-          </div>
+            <FormFieldWide>
+              <Button type="button" onClick={addTicket}>Tambah jenis tiket</Button>
+            </FormFieldWide>
+          </FormSection>
         ) : null}
       </section>
 
@@ -352,29 +355,31 @@ export function EventEditor({ eventId }: { eventId: string }) {
       </section>
 
       {e.inventoryMode !== "GENERAL_ADMISSION" && canAuthorTickets ? (
-        <section className="grid max-w-xl gap-3">
-          <h2 className="font-display text-2xl text-ink">Zona dan denah</h2>
+        <FormSection title="Zona dan denah">
           <Input label="Nama zona" name="sectionName" value={sectionName} onChange={(ev) => setSectionName(ev.target.value)} />
-          <div>
-            <label htmlFor="sectionTicket" className="mb-1 block text-sm font-medium">Jenis tiket zona</label>
-            <select id="sectionTicket" className="min-h-11 w-full rounded-md border border-stone-300 bg-white px-3 text-sm" value={sectionTicket} onChange={(ev) => setSectionTicket(ev.target.value)}>
-              <option value="">Pilih jenis tiket</option>
-              {current.ticketTypes.map((t) => (
-                <option key={t.id} value={t.id}>{t.name}</option>
-              ))}
-            </select>
-          </div>
-          <Button type="button" onClick={saveSections}>Simpan zona</Button>
+          <Select id="sectionTicket" label="Jenis tiket zona" value={sectionTicket} onChange={(ev) => setSectionTicket(ev.target.value)}>
+            <option value="">Pilih jenis tiket</option>
+            {current.ticketTypes.map((t) => (
+              <option key={t.id} value={t.id}>{t.name}</option>
+            ))}
+          </Select>
+          <FormFieldWide>
+            <Button type="button" onClick={saveSections}>Simpan zona</Button>
+          </FormFieldWide>
           {e.inventoryMode === "RESERVED_SEATING" ? (
             <>
-              <Input label="Label kursi (pisahkan koma)" name="seats" value={seatLabels} onChange={(ev) => setSeatLabels(ev.target.value)} />
+              <FormFieldWide>
+                <Input label="Label kursi (pisahkan koma)" name="seats" value={seatLabels} onChange={(ev) => setSeatLabels(ev.target.value)} />
+              </FormFieldWide>
               <Button type="button" onClick={saveSeats}>Simpan kursi</Button>
               <Input label="Teks alternatif denah" name="altText" value={altText} onChange={(ev) => setAltText(ev.target.value)} />
               <Input label="Legenda denah" name="legend" value={legend} onChange={(ev) => setLegend(ev.target.value)} />
-              <Button type="button" onClick={saveSeatMap}>Simpan meta denah (placeholder)</Button>
+              <FormFieldWide>
+                <Button type="button" onClick={saveSeatMap}>Simpan meta denah (placeholder)</Button>
+              </FormFieldWide>
             </>
           ) : null}
-        </section>
+        </FormSection>
       ) : null}
 
       {canAuthorTickets ? (

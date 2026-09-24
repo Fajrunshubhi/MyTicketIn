@@ -21,9 +21,10 @@ export function middleware(req: NextRequest) {
   if (!session) {
     const login = new URL("/login", req.url);
     login.searchParams.set("callbackUrl", req.nextUrl.pathname);
-    const path = req.nextUrl.pathname;
     if (path.startsWith("/admin")) {
       login.searchParams.set("portal", "admin");
+    } else if (path.startsWith("/petugas")) {
+      login.searchParams.set("portal", "staff");
     } else if (path.startsWith("/organizer/events")) {
       login.searchParams.set("portal", "organizer");
     } else {
@@ -39,9 +40,12 @@ export const config = {
     "/login",
     "/register",
     "/dashboard",
+    "/dashboard/:path*",
     "/home",
     "/admin/:path*",
     "/organizer/:path*",
+    "/petugas",
+    "/petugas/:path*",
     "/checkout",
     "/orders",
     "/orders/:path*",

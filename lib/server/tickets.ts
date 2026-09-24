@@ -226,11 +226,30 @@ export async function issueTicketsForPaidOrder(orderId: string, buyer: AuthUser)
   }
 }
 
+export function normalizeManualCode(raw: string): string {
+  return raw.replace(/[^a-z0-9]/gi, "").toUpperCase();
+}
+
 export async function lookupTicketByToken(raw: string) {
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+  const hash = tokenHash(trimmed);
+  const manual = normalizeManualCode(trimmed);
   const rows = await query<Record<string, unknown>>(
-    `SELECT id, event_id, owner_user_id, status::text AS status, ticket_number, ticket_type_name, section_name, seat_label, used_at::text
-     FROM tickets WHERE token_hash=$1 LIMIT 1`,
-    [tokenHash(raw.trim())],
+    `SELECT t.id, t.event_id, t.owner_user_id, t.status::text AS status, t.ticket_number, t.ticket_type_name, t.section_name, t.seat_label, t.used_at::text,
+            COALESCE(NULLIF(btrim(t.holder_full_name), ''), a.full_name, u.name, '') AS holder_full_name,
+            COALESCE(NULLIF(btrim(t.holder_email), ''), a.email, u.email, '') AS holder_email,
+            COALESCE(NULLIF(btrim(t.holder_phone), ''), a.phone, '') AS holder_phone,
+            COALESCE(NULLIF(t.holder_identity_number, '0000000000000000'), a.identity_number, '') AS holder_identity_number,
+            u.name AS owner_name
+     FROM tickets t
+     JOIN users u ON u.id = t.owner_user_id
+     LEFT JOIN order_attendees a ON a.order_item_id = t.order_item_id AND a.unit_sequence = t.unit_sequence
+     WHERE t.token_hash = $1
+        OR ($2 <> '' AND char_length($2) = 16 AND btrim(t.manual_code) = $2)
+        OR upper(btrim(t.ticket_number)) = upper($3)
+     LIMIT 1`,
+    [hash, manual, trimmed],
   );
   return rows[0] || null;
 }

@@ -11,6 +11,7 @@ export type PublicSessionUser = {
     isAdmin?: boolean;
     canOrganize?: boolean;
     canBuy?: boolean;
+    kind?: string;
   };
 };
 
@@ -30,6 +31,9 @@ export const loadSessionUser = cache(async (): Promise<PublicSessionUser | null>
 });
 
 export function sessionHomePath(user: PublicSessionUser): string {
+  if (user.access?.kind === "staff") {
+    return "/petugas";
+  }
   if (user.access?.isAdmin) {
     return "/dashboard";
   }

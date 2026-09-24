@@ -22,7 +22,7 @@ export function ProfileForm() {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    fetch("/api/me", { credentials: "include", cache: "no-store" })
+    apiFetch("/api/me")
       .then(async (res) => {
         if (!res.ok) {
           router.replace("/login");
@@ -118,8 +118,8 @@ export function ProfileForm() {
             </p>
           ) : null}
           <div className="flex flex-wrap gap-3">
-            <Button type="submit" disabled={loading}>
-              {loading ? "Menyimpan…" : "Simpan"}
+            <Button type="submit" loading={loading}>
+              Simpan
             </Button>
             <a href="/dashboard" className="inline-flex min-h-11 items-center justify-center rounded-full px-4 py-2 text-sm font-medium text-ink/80 hover:bg-white">
               Kembali ke dashboard

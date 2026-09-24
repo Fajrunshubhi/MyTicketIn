@@ -1,9 +1,10 @@
 import { Suspense } from "react";
+import { RouteLoading } from "@/components/ui/AppLoading";
 import AdminEventsClient from "./AdminEventsClient";
 
 export default function AdminEventsPage() {
   return (
-    <Suspense fallback={<p className="p-6">Memuat antrean event…</p>}>
+    <Suspense fallback={<RouteLoading />}>
       <AdminEventsClient />
     </Suspense>
   );

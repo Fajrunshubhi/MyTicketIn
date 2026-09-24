@@ -32,6 +32,20 @@ describe("portal", () => {
     });
     expect(msg).toMatch(/pembeli/i);
   });
+
+  it("accepts staff portal and rejects register intent", () => {
+    expect(parsePortal("staff")).toBe("staff");
+    expect(() => parseRegisterIntent("staff")).toThrow();
+    const denied = authorizePortal("staff", {
+      kind: "buyer",
+      isAdmin: false,
+      canBuy: true,
+      canOrganize: false,
+      canApplyOrganizer: true,
+      organizerStatus: null,
+    });
+    expect(denied).toMatch(/petugas tidak terdaftar/i);
+  });
 });
 
 describe("event authoring status", () => {

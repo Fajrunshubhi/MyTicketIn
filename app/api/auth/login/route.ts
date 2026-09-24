@@ -11,11 +11,17 @@ export const POST = routeHandler(async (req: NextRequest) => {
     password?: string;
     callbackUrl?: string;
     portal?: string;
+    organizerId?: string;
   } | null;
   if (!body) {
     throw new AppError("VALIDATION_ERROR", "Periksa kembali isian formulir.", {}, 400);
   }
-  const result = await loginWithPassword(body.username || "", body.password || "", body.portal || "");
+  const result = await loginWithPassword(
+    body.username || "",
+    body.password || "",
+    body.portal || "",
+    body.organizerId || "",
+  );
   const acc = result.acc || (await accessFor(result.user));
   const res = jsonData(userPayload(result.user, result.portal, acc, body.callbackUrl || ""), 200, req);
   setAuthCookies(res, result.raw, result.csrf);
