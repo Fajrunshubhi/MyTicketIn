@@ -60,6 +60,13 @@ export const errorCatalog: Record<string, CatalogEntry> = {
     message: "Terlalu banyak permintaan.",
     recovery: "Tunggu sejenak, lalu coba lagi.",
   },
+  STORAGE_NOT_CONFIGURED: {
+    category: "PROVIDER",
+    status: 503,
+    retryable: true,
+    message: "Penyimpanan gambar belum dikonfigurasi.",
+    recovery: "Isi kredensial object storage di Vercel, lalu unggah ulang.",
+  },
   SERVICE_UNHEALTHY: {
     category: "PROVIDER",
     status: 503,

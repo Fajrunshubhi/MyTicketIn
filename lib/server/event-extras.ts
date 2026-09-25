@@ -1,4 +1,5 @@
 import { AppError, execute, newId, query } from "@/lib/server/http";
+import { dummyCover } from "@/lib/event-cover";
 import { publicImageSrc } from "@/lib/server/gallery";
 import { detailsEditable, getOwnedEvent, markEventCancelled, normalizeTicketInput, type OrgEvent } from "@/lib/server/events-organizer";
 
@@ -69,12 +70,14 @@ export async function getSeatMap(eventId: string) {
   return { id: m.id, altText: m.alt_text, legend: m.legend, status: m.status };
 }
 
-export async function listGalleryUrls(eventId: string): Promise<string[]> {
+export async function listGalleryUrls(eventId: string, category = "", title = ""): Promise<string[]> {
+  const fallback = dummyCover(category, title, eventId);
   const rows = await query<{ image_url: string }>(
     `SELECT image_url FROM event_gallery_images WHERE event_id=$1 ORDER BY sort_order, id`,
     [eventId],
   );
-  return rows.map((r) => publicImageSrc(r.image_url, "")).filter(Boolean);
+  const urls = rows.map((r) => publicImageSrc(r.image_url, fallback)).filter(Boolean);
+  return urls.length ? urls : [fallback];
 }
 
 export async function replaceGalleryUrls(eventId: string, urls: string[]) {

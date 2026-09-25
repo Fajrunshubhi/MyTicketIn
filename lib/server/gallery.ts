@@ -1,7 +1,9 @@
 import { existsSync } from "fs";
 import { mkdir, writeFile } from "fs/promises";
 import path from "path";
+import { isLocalGalleryUrl } from "@/lib/event-cover";
 import { AppError, newId } from "@/lib/server/http";
+import { galleryStorageConfig, putGalleryObject } from "@/lib/server/s3-put";
 
 const MAX_BYTES = 5 * 1024 * 1024;
 
@@ -19,19 +21,23 @@ function detectExt(buf: Buffer): { mime: string; ext: string } {
 }
 
 export async function saveGalleryFile(bytes: Buffer): Promise<string> {
-  if (!localUploadsAvailable()) {
-    throw new AppError(
-      "VALIDATION_ERROR",
-      "Unggah galeri tidak tersedia di Vercel. Gunakan foto dummy atau jalankan secara lokal.",
-      {},
-      400,
-    );
-  }
   if (!bytes.length || bytes.length > MAX_BYTES) {
     throw new AppError("VALIDATION_ERROR", "Ukuran gambar maksimal 5 MB.", {}, 400);
   }
-  const { ext } = detectExt(bytes);
+  const { mime, ext } = detectExt(bytes);
   const name = `${newId()}${ext}`;
+  const key = `gallery/${name}`;
+  if (galleryStorageConfig()) {
+    return putGalleryObject(key, bytes, mime);
+  }
+  if (!localUploadsAvailable()) {
+    throw new AppError(
+      "STORAGE_NOT_CONFIGURED",
+      "Penyimpanan gambar belum dikonfigurasi. Isi GALLERY_S3_BUCKET, AWS_ENDPOINT_URL_S3, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, dan GALLERY_S3_PUBLIC_BASE_URL di Vercel.",
+      {},
+      503,
+    );
+  }
   const dir = path.join(process.cwd(), "uploads", "gallery");
   await mkdir(dir, { recursive: true });
   await writeFile(path.join(dir, name), bytes);
@@ -47,17 +53,19 @@ export function galleryFilePath(name: string): string {
 }
 
 export function localUploadsAvailable(): boolean {
-  return process.env.VERCEL !== "1";
+  if (process.env.VERCEL || process.env.VERCEL_ENV) return false;
+  return true;
 }
 
 /** Local gallery files live on disk; skip URLs whose file is gone so the UI never shows a broken image. */
 export function publicImageSrc(url: string, fallback: string): string {
   const trimmed = String(url || "").trim();
   if (!trimmed) return fallback;
-  if (!trimmed.startsWith("/uploads/gallery/")) return trimmed;
+  if (!isLocalGalleryUrl(trimmed)) return trimmed;
   if (!localUploadsAvailable()) return fallback;
   try {
-    const filePath = galleryFilePath(trimmed.slice("/uploads/gallery/".length));
+    const name = trimmed.replace(/^.*\/uploads\/gallery\//, "");
+    const filePath = galleryFilePath(name);
     return existsSync(filePath) ? trimmed : fallback;
   } catch {
     return fallback;

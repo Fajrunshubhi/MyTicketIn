@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { formatRupiah } from "@/lib/format";
 import { SALE_LABEL, type CatalogCard } from "@/components/events/catalog-types";
+import { EventCoverImg } from "@/components/events/EventCoverImg";
 import { Icon } from "@/components/ui/Icon";
 
 function cardDate(iso: string, timeZone: string) {
@@ -26,18 +27,15 @@ export function EventCard({ item }: { item: CatalogCard }) {
         className="block focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold-400"
       >
         <div className="relative">
-          <img
-            src={item.image?.url || "/dummy-events/jazz-1.jpg"}
+          <EventCoverImg
+            src={item.image?.url}
             alt={item.image?.alt || item.title}
+            category={item.category}
+            title={item.title}
+            seed={item.slug}
             width={640}
             height={360}
             className="h-[190px] w-full bg-stone-200 object-cover"
-            onError={(event) => {
-              const el = event.currentTarget;
-              if (el.dataset.fallback === "1") return;
-              el.dataset.fallback = "1";
-              el.src = "/dummy-events/jazz-1.jpg";
-            }}
           />
           <span className="absolute left-3 top-3 rounded-full bg-white px-2.5 py-1 text-[11px] font-semibold text-ink shadow-soft">
             {price}

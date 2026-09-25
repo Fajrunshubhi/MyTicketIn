@@ -1,4 +1,4 @@
-import { dummyCover } from "@/lib/server/catalog";
+import { dummyCover } from "@/lib/event-cover";
 import { publicImageSrc } from "@/lib/server/gallery";
 import { AppError, execute, newId, query } from "@/lib/server/http";
 
@@ -93,10 +93,11 @@ async function attachGalleryUrls(events: OrgEvent[]): Promise<OrgEvent[]> {
     byEvent.set(row.event_id, list);
   }
   return events.map((e) => {
-    const urls = byEvent.get(e.id) || [];
+    const fallback = dummyCover(String(e.category || ""), String(e.title || ""), e.id);
+    const urls = (byEvent.get(e.id) || []).filter(Boolean);
     return {
       ...e,
-      galleryUrls: urls.length ? urls : [dummyCover(String(e.category || ""), String(e.title || ""))],
+      galleryUrls: urls.length ? urls : [fallback],
     };
   });
 }

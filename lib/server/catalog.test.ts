@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { eventImageSrc } from "@/lib/event-cover";
 import { dummyCover } from "@/lib/server/catalog";
 import { authorizePortal, parseRegisterIntent, parsePortal } from "@/lib/server/access";
 import { authoringMutable, detailsEditable, normalizeEventInput, normalizeTicketInput } from "@/lib/server/events-organizer";
@@ -151,5 +152,12 @@ describe("publicImageSrc", () => {
       if (prev === undefined) delete process.env.VERCEL;
       else process.env.VERCEL = prev;
     }
+  });
+});
+
+describe("eventImageSrc", () => {
+  it("rewrites local gallery paths to static dummy covers", () => {
+    expect(eventImageSrc("/uploads/gallery/abc.jpg", "Seni", "Pameran")).toBe("/dummy-events/theater-1.jpg");
+    expect(eventImageSrc("/dummy-events/food-1.jpg", "Musik", "Jazz")).toBe("/dummy-events/food-1.jpg");
   });
 });

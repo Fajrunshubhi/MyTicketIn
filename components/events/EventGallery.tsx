@@ -2,15 +2,14 @@
 
 import { useMemo, useState } from "react";
 import { Icon } from "@/components/ui/Icon";
+import { DUMMY_EVENT_COVER, eventImageSrc } from "@/lib/event-cover";
 
 export type GalleryImage = { url: string; alt: string };
-
-const FALLBACK = "/dummy-events/jazz-1.jpg";
 
 function markFallback(el: HTMLImageElement) {
   if (el.dataset.fallback === "1") return;
   el.dataset.fallback = "1";
-  el.src = FALLBACK;
+  el.src = DUMMY_EVENT_COVER;
 }
 
 export function EventGallery({
@@ -24,9 +23,11 @@ export function EventGallery({
 }) {
   const [broken, setBroken] = useState<Record<string, true>>({});
   const slides = useMemo(() => {
-    const mapped = (images.length > 0 ? images : [{ url: FALLBACK, alt: title }]).map((img) =>
-      broken[img.url] ? { ...img, url: FALLBACK } : img,
-    );
+    const source = images.length > 0 ? images : [{ url: DUMMY_EVENT_COVER, alt: title }];
+    const mapped = source.map((img) => {
+      const url = eventImageSrc(img.url, "", title);
+      return broken[img.url] || broken[url] ? { ...img, url: DUMMY_EVENT_COVER } : { ...img, url };
+    });
     const seen = new Set<string>();
     return mapped.filter((img) => {
       if (seen.has(img.url)) return false;
@@ -35,7 +36,7 @@ export function EventGallery({
     });
   }, [broken, images, title]);
   const [index, setIndex] = useState(0);
-  const current = slides[Math.min(index, slides.length - 1)] || { url: FALLBACK, alt: title };
+  const current = slides[Math.min(index, slides.length - 1)] || { url: DUMMY_EVENT_COVER, alt: title };
   const many = slides.length > 1;
 
   function go(next: number) {
@@ -54,7 +55,7 @@ export function EventGallery({
           onError={(event) => {
             const url = current.url;
             markFallback(event.currentTarget);
-            if (url !== FALLBACK) setBroken((cur) => ({ ...cur, [url]: true }));
+            if (url !== DUMMY_EVENT_COVER) setBroken((cur) => ({ ...cur, [url]: true }));
           }}
         />
         {many ? (
@@ -98,7 +99,7 @@ export function EventGallery({
                   className="h-14 w-20 object-cover"
                   onError={(event) => {
                     markFallback(event.currentTarget);
-                    if (slide.url !== FALLBACK) setBroken((cur) => ({ ...cur, [slide.url]: true }));
+                    if (slide.url !== DUMMY_EVENT_COVER) setBroken((cur) => ({ ...cur, [slide.url]: true }));
                   }}
                 />
               </button>

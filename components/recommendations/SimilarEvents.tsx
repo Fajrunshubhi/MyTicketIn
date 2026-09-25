@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { EventCoverImg } from "@/components/events/EventCoverImg";
 
 type Item = {
   slug: string;
@@ -50,16 +51,13 @@ export function SimilarEvents({ slug }: { slug: string }) {
       <ul className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {items.map((item) => (
           <li key={item.slug} className="overflow-hidden rounded-2xl border border-stone-200 bg-white shadow-card">
-            <img
-              src={item.image?.url || "/dummy-events/jazz-1.jpg"}
+            <EventCoverImg
+              src={item.image?.url}
               alt={item.image?.altText || item.title}
+              category={item.category}
+              title={item.title}
+              seed={item.slug}
               className="h-32 w-full object-cover"
-              onError={(event) => {
-                const el = event.currentTarget;
-                if (el.dataset.fallback === "1") return;
-                el.dataset.fallback = "1";
-                el.src = "/dummy-events/jazz-1.jpg";
-              }}
             />
             <div className="p-4">
             <p className="font-semibold text-ink">{item.title}</p>

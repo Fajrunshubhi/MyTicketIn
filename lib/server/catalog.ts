@@ -1,5 +1,8 @@
 import { AppError, query } from "@/lib/server/http";
+import { dummyCover } from "@/lib/event-cover";
 import { publicImageSrc } from "@/lib/server/gallery";
+
+export { dummyCover } from "@/lib/event-cover";
 
 export type PublicImage = { url: string; alt: string };
 export type CatalogCard = {
@@ -52,23 +55,14 @@ type TicketRow = {
   sales_stopped_at: string | null;
 };
 
-export function dummyCover(category: string, title: string): string {
-  const blob = `${category} ${title}`.toLowerCase();
-  if (blob.includes("film") || blob.includes("teater") || blob.includes("pameran") || blob.includes("seni")) {
-    return "/dummy-events/theater-1.jpg";
-  }
-  if (blob.includes("lari") || blob.includes("run") || blob.includes("olahraga")) return "/dummy-events/run-jakarta.jpg";
-  if (blob.includes("kuliner") || blob.includes("food") || blob.includes("festival")) return "/dummy-events/food-1.jpg";
-  if (blob.includes("seminar") || blob.includes("summit") || blob.includes("konferensi")) return "/dummy-events/summit-1.jpg";
-  return "/dummy-events/jazz-1.jpg";
-}
-
-async function galleryUrls(eventId: string): Promise<string[]> {
+async function galleryUrls(eventId: string, category: string, title: string): Promise<string[]> {
+  const fallback = dummyCover(category, title, eventId);
   const rows = await query<{ image_url: string }>(
     `SELECT image_url FROM event_gallery_images WHERE event_id = $1 ORDER BY sort_order, id`,
     [eventId],
   );
-  return rows.map((r) => publicImageSrc(r.image_url, "")).filter(Boolean);
+  const urls = rows.map((r) => publicImageSrc(r.image_url, fallback)).filter(Boolean);
+  return urls.length ? urls : [fallback];
 }
 
 function cover(title: string, category: string, urls: string[]): PublicImage {
@@ -155,7 +149,7 @@ export async function listCatalog(params: {
        FROM event_ticket_types WHERE event_id = $1 ORDER BY sort_order, id`,
       [e.id],
     );
-    const urls = await galleryUrls(e.id);
+    const urls = await galleryUrls(e.id, e.category, e.title);
     const starts = new Date(e.starts_at);
     items.push({
       slug: e.slug,
@@ -247,7 +241,7 @@ export async function getPublicEvent(slug: string) {
     [e.id],
   );
   const org = await query<{ name: string }>(`SELECT name FROM organizer_profiles WHERE id = $1 LIMIT 1`, [e.organizer_profile_id]);
-  const urls = await galleryUrls(e.id);
+  const urls = await galleryUrls(e.id, e.category, e.title);
   const now = new Date();
   const starts = new Date(e.starts_at);
   const images = (urls.length ? urls : [dummyCover(e.category, e.title)]).map((url, i) => ({

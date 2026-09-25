@@ -1,4 +1,4 @@
-import { dummyCover } from "@/lib/server/catalog";
+import { dummyCover } from "@/lib/event-cover";
 import { publicImageSrc } from "@/lib/server/gallery";
 import { query } from "@/lib/server/http";
 

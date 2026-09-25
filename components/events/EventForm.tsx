@@ -290,7 +290,7 @@ export function EventForm({
             <ul className="grid gap-2 sm:grid-cols-4">
               {values.galleryUrls.map((url) => (
                 <li key={url} className="relative overflow-hidden rounded-xl border border-stone-200">
-                  <img src={url} alt="" className="h-20 w-full object-cover" />
+                  <img src={url.startsWith("/uploads/") ? "/dummy-events/jazz-1.jpg" : url} alt="" className="h-20 w-full object-cover" />
                   <button
                     type="button"
                     className="absolute right-1 top-1 rounded-full bg-white/90 px-2 text-xs"
