@@ -16,9 +16,9 @@ export function isLocalGalleryUrl(url: string): boolean {
   return trimmed.startsWith("/uploads/") || trimmed.includes("/uploads/gallery/");
 }
 
-/** Resolve a cover that actually exists on Vercel (static files in /public). */
+/** Keep the stored URL. Dummy covers are only for empty src; broken files use img onError. */
 export function eventImageSrc(url?: string | null, category = "", title = "", seed = ""): string {
   const trimmed = String(url || "").trim();
-  if (!trimmed || isLocalGalleryUrl(trimmed)) return dummyCover(category, title, seed);
+  if (!trimmed) return dummyCover(category, title, seed);
   return trimmed;
 }

@@ -61,7 +61,7 @@ async function galleryUrls(eventId: string, category: string, title: string): Pr
     `SELECT image_url FROM event_gallery_images WHERE event_id = $1 ORDER BY sort_order, id`,
     [eventId],
   );
-  const urls = rows.map((r) => publicImageSrc(r.image_url, fallback)).filter(Boolean);
+  const urls = rows.map((r) => publicImageSrc(r.image_url, "")).filter(Boolean);
   return urls.length ? urls : [fallback];
 }
 

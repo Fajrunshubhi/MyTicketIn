@@ -8,7 +8,7 @@ import { lifeDto, listEventLifecycle } from "@/lib/server/lifecycle";
 async function detailPayload(orgId: string, id: string) {
   const e = await getOwnedEvent(orgId, id);
   const types = (await listTicketRows(id)).map(ticketDto);
-  const gallery = await listGalleryUrls(id, String(e.category || ""), String(e.title || ""));
+  const gallery = await listGalleryUrls(id);
   const event = eventDto({ ...e, galleryUrls: gallery } as OrgEvent & { galleryUrls: string[] });
   const life = await listEventLifecycle(id);
   return {

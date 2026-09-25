@@ -6,7 +6,6 @@ import { EventCard } from "@/components/events/EventCard";
 import { LandingToolbar } from "@/components/landing/LandingToolbar";
 import type { CatalogCard } from "@/components/events/catalog-types";
 import { listCatalog, listFilters } from "@/lib/server/catalog";
-import { eventImageSrc } from "@/lib/event-cover";
 import { loadSessionUser } from "@/lib/session";
 
 async function loadUpcoming(): Promise<{ items: CatalogCard[]; unavailable: boolean }> {
@@ -51,11 +50,7 @@ export default async function PlatformPage() {
         <section className="relative pb-8">
           <div className="relative min-h-[360px] overflow-hidden rounded-[32px] sm:min-h-[420px]">
             {heroImage ? (
-              <img
-                src={eventImageSrc(heroImage.url, items[0]?.category, items[0]?.title, items[0]?.slug)}
-                alt={heroImage.alt}
-                className="absolute inset-0 h-full w-full object-cover"
-              />
+              <img src={heroImage.url} alt={heroImage.alt} className="absolute inset-0 h-full w-full object-cover" />
             ) : (
               <div className="hero-stage absolute inset-0" />
             )}

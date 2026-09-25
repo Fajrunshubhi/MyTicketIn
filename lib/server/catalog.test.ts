@@ -139,15 +139,16 @@ describe("event mutation policy", () => {
 
 describe("publicImageSrc", () => {
   it("falls back when a local gallery file is missing", () => {
-    expect(publicImageSrc("/uploads/gallery/missingfile.jpg", "/dummy-events/jazz-1.jpg")).toBe("/dummy-events/jazz-1.jpg");
+    expect(publicImageSrc("/uploads/gallery/missingfile.jpg", "/dummy-events/jazz-1.jpg")).toBe("/uploads/gallery/missingfile.jpg");
     expect(publicImageSrc("/dummy-events/theater-1.jpg", "/x")).toBe("/dummy-events/theater-1.jpg");
+    expect(publicImageSrc("/uploads/gallery/bad name.jpg", "/dummy-events/jazz-1.jpg")).toBe("/dummy-events/jazz-1.jpg");
   });
 
-  it("does not serve local uploads on Vercel", () => {
+  it("keeps gallery URLs so the Postgres-backed route can serve them", () => {
     const prev = process.env.VERCEL;
     process.env.VERCEL = "1";
     try {
-      expect(publicImageSrc("/uploads/gallery/abc123.jpg", "/dummy-events/jazz-1.jpg")).toBe("/dummy-events/jazz-1.jpg");
+      expect(publicImageSrc("/uploads/gallery/abc123.jpg", "/dummy-events/jazz-1.jpg")).toBe("/uploads/gallery/abc123.jpg");
     } finally {
       if (prev === undefined) delete process.env.VERCEL;
       else process.env.VERCEL = prev;
@@ -156,8 +157,9 @@ describe("publicImageSrc", () => {
 });
 
 describe("eventImageSrc", () => {
-  it("rewrites local gallery paths to static dummy covers", () => {
-    expect(eventImageSrc("/uploads/gallery/abc.jpg", "Seni", "Pameran")).toBe("/dummy-events/theater-1.jpg");
+  it("keeps stored gallery URLs so uploads stay distinct", () => {
+    expect(eventImageSrc("/uploads/gallery/abc.jpg", "Seni", "Pameran")).toBe("/uploads/gallery/abc.jpg");
     expect(eventImageSrc("/dummy-events/food-1.jpg", "Musik", "Jazz")).toBe("/dummy-events/food-1.jpg");
+    expect(eventImageSrc("", "Seni", "Pameran")).toBe("/dummy-events/theater-1.jpg");
   });
 });

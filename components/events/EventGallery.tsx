@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { Icon } from "@/components/ui/Icon";
-import { DUMMY_EVENT_COVER, eventImageSrc } from "@/lib/event-cover";
+import { DUMMY_EVENT_COVER } from "@/lib/event-cover";
 
 export type GalleryImage = { url: string; alt: string };
 
@@ -24,10 +24,7 @@ export function EventGallery({
   const [broken, setBroken] = useState<Record<string, true>>({});
   const slides = useMemo(() => {
     const source = images.length > 0 ? images : [{ url: DUMMY_EVENT_COVER, alt: title }];
-    const mapped = source.map((img) => {
-      const url = eventImageSrc(img.url, "", title);
-      return broken[img.url] || broken[url] ? { ...img, url: DUMMY_EVENT_COVER } : { ...img, url };
-    });
+    const mapped = source.map((img) => (broken[img.url] ? { ...img, url: DUMMY_EVENT_COVER } : img));
     const seen = new Set<string>();
     return mapped.filter((img) => {
       if (seen.has(img.url)) return false;
