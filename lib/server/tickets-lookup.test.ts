@@ -16,9 +16,11 @@ describe("ticket QR buffers", () => {
     expect(asBuffer({ 0: 0x00, 1: 0x11, 2: 0x22 }).equals(Buffer.from([0x00, 0x11, 0x22]))).toBe(true);
   });
 
-  it("round-trips an opaque token", () => {
+  it("round-trips an opaque token with and without ticket AAD", () => {
     const raw = "aa".repeat(32);
     const enc = encryptToken(raw);
     expect(decryptToken(enc.ciphertext, enc.nonce, enc.tag)).toBe(raw);
+    const withAad = encryptToken(raw, "ticket-id-1");
+    expect(decryptToken(withAad.ciphertext, withAad.nonce, withAad.tag, "ticket-id-1")).toBe(raw);
   });
 });

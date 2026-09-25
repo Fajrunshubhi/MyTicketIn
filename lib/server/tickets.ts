@@ -24,27 +24,81 @@ function hashKey(raw: string): Buffer {
   return createHash("sha256").update(raw).digest();
 }
 
-function qrKey(): Buffer {
-  return hashKey(qrKeyMaterial()[0]);
+function parsedNamedKeys(): Buffer[] {
+  const out: Buffer[] = [];
+  const raw = String(process.env.QR_ENCRYPTION_KEYS || "");
+  for (const part of raw.split(",")) {
+    const trimmed = part.trim();
+    if (!trimmed) continue;
+    const keyPart = trimmed.includes(":") ? trimmed.slice(trimmed.indexOf(":") + 1).trim() : trimmed;
+    if (/^[0-9a-fA-F]{64}$/.test(keyPart)) {
+      out.push(Buffer.from(keyPart, "hex"));
+      continue;
+    }
+    try {
+      const decoded = Buffer.from(keyPart, "base64");
+      if (decoded.length === 32) out.push(decoded);
+    } catch {
+      /* ignore malformed named keys */
+    }
+  }
+  return out;
 }
 
-export function encryptToken(raw: string): { hash: string; ciphertext: Buffer; nonce: Buffer; tag: Buffer } {
+function qrKeyBuffers(): Buffer[] {
+  const out: Buffer[] = [];
+  const seen = new Set<string>();
+  const push = (buf: Buffer) => {
+    if (buf.length !== 32) return;
+    const id = buf.toString("hex");
+    if (seen.has(id)) return;
+    seen.add(id);
+    out.push(buf);
+  };
+  for (const material of qrKeyMaterial()) {
+    push(hashKey(material));
+    push(createHash("sha256").update(`${material}|qr-enc-v1`).digest());
+  }
+  for (const named of parsedNamedKeys()) push(named);
+  return out;
+}
+
+function qrKey(): Buffer {
+  const key = qrKeyBuffers()[0];
+  if (!key) throw new Error("TICKET_CRYPTO_FAILED");
+  return key;
+}
+
+function openToken(ciphertext: Buffer, nonce: Buffer, tag: Buffer, key: Buffer, aad?: Buffer): string {
+  const decipher = createDecipheriv("aes-256-gcm", key, nonce);
+  if (aad && aad.length) decipher.setAAD(aad);
+  decipher.setAuthTag(tag);
+  return Buffer.concat([decipher.update(ciphertext), decipher.final()]).toString("utf8");
+}
+
+export function encryptToken(
+  raw: string,
+  ticketId?: string,
+): { hash: string; ciphertext: Buffer; nonce: Buffer; tag: Buffer } {
   const nonce = randomBytes(12);
   const cipher = createCipheriv("aes-256-gcm", qrKey(), nonce);
+  if (ticketId) cipher.setAAD(Buffer.from(ticketId, "utf8"));
   const ciphertext = Buffer.concat([cipher.update(raw, "utf8"), cipher.final()]);
   const tag = cipher.getAuthTag();
   return { hash: tokenHash(raw), ciphertext, nonce, tag };
 }
 
-export function decryptToken(ciphertext: Buffer, nonce: Buffer, tag: Buffer): string {
+export function decryptToken(ciphertext: Buffer, nonce: Buffer, tag: Buffer, ticketId?: string): string {
+  const aads: Array<Buffer | undefined> = [undefined];
+  if (ticketId) aads.unshift(Buffer.from(ticketId, "utf8"));
   let last: unknown;
-  for (const material of qrKeyMaterial()) {
-    try {
-      const decipher = createDecipheriv("aes-256-gcm", hashKey(material), nonce);
-      decipher.setAuthTag(tag);
-      return Buffer.concat([decipher.update(ciphertext), decipher.final()]).toString("utf8");
-    } catch (err) {
-      last = err;
+  for (const key of qrKeyBuffers()) {
+    for (const aad of aads) {
+      try {
+        return openToken(ciphertext, nonce, tag, key, aad);
+      } catch (err) {
+        last = err;
+      }
     }
   }
   throw last instanceof Error ? last : new Error("TICKET_CRYPTO_FAILED");
@@ -164,13 +218,14 @@ export async function getTicket(user: AuthUser, id: string) {
 
 export async function ticketQrPayload(user: AuthUser, id: string): Promise<string> {
   const rows = await query<{
+    id: string;
     owner_user_id: string;
     token_ciphertext: Buffer | string;
     token_nonce: Buffer | string;
     token_auth_tag: Buffer | string;
     status: string;
   }>(
-    `SELECT owner_user_id, encode(token_ciphertext, 'hex') AS token_ciphertext, encode(token_nonce, 'hex') AS token_nonce,
+    `SELECT id, owner_user_id, encode(token_ciphertext, 'hex') AS token_ciphertext, encode(token_nonce, 'hex') AS token_nonce,
             encode(token_auth_tag, 'hex') AS token_auth_tag, status::text AS status
      FROM tickets WHERE id=$1 LIMIT 1`,
     [id],
@@ -179,7 +234,7 @@ export async function ticketQrPayload(user: AuthUser, id: string): Promise<strin
   if (!t || (String(t.owner_user_id) !== user.id && user.role !== "ADMIN")) {
     throw new AppError("NOT_FOUND", "Tiket tidak ditemukan.", {}, 404);
   }
-  if (t.status !== "UNUSED") {
+  if (t.status === "CANCELLED") {
     throw new AppError("TICKET_QR_UNAVAILABLE", "Kode QR tidak tersedia untuk tiket ini.", {}, 409);
   }
   const ct = asBuffer(t.token_ciphertext);
@@ -189,7 +244,7 @@ export async function ticketQrPayload(user: AuthUser, id: string): Promise<strin
     throw new AppError("TICKET_CRYPTO_FAILED", "Kode QR tidak dapat ditampilkan.", {}, 500);
   }
   try {
-    return decryptToken(ct, nonce, tag);
+    return decryptToken(ct, nonce, tag, String(t.id));
   } catch {
     throw new AppError("TICKET_CRYPTO_FAILED", "Kode QR tidak dapat ditampilkan.", {}, 500);
   }
@@ -223,7 +278,7 @@ export async function issueTicketsForPaidOrder(orderId: string, buyer: AuthUser)
       seqGlobal += 1;
       const tid = newId();
       const raw = randomToken();
-      const enc = encryptToken(raw);
+      const enc = encryptToken(raw, tid);
       const number = `T${tid.slice(0, 10).toUpperCase()}`;
       const manual = tid.replace(/[^a-f0-9]/gi, "").slice(0, 16).padEnd(16, "0").toUpperCase();
       const attendee = await query<{ full_name: string; email: string; phone: string; identity_number: string }>(

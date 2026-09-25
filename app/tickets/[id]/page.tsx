@@ -111,7 +111,7 @@ export default function TicketDetailPage() {
   }, [load]);
 
   useEffect(() => {
-    if (ticket?.status === "UNUSED" && !qrUrlRef.current) {
+    if (ticket && ticket.status !== "CANCELLED" && !qrUrlRef.current) {
       void loadQr();
     }
   }, [ticket?.id, ticket?.status, loadQr]);
@@ -141,7 +141,7 @@ export default function TicketDetailPage() {
     setPdfBusy(true);
     try {
       let blob = qrBlob;
-      if (ticket.status === "UNUSED" && !blob) blob = await loadQr();
+      if (ticket.status !== "CANCELLED" && !blob) blob = await loadQr();
       const tz = ticket.event?.timezone || "Asia/Jakarta";
       await downloadTicketPdf({
         fileName: `tiket-${ticket.ticketNumber}.pdf`,
@@ -226,7 +226,7 @@ export default function TicketDetailPage() {
               </Button>
             </p>
             <div className="mt-6 flex flex-wrap gap-3">
-              {ticket.status === "UNUSED" ? (
+              {ticket.status !== "CANCELLED" ? (
                 <Button onClick={() => void loadQr()}>Tampilkan QR</Button>
               ) : null}
               <Button onClick={() => void savePdf()} disabled={pdfBusy}>
@@ -238,21 +238,20 @@ export default function TicketDetailPage() {
                 <Alert tone="error" title={qrError} />
               </div>
             ) : null}
-            {ticket.status === "UNUSED" && qrUrl ? (
+            {ticket.status !== "CANCELLED" && qrUrl ? (
               <figure className="mt-4 rounded-xl bg-white p-4">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src={qrUrl} width={320} height={320} alt={`Kode QR tiket ${ticket.ticketNumber}`} className="mx-auto h-auto w-full max-w-xs" />
                 <figcaption className="mt-2 text-center text-sm text-ink">
+                  {ticket.status === "USED" ? "Tiket sudah digunakan. " : ""}
                   {safeCheckInBefore(ticket.event?.startsAt, ticket.event?.timezone)}
                   {safeCheckInBefore(ticket.event?.startsAt, ticket.event?.timezone) ? " " : ""}
                   QR hanya berisi token check-in.
                 </figcaption>
               </figure>
             ) : null}
-            {ticket.status !== "UNUSED" ? (
-              <p className="mt-6 text-ink/70">
-                Tiket {STATUS_LABEL[ticket.status] || ticket.status}. Kode QR tidak ditampilkan.
-              </p>
+            {ticket.status === "CANCELLED" ? (
+              <p className="mt-6 text-ink/70">Tiket dibatalkan. Kode QR tidak ditampilkan.</p>
             ) : (
               <p className="mt-3 text-sm text-ink/60">QR hanya ditampilkan saat diminta dan tidak disimpan di perangkat.</p>
             )}
