@@ -4,12 +4,15 @@ import { requireAuth } from "@/lib/server/guard";
 import { renderTicketQrPng } from "@/lib/server/qr-png";
 import { ticketQrPayload } from "@/lib/server/tickets";
 
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
 export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
   try {
     const user = await requireAuth(req);
     const token = await ticketQrPayload(user, params.id);
     const png = await renderTicketQrPng(token);
-    return new NextResponse(new Uint8Array(png), {
+    return new NextResponse(Buffer.from(png), {
       status: 200,
       headers: {
         "Content-Type": "image/png",

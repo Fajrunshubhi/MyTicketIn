@@ -1,10 +1,16 @@
 import { describe, expect, it } from "vitest";
-import { asBuffer, decryptToken, encryptToken, normalizeManualCode } from "@/lib/server/tickets";
+import { asBuffer, decryptToken, encryptToken, normalizeManualCode, qrScanPayload } from "@/lib/server/tickets";
 
 describe("normalizeManualCode", () => {
   it("strips separators used on ticket cards", () => {
     expect(normalizeManualCode("A594-3CAC-A9C7-78F1")).toBe("A5943CACA9C778F1");
     expect(normalizeManualCode("a5943caca9c778f1")).toBe("A5943CACA9C778F1");
+  });
+});
+
+describe("qrScanPayload", () => {
+  it("prefers the 16-character backup code", () => {
+    expect(qrScanPayload("13c2-2062-c1c2-119a", "T13C22062C1")).toBe("13C22062C1C2119A");
   });
 });
 

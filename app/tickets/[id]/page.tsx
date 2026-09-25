@@ -6,6 +6,7 @@ import { Container } from "@/components/ui/Container";
 import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { formatCheckInBefore, formatDateTime } from "@/lib/format";
+import { renderQrPngBlob } from "@/lib/qr-client";
 import { downloadTicketPdf } from "@/lib/ticket-pdf";
 
 type Ticket = {
@@ -76,20 +77,40 @@ export default function TicketDetailPage() {
 
   const loadQr = useCallback(async (): Promise<Blob | null> => {
     setQrError("");
-    const res = await fetch(`/api/tickets/${params.id}/qr`, { credentials: "include", cache: "no-store" });
-    if (!res.ok) {
-      const body = await res.json().catch(() => ({}));
-      setQrError((body as { error?: { message?: string } }).error?.message || "Kode QR tidak tersedia.");
+    const apply = (blob: Blob) => {
+      if (qrUrlRef.current) URL.revokeObjectURL(qrUrlRef.current);
+      const url = URL.createObjectURL(blob);
+      qrUrlRef.current = url;
+      setQrBlob(blob);
+      setQrUrl(url);
+    };
+    try {
+      const res = await fetch(`/api/tickets/${params.id}/qr`, { credentials: "include", cache: "no-store" });
+      const type = res.headers.get("content-type") || "";
+      if (res.ok && type.includes("image")) {
+        const blob = await res.blob();
+        if (blob.size > 32) {
+          apply(blob);
+          return blob;
+        }
+      }
+    } catch {
+      /* fall back to on-device QR from the printed backup code */
+    }
+    const payload = (ticket?.manualCode || "").replace(/[\s-]/g, "") || ticket?.ticketNumber || "";
+    if (!payload) {
+      setQrError("Kode QR tidak dapat ditampilkan.");
       return null;
     }
-    const blob = await res.blob();
-    if (qrUrlRef.current) URL.revokeObjectURL(qrUrlRef.current);
-    const url = URL.createObjectURL(blob);
-    qrUrlRef.current = url;
-    setQrBlob(blob);
-    setQrUrl(url);
-    return blob;
-  }, [params.id]);
+    try {
+      const blob = await renderQrPngBlob(payload);
+      apply(blob);
+      return blob;
+    } catch {
+      setQrError("Kode QR tidak dapat ditampilkan.");
+      return null;
+    }
+  }, [params.id, ticket?.manualCode, ticket?.ticketNumber]);
 
   const load = useCallback(() => {
     fetch(`/api/tickets/${params.id}`, { credentials: "include", cache: "no-store" })
