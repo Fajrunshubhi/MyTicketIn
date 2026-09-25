@@ -86,33 +86,32 @@ export function SiteNav({
   ));
 
   return (
-    <header className="relative z-40 border-b border-stone-200/70 bg-[#fbfafd]/90 backdrop-blur md:border-none md:bg-transparent md:backdrop-blur-none">
-      <div className="mx-auto flex w-full max-w-6xl min-w-0 items-center justify-between gap-3 px-4 py-3 sm:px-6 sm:py-5">
-        <div className="min-w-0 shrink">{brand}</div>
-        <nav className="hidden min-w-0 items-center justify-end gap-2 md:flex" aria-label="Navigasi utama">
-          {links}
-          {trailing}
-          {showLogout ? <LogoutButton /> : null}
-        </nav>
-        <button
-          ref={buttonRef}
-          type="button"
-          className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-xl border border-stone-200 bg-white text-ink md:hidden"
-          aria-expanded={open}
-          aria-controls={panelId}
-          aria-label={open ? "Tutup menu" : "Buka menu"}
-          onClick={() => setOpen((cur) => !cur)}
-        >
-          <Icon name={open ? "close" : "menu"} className="h-5 w-5" />
-        </button>
-      </div>
-      {open ? (
-        <>
-          <button type="button" className="fixed inset-0 z-40 bg-ink/30 md:hidden" aria-label="Tutup menu" onClick={close} />
+    <>
+      <header className="fixed inset-x-0 top-0 z-50 bg-[#fbfafd]">
+        <div className="mx-auto flex w-full max-w-6xl min-w-0 items-center justify-between gap-3 px-4 py-3 sm:px-6 sm:py-5">
+          <div className="min-w-0 shrink">{brand}</div>
+          <nav className="hidden min-w-0 items-center justify-end gap-2 md:flex" aria-label="Navigasi utama">
+            {links}
+            {trailing}
+            {showLogout ? <LogoutButton /> : null}
+          </nav>
+          <button
+            ref={buttonRef}
+            type="button"
+            className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-xl border border-stone-200 bg-white text-ink md:hidden"
+            aria-expanded={open}
+            aria-controls={panelId}
+            aria-label={open ? "Tutup menu" : "Buka menu"}
+            onClick={() => setOpen((cur) => !cur)}
+          >
+            <Icon name={open ? "close" : "menu"} className="h-5 w-5" />
+          </button>
+        </div>
+        {open ? (
           <div
             ref={panelRef}
             id={panelId}
-            className="absolute inset-x-0 top-full z-50 border-b border-stone-200 bg-paper px-4 py-4 shadow-card md:hidden"
+            className="border-b border-stone-200 bg-paper px-4 py-4 shadow-card md:hidden"
           >
             <nav className="flex flex-col gap-2" aria-label="Navigasi utama">
               {links}
@@ -120,9 +119,13 @@ export function SiteNav({
               {showLogout ? <LogoutButton className="w-full justify-center" /> : null}
             </nav>
           </div>
-        </>
+        ) : null}
+      </header>
+      {open ? (
+        <button type="button" className="fixed inset-0 z-40 bg-ink/30 md:hidden" aria-label="Tutup menu" onClick={close} />
       ) : null}
+      <div className="h-[4.25rem] sm:h-[5.25rem]" aria-hidden="true" />
       <AdminLifecycleAlerts />
-    </header>
+    </>
   );
 }

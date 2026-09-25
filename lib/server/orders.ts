@@ -11,12 +11,29 @@ type CheckoutLine = {
 export async function listOrders(user: AuthUser, limit: number) {
   const lim = Math.min(Math.max(limit || 20, 1), 50);
   const rows = await query<Record<string, unknown>>(
-    `SELECT id, order_number, event_id, status::text AS status, currency, subtotal_rupiah, loyalty_discount_rupiah,
-            total_payable_rupiah, expires_at::text, created_at::text, version
-     FROM orders WHERE buyer_user_id = $1 ORDER BY created_at DESC, id DESC LIMIT $2`,
+    `SELECT o.id, o.order_number, o.event_id, o.status::text AS status, o.currency, o.subtotal_rupiah, o.loyalty_discount_rupiah,
+            o.total_payable_rupiah, o.expires_at::text, o.created_at::text, o.version,
+            e.title AS event_title, e.slug AS event_slug, e.starts_at::text AS event_starts_at,
+            e.timezone AS event_timezone, e.venue_name AS event_venue, e.city AS event_city
+     FROM orders o
+     JOIN events e ON e.id = o.event_id
+     WHERE o.buyer_user_id = $1
+     ORDER BY o.created_at DESC, o.id DESC
+     LIMIT $2`,
     [user.id, lim],
   );
-  return rows.map(orderDto);
+  return rows.map((o) => ({
+    ...orderDto(o),
+    event: {
+      id: String(o.event_id || ""),
+      title: String(o.event_title || ""),
+      slug: String(o.event_slug || ""),
+      startsAt: o.event_starts_at ? new Date(String(o.event_starts_at)).toISOString() : null,
+      timezone: String(o.event_timezone || "Asia/Jakarta"),
+      venueName: String(o.event_venue || ""),
+      city: String(o.event_city || ""),
+    },
+  }));
 }
 
 export async function getOrder(user: AuthUser, id: string) {
@@ -34,14 +51,57 @@ export async function getOrder(user: AuthUser, id: string) {
      FROM order_items WHERE order_id = $1 ORDER BY id`,
     [id],
   );
-  const ev = await query<{ id: string; title: string; slug: string }>(
-    `SELECT id, title, slug FROM events WHERE id=$1 LIMIT 1`,
+  const ev = await query<{
+    id: string;
+    title: string;
+    slug: string;
+    starts_at: string;
+    timezone: string;
+    venue_name: string;
+    city: string;
+    province: string;
+  }>(
+    `SELECT id, title, slug, starts_at::text AS starts_at, timezone, venue_name, city, province FROM events WHERE id=$1 LIMIT 1`,
     [o.event_id],
   );
+  const attendees = await query<{
+    order_item_id: string;
+    full_name: string;
+    email: string;
+    identity_number: string;
+  }>(
+    `SELECT order_item_id, full_name, email, identity_number FROM order_attendees WHERE order_id=$1 ORDER BY unit_sequence, id`,
+    [id],
+  );
+  const byItem = new Map<string, { fullName: string; email?: string; identityNumber?: string }[]>();
+  for (const a of attendees) {
+    const list = byItem.get(a.order_item_id) || [];
+    list.push({
+      fullName: a.full_name,
+      email: a.email,
+      identityNumber: a.identity_number === "0000000000000000" ? "" : a.identity_number,
+    });
+    byItem.set(a.order_item_id, list);
+  }
+  const event = ev[0]
+    ? {
+        id: ev[0].id,
+        title: ev[0].title,
+        slug: ev[0].slug,
+        startsAt: ev[0].starts_at ? new Date(ev[0].starts_at).toISOString() : null,
+        timezone: ev[0].timezone,
+        venueName: ev[0].venue_name,
+        city: ev[0].city,
+        province: ev[0].province,
+      }
+    : undefined;
   return {
     ...orderDto(o),
-    event: ev[0] ? { id: ev[0].id, title: ev[0].title, slug: ev[0].slug } : undefined,
-    items: items.map(itemDto),
+    event,
+    items: items.map((it) => ({
+      ...itemDto(it),
+      attendees: byItem.get(String(it.id)) || [],
+    })),
   };
 }
 
@@ -59,6 +119,7 @@ function orderDto(o: Record<string, unknown>) {
     serverTime: new Date().toISOString(),
     createdAt: o.created_at ? new Date(String(o.created_at)).toISOString() : null,
     version: o.version,
+    redeemedPoints: Number(o.redeemed_points || 0),
   };
 }
 

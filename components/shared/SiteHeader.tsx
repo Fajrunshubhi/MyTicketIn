@@ -12,13 +12,12 @@ export async function SiteHeader() {
           { href: "/petugas", label: "Scanner", icon: "devices", emphasis: true },
         ]
       : [
-          { href: "/events", label: "Katalog", icon: "catalog" },
+          { href: "/events", label: "Event", icon: "catalog" },
           { href: "/dashboard", label: "Dashboard", icon: "dashboard", emphasis: true },
         ]
     : [
-        { href: "/events", label: "Katalog", icon: "catalog" },
-        { href: "/login?portal=buyer", label: "Masuk pembeli", icon: "login" },
-        { href: "/login?portal=staff", label: "Masuk petugas", icon: "devices" },
+        { href: "/events", label: "Event", icon: "catalog" },
+        { href: "/login", label: "Masuk", icon: "login" },
         { href: "/register", label: "Daftar", icon: "userPlus", emphasis: true },
       ];
 

@@ -31,7 +31,7 @@ export function EventLocationMap({
         <iframe
           title={`Peta lokasi ${venueName}`}
           src={embed}
-          className="h-56 w-full border-0"
+          className="h-80 w-full border-0 sm:h-96"
           loading="lazy"
           referrerPolicy="no-referrer-when-downgrade"
         />

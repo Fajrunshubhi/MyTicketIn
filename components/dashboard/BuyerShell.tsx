@@ -6,7 +6,7 @@ import { type IconName } from "@/components/ui/Icon";
 
 const NAV: WorkspaceNavItem[] = [
   { href: "/dashboard", label: "Dashboard", icon: "dashboard" as IconName, exact: true },
-  { href: "/events", label: "Katalog", icon: "catalog" },
+  { href: "/dashboard/events", label: "Event", icon: "catalog" },
   { href: "/orders", label: "Order", icon: "orders" },
   { href: "/tickets", label: "Tiket", icon: "ticket" },
   { href: "/notifications", label: "Notifikasi", icon: "bell" },
@@ -21,7 +21,7 @@ function pageTitle(pathname: string): string {
   if (pathname.startsWith("/dashboard/profile")) return "Profil";
   if (pathname.startsWith("/organizer/apply")) return "Pengajuan organizer";
   if (pathname.startsWith("/organizer/status")) return "Status pengajuan";
-  if (pathname.startsWith("/events")) return "Katalog";
+  if (pathname.startsWith("/dashboard/events") || pathname.startsWith("/events")) return "Event";
   return "Dashboard";
 }
 
@@ -32,11 +32,9 @@ export function BuyerShell({ children }: { children: ReactNode }) {
       navAriaLabel="Menu pembeli"
       storageKey="mti-buyer-nav"
       titleForPath={pageTitle}
-      searchPlaceholder="Cari event di katalog"
-      searchPath={(q) => (q ? `/events?q=${encodeURIComponent(q)}` : "/events")}
       notificationsHref="/notifications"
-      primaryHref="/events"
-      primaryLabel="Lihat katalog"
+      primaryHref="/dashboard/events"
+      primaryLabel="Lihat event"
     >
       {children}
     </WorkspaceShell>

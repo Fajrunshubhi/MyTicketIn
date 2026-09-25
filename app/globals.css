@@ -58,3 +58,62 @@ body {
   background-image: radial-gradient(rgba(109, 74, 255, 0.28) 1px, transparent 1px);
   background-size: 14px 14px;
 }
+
+.review-marquee-viewport {
+  --review-gap: 1.25rem;
+  --review-cols: 1;
+}
+
+.review-marquee-card {
+  width: calc((100vw - 2rem - (var(--review-cols) - 1) * var(--review-gap)) / var(--review-cols));
+}
+
+@media (min-width: 640px) {
+  .review-marquee-viewport {
+    --review-cols: 2;
+  }
+  .review-marquee-card {
+    width: calc((min(72rem, 100vw) - 3rem - (var(--review-cols) - 1) * var(--review-gap)) / var(--review-cols));
+  }
+}
+
+@media (min-width: 1024px) {
+  .review-marquee-viewport {
+    --review-cols: 3;
+  }
+}
+
+@keyframes review-marquee-left {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+@keyframes review-marquee-right {
+  from {
+    transform: translateX(-50%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+.review-marquee-left {
+  animation: review-marquee-left 42s linear infinite;
+}
+
+.review-marquee-right {
+  animation: review-marquee-right 42s linear infinite;
+}
+
+.review-marquee-viewport:hover .review-marquee-track,
+.review-marquee-viewport:focus-within .review-marquee-track {
+  animation-play-state: paused;
+}
+
+.partner-marquee-alternate {
+  animation: review-marquee-left 28s linear infinite alternate;
+}

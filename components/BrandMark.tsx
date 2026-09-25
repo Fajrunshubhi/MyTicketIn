@@ -1,11 +1,15 @@
+import Link from "next/link";
+
 export default function BrandMark({
   compact = false,
   onDark = false,
   markOnly = false,
+  href = "/",
 }: {
   compact?: boolean;
   onDark?: boolean;
   markOnly?: boolean;
+  href?: string | null;
 }) {
   const mark = (
     <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl ${onDark ? "bg-white/15 text-white" : "bg-gold-500 text-white"}`}>
@@ -23,13 +27,24 @@ export default function BrandMark({
   if (markOnly) {
     return mark;
   }
-  return (
-    <div className={`flex min-w-0 items-center gap-3 ${compact ? "" : "mb-8"}`}>
+  const body = (
+    <>
       {mark}
       <div className="min-w-0">
         <p className={`truncate text-xl font-semibold tracking-tight ${onDark ? "text-white" : "text-ink"}`}>MYTICKETIN</p>
         <p className={`hidden truncate text-md sm:block ${onDark ? "text-white/70" : "text-ink/60"}`}>Event Ticketing</p>
       </div>
-    </div>
+    </>
+  );
+  const className = `flex min-w-0 items-center gap-3 rounded-xl focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 ${
+    onDark ? "focus-visible:outline-white" : "focus-visible:outline-gold-400"
+  } ${compact ? "" : "mb-8"}`;
+  if (!href) {
+    return <div className={className}>{body}</div>;
+  }
+  return (
+    <Link href={href} className={className} aria-label="Beranda MyTicketIn">
+      {body}
+    </Link>
   );
 }

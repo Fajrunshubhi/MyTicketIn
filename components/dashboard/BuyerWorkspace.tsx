@@ -120,7 +120,7 @@ export function BuyerWorkspace() {
         <section className="rounded-3xl bg-white p-5 shadow-sm" aria-labelledby="buyer-upcoming">
           <div className="flex items-center justify-between gap-3">
             <h2 id="buyer-upcoming" className="text-lg font-semibold text-ink">Event mendatang</h2>
-            <Link href="/events" className="text-sm text-gold-700">Katalog</Link>
+            <Link href="/dashboard/events" className="text-sm text-gold-700">Semua</Link>
           </div>
           {events.length === 0 ? (
             <p className="mt-6 text-sm text-ink/55">Belum ada event terbit. Pembayaran dan tiket QR belum diaktifkan.</p>

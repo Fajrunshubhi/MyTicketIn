@@ -8,7 +8,7 @@ import { Alert } from "@/components/ui/Alert";
 import { LoadingState } from "@/components/ui/LoadingState";
 import type { CatalogCard } from "@/components/events/catalog-types";
 
-export function CatalogClient() {
+export function CatalogClient({ basePath = "/events" }: { basePath?: string }) {
   const params = useSearchParams();
   const [items, setItems] = useState<CatalogCard[]>([]);
   const [next, setNext] = useState<string | null>(null);
@@ -20,7 +20,16 @@ export function CatalogClient() {
   const [loading, setLoading] = useState(true);
 
   const qs = params.toString();
-  const hasFilter = Boolean(params.get("q") || params.get("category") || params.get("city") || params.get("province") || params.get("dateFrom") || params.get("tag"));
+  const hasFilter = Boolean(
+    params.get("q") ||
+      params.get("category") ||
+      params.get("city") ||
+      params.get("province") ||
+      params.get("dateFrom") ||
+      params.get("tag") ||
+      params.get("when") === "past",
+  );
+  const pastMode = params.get("when") === "past";
 
   useEffect(() => {
     fetch("/api/events/filters", { cache: "no-store" })
@@ -59,7 +68,7 @@ export function CatalogClient() {
 
   return (
     <div className="space-y-6">
-      <CatalogFilters filters={filters} />
+      <CatalogFilters filters={filters} basePath={basePath} />
       <p className="sr-only" aria-live="polite">
         {loading ? "Memuat katalog" : `${items.length} event`}
       </p>
@@ -67,7 +76,7 @@ export function CatalogClient() {
       {error ? <Alert tone="error" title="Katalog gagal dimuat">{error}</Alert> : null}
       {!loading && !error && items.length === 0 ? (
         <Alert tone="info" title={hasFilter ? "Tidak ada event untuk filter ini" : "Belum ada event"}>
-          {hasFilter ? "Hapus filter untuk melihat katalog." : "Event Published akan tampil di sini."}
+          {hasFilter ? "Hapus filter untuk melihat katalog." : pastMode ? "Event yang sudah berlangsung akan tampil di sini." : "Event Published akan tampil di sini."}
         </Alert>
       ) : null}
       <ul className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">{items.map((item) => <EventCard key={item.slug} item={item} />)}</ul>

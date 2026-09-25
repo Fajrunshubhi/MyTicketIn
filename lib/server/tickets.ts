@@ -1,5 +1,6 @@
 import { createCipheriv, createDecipheriv, randomBytes, createHash } from "crypto";
 import { AppError, execute, newId, query, randomToken, tokenHash } from "@/lib/server/http";
+import { publicImageSrc } from "@/lib/server/gallery";
 import type { AuthUser } from "@/lib/server/access";
 
 function qrKeyMaterial(): string[] {
@@ -139,6 +140,7 @@ function ticketView(row: Record<string, unknown>) {
       id: row.event_id,
       slug: row.slug,
       title: row.title,
+      category: String(row.category || ""),
       startsAt: row.starts_at,
       endsAt: row.ends_at,
       timezone: row.timezone,
@@ -146,6 +148,7 @@ function ticketView(row: Record<string, unknown>) {
       addressLine: row.address_line,
       city: row.city,
       province: row.province,
+      imageUrl: publicImageSrc(String(row.image_url || ""), ""),
     },
     ticketType: {
       name: row.ticket_type_name,
@@ -176,7 +179,8 @@ export async function listTickets(user: AuthUser, status: string, limit: number)
             COALESCE(NULLIF(btrim(t.holder_email), ''), a.email, '') AS holder_email,
             COALESCE(NULLIF(btrim(t.holder_phone), ''), a.phone, '') AS holder_phone,
             COALESCE(NULLIF(t.holder_identity_number, '0000000000000000'), a.identity_number, '') AS holder_identity_number,
-            e.slug, e.title, e.starts_at::text, e.ends_at::text, e.timezone, e.venue_name, e.address_line, e.city, e.province,
+            e.slug, e.title, e.category, e.starts_at::text, e.ends_at::text, e.timezone, e.venue_name, e.address_line, e.city, e.province,
+            (SELECT g.image_url FROM event_gallery_images g WHERE g.event_id = e.id ORDER BY g.sort_order, g.id LIMIT 1) AS image_url,
             o.order_number, u.name AS owner_name
      FROM tickets t
      JOIN events e ON e.id = t.event_id
@@ -198,7 +202,8 @@ export async function getTicket(user: AuthUser, id: string) {
             COALESCE(NULLIF(btrim(t.holder_email), ''), a.email, '') AS holder_email,
             COALESCE(NULLIF(btrim(t.holder_phone), ''), a.phone, '') AS holder_phone,
             COALESCE(NULLIF(t.holder_identity_number, '0000000000000000'), a.identity_number, '') AS holder_identity_number,
-            e.slug, e.title, e.starts_at::text, e.ends_at::text, e.timezone, e.venue_name, e.address_line, e.city, e.province,
+            e.slug, e.title, e.category, e.starts_at::text, e.ends_at::text, e.timezone, e.venue_name, e.address_line, e.city, e.province,
+            (SELECT g.image_url FROM event_gallery_images g WHERE g.event_id = e.id ORDER BY g.sort_order, g.id LIMIT 1) AS image_url,
             o.order_number, u.name AS owner_name
      FROM tickets t
      JOIN events e ON e.id = t.event_id

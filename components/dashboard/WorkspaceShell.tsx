@@ -92,8 +92,8 @@ export function WorkspaceShell({
   navAriaLabel: string;
   storageKey: string;
   titleForPath: (pathname: string) => string;
-  searchPlaceholder: string;
-  searchPath: (query: string) => string;
+  searchPlaceholder?: string;
+  searchPath?: (query: string) => string;
   notificationsHref: string;
   primaryHref?: string;
   primaryLabel?: string;
@@ -101,19 +101,11 @@ export function WorkspaceShell({
   const pathname = usePathname() || "/dashboard";
   const router = useRouter();
   const [open, setOpen] = useState(false);
-  const [wide, setWide] = useState(false);
+  const [wide, setWide] = useState(true);
   const [query, setQuery] = useState("");
   const panelId = useId();
   const buttonRef = useRef<HTMLButtonElement>(null);
   const panelRef = useRef<HTMLElement>(null);
-
-  useEffect(() => {
-    try {
-      setWide(localStorage.getItem(storageKey) === "wide");
-    } catch {
-      setWide(false);
-    }
-  }, [storageKey]);
 
   useEffect(() => {
     try {
@@ -143,6 +135,7 @@ export function WorkspaceShell({
 
   function onSearch(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (!searchPath) return;
     router.push(searchPath(query.trim()));
   }
 
@@ -220,18 +213,20 @@ export function WorkspaceShell({
               <ProfileMenu appearance="chip" />
             </div>
           </div>
-          <form onSubmit={onSearch} className="mt-3">
-            <label className="relative block">
-              <span className="sr-only">{searchPlaceholder}</span>
-              <Icon name="search" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink/35" />
-              <input
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder={searchPlaceholder}
-                className="h-11 w-full rounded-full border border-stone-200 bg-white pl-10 pr-4 text-sm text-ink outline-none focus:ring-2"
-              />
-            </label>
-          </form>
+          {searchPlaceholder && searchPath ? (
+            <form onSubmit={onSearch} className="mt-3">
+              <label className="relative block">
+                <span className="sr-only">{searchPlaceholder}</span>
+                <Icon name="search" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink/35" />
+                <input
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  placeholder={searchPlaceholder}
+                  className="h-11 w-full rounded-full border border-stone-200 bg-white pl-10 pr-4 text-sm text-ink outline-none focus:ring-2"
+                />
+              </label>
+            </form>
+          ) : null}
         </header>
 
         <div className="min-h-0 flex-1 overflow-y-auto px-3 py-5 sm:px-6 lg:px-8">{children}</div>

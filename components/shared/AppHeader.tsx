@@ -1,7 +1,6 @@
 "use client";
 
 import type { ReactNode } from "react";
-import Link from "next/link";
 import BrandMark from "@/components/BrandMark";
 import { SiteNav, type SiteNavItem } from "@/components/shared/SiteNav";
 
@@ -19,9 +18,7 @@ export function AppHeader({
   return (
     <SiteNav
       brand={
-        <Link href={homeHref} className="block min-w-0">
-          <BrandMark compact />
-        </Link>
+        <BrandMark compact href={homeHref} />
       }
       items={items}
       trailing={trailing}

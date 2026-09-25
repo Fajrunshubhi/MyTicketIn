@@ -14,6 +14,7 @@ export const GET = routeHandler(async (req: NextRequest) => {
     }
     limit = n;
   }
+  const when = q.get("when") === "past" ? "past" : "upcoming";
   const result = await listCatalog({
     q: q.get("q") || "",
     category: q.get("category") || "",
@@ -21,6 +22,7 @@ export const GET = routeHandler(async (req: NextRequest) => {
     province: q.get("province") || "",
     tag: q.get("tag") || "",
     limit,
+    when,
   });
   return jsonPublic(
     {

@@ -175,3 +175,39 @@ export async function decide(admin: AuthUser, id: string, decision: string, reas
   if (!out) throw new AppError("ORGANIZER_APPLICATION_NOT_FOUND", "Pengajuan tidak ditemukan.", {}, 404);
   return out;
 }
+
+export type PublicOrganizer = { id: string; name: string; description: string; eventCount: number };
+
+export async function getPublicOrganizer(id: string): Promise<PublicOrganizer | null> {
+  const key = id.trim();
+  if (!key) return null;
+  const rows = await query<{ id: string; name: string; description: string; n: string }>(
+    `SELECT p.id, p.name, p.description, COUNT(e.id)::text AS n
+     FROM organizer_profiles p
+     LEFT JOIN events e ON e.organizer_profile_id = p.id AND e.status IN ('PUBLISHED', 'COMPLETED')
+     WHERE p.id = $1 AND p.status = 'APPROVED'
+     GROUP BY p.id, p.name, p.description
+     LIMIT 1`,
+    [key],
+  );
+  const row = rows[0];
+  if (!row) return null;
+  return { id: row.id, name: row.name, description: String(row.description || ""), eventCount: Number(row.n || 0) };
+}
+
+export type LandingOrganizer = { id: string; name: string; eventCount: number };
+
+export async function listLandingOrganizers(limit = 24): Promise<LandingOrganizer[]> {
+  const cap = Math.min(Math.max(limit || 24, 1), 200);
+  const rows = await query<{ id: string; name: string; n: string }>(
+    `SELECT p.id, p.name, COUNT(e.id)::text AS n
+     FROM organizer_profiles p
+     LEFT JOIN events e ON e.organizer_profile_id = p.id AND e.status IN ('PUBLISHED', 'COMPLETED')
+     WHERE p.status = 'APPROVED'
+     GROUP BY p.id, p.name
+     ORDER BY COUNT(e.id) DESC, lower(p.name) ASC, p.id ASC
+     LIMIT $1`,
+    [cap],
+  );
+  return rows.map((row) => ({ id: row.id, name: row.name, eventCount: Number(row.n || 0) }));
+}

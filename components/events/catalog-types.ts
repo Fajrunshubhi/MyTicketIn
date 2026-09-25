@@ -3,6 +3,7 @@ export const SALE_LABEL: Record<string, string> = {
   NOT_STARTED: "Belum mulai",
   ENDED: "Penjualan berakhir",
   STOPPED: "Dihentikan",
+  PAST: "Selesai",
 };
 
 export type CatalogCard = {
@@ -15,6 +16,8 @@ export type CatalogCard = {
   image: { url: string; alt: string };
   priceFromRupiah: number | null;
   saleStatus: string;
+  ratingAverage: number;
+  ratingCount: number;
 };
 
 export type PublicEvent = {
@@ -57,4 +60,6 @@ export type PublicEvent = {
     stockLabel: string;
   }[];
   availabilityDisclaimer: string;
+  ratingAverage: number;
+  ratingCount: number;
 };

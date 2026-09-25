@@ -1,6 +1,5 @@
 import type { ReactNode } from "react";
 import { redirect } from "next/navigation";
-import { BuyerShell } from "@/components/dashboard/BuyerShell";
 import { loadSessionUser } from "@/lib/session";
 
 export default async function OrdersLayout({ children }: { children: ReactNode }) {
@@ -11,5 +10,5 @@ export default async function OrdersLayout({ children }: { children: ReactNode }
   if (user.access?.canOrganize || user.access?.isAdmin) {
     redirect("/dashboard");
   }
-  return <BuyerShell>{children}</BuyerShell>;
+  return children;
 }

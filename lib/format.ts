@@ -6,6 +6,17 @@ export function formatRupiah(amount: number): string {
   return `Rp${grouped}`;
 }
 
+const ZONE_LABELS: Record<string, string> = {
+  "Asia/Jakarta": "WIB",
+  "Asia/Makassar": "WITA",
+  "Asia/Jayapura": "WIT",
+  UTC: "UTC",
+};
+
+function zoneLabel(timeZone: string): string {
+  return ZONE_LABELS[timeZone] ?? timeZone;
+}
+
 export function formatDateTime(
   isoOrDate: string | Date,
   timeZone = "Asia/Jakarta"
@@ -23,13 +34,7 @@ export function formatDateTime(
     hour12: false,
     timeZone,
   }).format(date);
-  const zoneLabels: Record<string, string> = {
-    "Asia/Jakarta": "WIB",
-    "Asia/Makassar": "WITA",
-    "Asia/Jayapura": "WIT",
-    UTC: "UTC",
-  };
-  return `${formatted} ${zoneLabels[timeZone] ?? timeZone}`;
+  return `${formatted} ${zoneLabel(timeZone)}`;
 }
 
 export function formatCheckInBefore(isoOrDate: string | Date, timeZone = "Asia/Jakarta"): string {
@@ -75,6 +80,10 @@ export function formatClock(iso: string, timeZone = "Asia/Jakarta"): string {
     hour12: false,
     timeZone,
   }).format(date);
+}
+
+export function formatClockWithZone(iso: string, timeZone = "Asia/Jakarta"): string {
+  return `${formatClock(iso, timeZone)} ${zoneLabel(timeZone)}`;
 }
 
 const TIME_PARTS: Intl.DateTimeFormatOptions = {

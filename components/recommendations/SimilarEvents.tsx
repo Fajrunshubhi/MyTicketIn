@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { EventCoverImg } from "@/components/events/EventCoverImg";
+import { formatDateTime } from "@/lib/format";
 
 type Item = {
   slug: string;
@@ -43,7 +44,7 @@ export function SimilarEvents({ slug }: { slug: string }) {
   }
 
   return (
-      <section className="mt-12" aria-labelledby="similar-heading">
+      <section className="border-t border-stone-200 pt-10" aria-labelledby="similar-heading">
       <h2 id="similar-heading" className="text-2xl font-semibold text-ink">Event lain yang mungkin Anda suka</h2>
       <p className="mt-1 text-sm text-ink/55">
         {mode === "HISTORY" ? "Berdasarkan pembelian Paid Anda." : "Berdasarkan kategori dan lokasi event ini."}
@@ -62,6 +63,11 @@ export function SimilarEvents({ slug }: { slug: string }) {
             <div className="p-4">
             <p className="font-semibold text-ink">{item.title}</p>
             <p className="mt-1 text-sm text-ink/65">{item.organizer?.name ? `${item.organizer.name} · ` : null}{item.city}{item.province ? `, ${item.province}` : ""}</p>
+            <p className="mt-1 text-sm text-ink/70">
+              <time dateTime={item.startsAt}>
+                {item.startsAt ? formatDateTime(item.startsAt, item.timezone || "Asia/Jakarta") : "Waktu belum tersedia"}
+              </time>
+            </p>
             <p className="mt-1 text-sm text-gold-800">{item.reason}</p>
             <p className="mt-3">
               <Link className="text-gold-700 underline" href={`/events/${item.slug}`}>Lihat event</Link>

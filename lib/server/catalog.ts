@@ -1,6 +1,7 @@
 import { AppError, query } from "@/lib/server/http";
 import { dummyCover } from "@/lib/event-cover";
 import { publicImageSrc } from "@/lib/server/gallery";
+import { emptyRatingSummary, ratingSummaryByEventIds } from "@/lib/server/reviews";
 
 export { dummyCover } from "@/lib/event-cover";
 
@@ -15,6 +16,8 @@ export type CatalogCard = {
   image: PublicImage;
   priceFromRupiah: number | null;
   saleStatus: string;
+  ratingAverage: number;
+  ratingCount: number;
 };
 
 type EventRow = {
@@ -107,41 +110,10 @@ function priceFrom(eventStatus: string, startsAt: Date, tickets: TicketRow[], no
   return eligible ?? all;
 }
 
-export async function listCatalog(params: {
-  q: string;
-  category: string;
-  city: string;
-  province: string;
-  tag: string;
-  limit: number;
-}): Promise<{ items: CatalogCard[]; nextCursor: string | null; appliedFilters: Record<string, string> }> {
-  const limit = Math.min(Math.max(params.limit || 12, 1), 24);
-  const q = params.q.trim();
-  const category = params.category.trim().toLowerCase();
-  const city = params.city.trim().toLowerCase();
-  const province = params.province.trim().toLowerCase();
-  const tag = params.tag.trim().toLowerCase();
-  const rows = await query<EventRow>(
-    `SELECT e.id, e.organizer_profile_id, e.slug, e.title, e.description, e.category, e.venue_name, e.address_line,
-            e.city, e.province, e.latitude, e.longitude, e.tags, e.timezone, e.starts_at::text, e.ends_at::text,
-            e.terms, e.contact_email, e.contact_phone, e.status::text AS status, e.inventory_mode::text AS inventory_mode
-     FROM events e
-     WHERE e.status = 'PUBLISHED'
-       AND e.starts_at > NOW()
-       AND ($1 = '' OR e.search_document @@ plainto_tsquery('simple', $1)
-            OR e.title ILIKE '%' || $1 || '%'
-            OR EXISTS (SELECT 1 FROM event_tags et WHERE et.event_id = e.id AND et.tag = ANY (regexp_split_to_array(lower($1), '\\s+'))))
-       AND ($2 = '' OR lower(e.category) = $2)
-       AND ($3 = '' OR lower(e.city) = $3)
-       AND ($4 = '' OR lower(e.province) = $4)
-       AND ($5 = '' OR $5 = ANY (e.tags))
-     ORDER BY e.starts_at ASC, e.id ASC
-     LIMIT $6`,
-    [q, category, city, province, tag, limit + 1],
-  );
-  const page = rows.slice(0, limit);
+async function toCatalogCards(page: EventRow[], saleOverride?: string): Promise<CatalogCard[]> {
   const items: CatalogCard[] = [];
   const now = new Date();
+  const ratings = await ratingSummaryByEventIds(page.map((e) => e.id));
   for (const e of page) {
     const tickets = await query<TicketRow>(
       `SELECT id, name, description, price_rupiah, quota, max_per_account, sale_starts_at::text, sale_ends_at::text,
@@ -151,6 +123,7 @@ export async function listCatalog(params: {
     );
     const urls = await galleryUrls(e.id, e.category, e.title);
     const starts = new Date(e.starts_at);
+    const rating = ratings.get(e.id) || emptyRatingSummary();
     items.push({
       slug: e.slug,
       title: e.title,
@@ -160,21 +133,111 @@ export async function listCatalog(params: {
       timezone: e.timezone,
       image: cover(e.title, e.category, urls),
       priceFromRupiah: priceFrom(e.status, starts, tickets, now),
-      saleStatus: listSaleStatus(e.status, starts, tickets, now),
+      saleStatus: saleOverride || listSaleStatus(e.status, starts, tickets, now),
+      ratingAverage: rating.average,
+      ratingCount: rating.count,
     });
   }
-  const applied: Record<string, string> = { sort: "soonest" };
+  return items;
+}
+
+export async function listCatalog(params: {
+  q: string;
+  category: string;
+  city: string;
+  province: string;
+  tag: string;
+  limit: number;
+  when?: "upcoming" | "past";
+}): Promise<{ items: CatalogCard[]; nextCursor: string | null; appliedFilters: Record<string, string> }> {
+  const limit = Math.min(Math.max(params.limit || 12, 1), 24);
+  const q = params.q.trim();
+  const category = params.category.trim().toLowerCase();
+  const city = params.city.trim().toLowerCase();
+  const province = params.province.trim().toLowerCase();
+  const tag = params.tag.trim().toLowerCase();
+  const past = params.when === "past";
+  const scope = past
+    ? `e.ends_at <= NOW() AND e.status IN ('PUBLISHED', 'COMPLETED')`
+    : `e.status = 'PUBLISHED' AND e.starts_at > NOW()`;
+  const order = past ? `e.ends_at DESC, e.id DESC` : `e.starts_at ASC, e.id ASC`;
+  const rows = await query<EventRow>(
+    `SELECT e.id, e.organizer_profile_id, e.slug, e.title, e.description, e.category, e.venue_name, e.address_line,
+            e.city, e.province, e.latitude, e.longitude, e.tags, e.timezone, e.starts_at::text, e.ends_at::text,
+            e.terms, e.contact_email, e.contact_phone, e.status::text AS status, e.inventory_mode::text AS inventory_mode
+     FROM events e
+     WHERE ${scope}
+       AND ($1 = '' OR e.search_document @@ plainto_tsquery('simple', $1)
+            OR e.title ILIKE '%' || $1 || '%'
+            OR EXISTS (SELECT 1 FROM event_tags et WHERE et.event_id = e.id AND et.tag = ANY (regexp_split_to_array(lower($1), '\\s+'))))
+       AND ($2 = '' OR lower(e.category) = $2)
+       AND ($3 = '' OR lower(e.city) = $3)
+       AND ($4 = '' OR lower(e.province) = $4)
+       AND ($5 = '' OR $5 = ANY (e.tags))
+     ORDER BY ${order}
+     LIMIT $6`,
+    [q, category, city, province, tag, limit + 1],
+  );
+  const page = rows.slice(0, limit);
+  const items = await toCatalogCards(page, past ? "PAST" : undefined);
+  const applied: Record<string, string> = { sort: past ? "newest" : "soonest" };
+  if (past) applied.when = "past";
   if (q) applied.q = q;
   if (category) applied.category = category;
   if (city) applied.city = city;
   if (province) applied.province = province;
   if (tag) applied.tag = tag;
   const last = page[page.length - 1];
+  const cursorKey = past ? last?.ends_at : last?.starts_at;
   return {
     items,
-    nextCursor: rows.length > limit && last ? Buffer.from(`${last.starts_at}|${last.id}`).toString("base64url") : null,
+    nextCursor: rows.length > limit && last && cursorKey ? Buffer.from(`${cursorKey}|${last.id}`).toString("base64url") : null,
     appliedFilters: applied,
   };
+}
+
+export async function listOrganizerPublicEvents(organizerProfileId: string): Promise<{
+  upcoming: CatalogCard[];
+  past: CatalogCard[];
+}> {
+  const id = organizerProfileId.trim();
+  if (!id) return { upcoming: [], past: [] };
+  const select = `e.id, e.organizer_profile_id, e.slug, e.title, e.description, e.category, e.venue_name, e.address_line,
+            e.city, e.province, e.latitude, e.longitude, e.tags, e.timezone, e.starts_at::text, e.ends_at::text,
+            e.terms, e.contact_email, e.contact_phone, e.status::text AS status, e.inventory_mode::text AS inventory_mode`;
+  const upcomingRows = await query<EventRow>(
+    `SELECT ${select}
+     FROM events e
+     WHERE e.organizer_profile_id = $1 AND e.status = 'PUBLISHED' AND e.starts_at > NOW()
+     ORDER BY e.starts_at ASC, e.id ASC
+     LIMIT 24`,
+    [id],
+  );
+  const pastRows = await query<EventRow>(
+    `SELECT ${select}
+     FROM events e
+     WHERE e.organizer_profile_id = $1 AND e.ends_at <= NOW() AND e.status IN ('PUBLISHED', 'COMPLETED')
+     ORDER BY e.ends_at DESC, e.id DESC
+     LIMIT 24`,
+    [id],
+  );
+  return {
+    upcoming: await toCatalogCards(upcomingRows),
+    past: await toCatalogCards(pastRows, "PAST"),
+  };
+}
+
+export async function listPastCatalog(limit = 9): Promise<CatalogCard[]> {
+  const result = await listCatalog({
+    q: "",
+    category: "",
+    city: "",
+    province: "",
+    tag: "",
+    limit,
+    when: "past",
+  });
+  return result.items;
 }
 
 export function parseNaturalFilter(raw: string) {
@@ -225,7 +288,7 @@ export async function getPublicEvent(slug: string) {
     [key],
   );
   const e = rows[0];
-  if (!e || e.status !== "PUBLISHED" || !(new Date(e.ends_at) > new Date())) return null;
+  if (!e || (e.status !== "PUBLISHED" && e.status !== "COMPLETED")) return null;
   const tickets = await query<TicketRow>(
     `SELECT id, name, description, price_rupiah, quota, max_per_account, sale_starts_at::text, sale_ends_at::text,
             reserved_quantity, paid_quantity, sales_stopped_at::text
@@ -249,6 +312,7 @@ export async function getPublicEvent(slug: string) {
     alt: i === 0 ? e.title : `${e.title} — ${i + 1}`,
   }));
   const sale = listSaleStatus(e.status, starts, tickets, now);
+  const rating = (await ratingSummaryByEventIds([e.id])).get(e.id) || emptyRatingSummary();
   return {
     id: e.id,
     slug: e.slug,
@@ -300,5 +364,7 @@ export async function getPublicEvent(slug: string) {
       };
     }),
     availabilityDisclaimer: "Label stok bersifat informatif. Kuota dan hold 15 menit dipastikan ulang saat checkout.",
+    ratingAverage: rating.average,
+    ratingCount: rating.count,
   };
 }

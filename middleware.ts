@@ -47,6 +47,7 @@ export const config = {
     "/petugas",
     "/petugas/:path*",
     "/checkout",
+    "/events/:slug/checkout",
     "/orders",
     "/orders/:path*",
     "/tickets",
