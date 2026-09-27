@@ -170,6 +170,7 @@ function ticketView(row: Record<string, unknown>) {
 }
 
 export async function listTickets(user: AuthUser, status: string, limit: number) {
+  await issueMissingTicketsForBuyer(user.id);
   const lim = Math.min(Math.max(limit || 20, 1), 50);
   const st = status.trim().toUpperCase();
   const rows = await query<Record<string, unknown>>(
@@ -268,9 +269,38 @@ export async function ticketQrPayload(user: AuthUser, id: string): Promise<strin
   return fallback;
 }
 
-export async function issueTicketsForPaidOrder(orderId: string, buyer: AuthUser) {
-  const existing = await query<{ n: string }>(`SELECT COUNT(*)::text AS n FROM tickets WHERE order_id=$1`, [orderId]);
-  if (Number(existing[0]?.n || 0) > 0) return;
+const PAID_ORDERS_MISSING_TICKETS = `
+  SELECT o.id, o.buyer_user_id
+  FROM orders o
+  WHERE o.status = 'PAID'
+    AND ($1 = '' OR o.buyer_user_id = $1)
+    AND (
+      SELECT COALESCE(SUM(oi.quantity), 0)::int FROM order_items oi WHERE oi.order_id = o.id
+    ) > (
+      SELECT COUNT(*)::int FROM tickets t WHERE t.order_id = o.id
+    )
+  ORDER BY o.paid_at ASC NULLS LAST, o.id ASC
+`;
+
+export async function issueMissingTicketsForBuyer(buyerUserId: string) {
+  const due = await query<{ id: string }>(`${PAID_ORDERS_MISSING_TICKETS} LIMIT 50`, [buyerUserId]);
+  for (const row of due) await issueTicketsForPaidOrder(row.id);
+}
+
+export async function reconcileTicketIssuance(batch = 20) {
+  const n = Math.min(Math.max(batch || 20, 1), 100);
+  const due = await query<{ id: string }>(`${PAID_ORDERS_MISSING_TICKETS} LIMIT $2`, ["", n]);
+  let issued = 0;
+  for (const row of due) {
+    const before = await query<{ n: string }>(`SELECT COUNT(*)::text AS n FROM tickets WHERE order_id=$1`, [row.id]);
+    await issueTicketsForPaidOrder(row.id);
+    const after = await query<{ n: string }>(`SELECT COUNT(*)::text AS n FROM tickets WHERE order_id=$1`, [row.id]);
+    if (Number(after[0]?.n || 0) > Number(before[0]?.n || 0)) issued += 1;
+  }
+  return { scanned: due.length, issued };
+}
+
+export async function issueTicketsForPaidOrder(orderId: string, buyer?: AuthUser) {
   const order = await query<{ id: string; event_id: string; buyer_user_id: string }>(
     `SELECT id, event_id, buyer_user_id FROM orders WHERE id=$1 AND status='PAID' LIMIT 1`,
     [orderId],
@@ -290,31 +320,44 @@ export async function issueTicketsForPaidOrder(orderId: string, buyer: AuthUser)
     [orderId],
   );
   const user = await query<{ name: string; email: string }>(`SELECT name, email FROM users WHERE id=$1`, [o.buyer_user_id]);
-  let seqGlobal = 0;
   for (const it of items) {
+    const existingUnits = await query<{ unit_sequence: number }>(
+      `SELECT unit_sequence FROM tickets WHERE order_item_id=$1`,
+      [it.id],
+    );
+    const have = new Set(existingUnits.map((r) => Number(r.unit_sequence)));
     for (let seq = 1; seq <= Number(it.quantity); seq += 1) {
-      seqGlobal += 1;
+      if (have.has(seq)) continue;
       const tid = newId();
       const raw = randomToken();
       const enc = encryptToken(raw, tid);
-      const number = `T${tid.slice(0, 10).toUpperCase()}`;
-      const manual = tid.replace(/[^a-f0-9]/gi, "").slice(0, 16).padEnd(16, "0").toUpperCase();
+      const number = `T${tid.slice(0, 12).toUpperCase()}`;
+      const manual = randomBytes(8).toString("hex").toUpperCase();
       const attendee = await query<{ full_name: string; email: string; phone: string; identity_number: string }>(
         `SELECT full_name, email, phone, identity_number FROM order_attendees
          WHERE order_item_id=$1 AND unit_sequence=$2 LIMIT 1`,
         [it.id, seq],
       );
-      const holderName = attendee[0]?.full_name || user[0]?.name || buyer.name;
-      const holderEmail = (attendee[0]?.email || user[0]?.email || buyer.email || "").toLowerCase();
-      const holderPhone = attendee[0]?.phone || "";
-      const holderNik = attendee[0]?.identity_number || "0000000000000000";
+      const holderName = String(attendee[0]?.full_name || user[0]?.name || buyer?.name || "Pembeli").slice(0, 120);
+      const holderEmail = String(attendee[0]?.email || user[0]?.email || buyer?.email || "").trim().toLowerCase().slice(0, 254);
+      const holderPhone = String(attendee[0]?.phone || "").replace(/\D/g, "").slice(0, 20);
+      const nikDigits = String(attendee[0]?.identity_number || "").replace(/\D/g, "");
+      let holderNik = nikDigits.length === 16 ? nikDigits : "0000000000000000";
+      if (holderNik !== "0000000000000000") {
+        const clash = await query<{ id: string }>(
+          `SELECT id FROM tickets
+           WHERE event_id=$1 AND holder_identity_number=$2 AND status <> 'CANCELLED' LIMIT 1`,
+          [o.event_id, holderNik],
+        );
+        if (clash[0]) holderNik = "0000000000000000";
+      }
       await query(
         `INSERT INTO tickets (
            id, ticket_number, manual_code, order_id, order_item_id, event_id, ticket_type_id, ticket_type_name, section_name, seat_label, event_seat_id,
            owner_user_id, holder_full_name, holder_email, holder_phone, holder_identity_number, unit_sequence, status,
            token_hash, token_ciphertext, token_nonce, token_auth_tag, token_key_version
          ) VALUES (
-           $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,'UNUSED'::ticket_status,$18,$19,$20,$21,1
+           $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,'UNUSED'::ticket_status,$18,decode($19,'hex'),decode($20,'hex'),decode($21,'hex'),1
          )`,
         [
           tid,
@@ -335,9 +378,9 @@ export async function issueTicketsForPaidOrder(orderId: string, buyer: AuthUser)
           holderNik,
           seq,
           enc.hash,
-          enc.ciphertext,
-          enc.nonce,
-          enc.tag,
+          enc.ciphertext.toString("hex"),
+          enc.nonce.toString("hex"),
+          enc.tag.toString("hex"),
         ],
       );
     }

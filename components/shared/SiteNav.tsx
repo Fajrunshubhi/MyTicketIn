@@ -3,6 +3,7 @@
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
 import LogoutButton from "@/components/LogoutButton";
+import { LiveClock } from "@/components/LiveClock";
 import { AdminLifecycleAlerts } from "@/components/admin/AdminLifecycleAlerts";
 import { Icon, type IconName } from "@/components/ui/Icon";
 
@@ -87,9 +88,10 @@ export function SiteNav({
 
   return (
     <>
-      <header className="fixed inset-x-0 top-0 z-50 bg-[#fbfafd]">
+      <header data-clock-host className="fixed inset-x-0 top-0 z-50 bg-[#fbfafd]">
         <div className="mx-auto flex w-full max-w-6xl min-w-0 items-center justify-between gap-3 px-4 py-3 sm:px-6 sm:py-5">
           <div className="min-w-0 shrink">{brand}</div>
+          <LiveClock className="ml-auto min-w-0 md:ml-0" />
           <nav className="hidden min-w-0 items-center justify-end gap-2 md:flex" aria-label="Navigasi utama">
             {links}
             {trailing}

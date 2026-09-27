@@ -1,14 +1,14 @@
 import { NextRequest } from "next/server";
 import { jsonData, routeHandler } from "@/lib/server/http";
 import { readJson, requireAuth, requireMutating } from "@/lib/server/guard";
-import { editApplication, getByOwner, ownerDto } from "@/lib/server/organizers";
+import { editApplication, getByOwner, listHistory, ownerDto } from "@/lib/server/organizers";
 import { AppError } from "@/lib/server/http";
 
 export const GET = routeHandler(async (req: NextRequest) => {
   const user = await requireAuth(req);
   const p = await getByOwner(user.id);
   if (!p) throw new AppError("ORGANIZER_APPLICATION_NOT_FOUND", "Pengajuan tidak ditemukan.", {}, 404);
-  return jsonData(ownerDto(p), 200, req);
+  return jsonData({ ...ownerDto(p), history: await listHistory(p.id) }, 200, req);
 });
 
 export const PATCH = routeHandler(async (req: NextRequest) => {

@@ -7,7 +7,7 @@ import { galleryStorageConfig, putGalleryObject } from "@/lib/server/s3-put";
 
 const MAX_BYTES = 5 * 1024 * 1024;
 
-function detectExt(buf: Buffer): { mime: string; ext: string } {
+export function inspectImageBytes(buf: Buffer): { mime: string; ext: string } {
   if (buf.length >= 8 && buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4e && buf[3] === 0x47) {
     return { mime: "image/png", ext: ".png" };
   }
@@ -47,7 +47,7 @@ export async function saveGalleryFile(bytes: Buffer): Promise<string> {
   if (!bytes.length || bytes.length > MAX_BYTES) {
     throw new AppError("VALIDATION_ERROR", "Ukuran gambar maksimal 5 MB.", {}, 400);
   }
-  const { mime, ext } = detectExt(bytes);
+  const { mime, ext } = inspectImageBytes(bytes);
   const name = `${newId()}${ext}`;
   const key = `gallery/${name}`;
   if (galleryStorageConfig()) {

@@ -18,6 +18,9 @@ export type AccountProfile = {
 
 export function roleLabel(me: AccountProfile): string {
   if (me.access?.isAdmin || me.role === "ADMIN") return "Admin aplikasi";
+  if (me.access?.kind === "organizer") {
+    return me.access.canOrganize ? "Penyelenggara event" : "Penyelenggara ditangguhkan";
+  }
   if (me.access?.canOrganize) return "Penyelenggara event";
   if (me.access?.organizerStatus) return "Calon penyelenggara";
   return "Pembeli tiket";

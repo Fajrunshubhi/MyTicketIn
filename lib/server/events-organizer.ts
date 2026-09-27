@@ -402,6 +402,13 @@ export async function submitEvent(orgId: string, id: string, expectedVersion: nu
   if (types.length === 0) {
     throw new AppError("TICKET_TYPE_REQUIRED", "Minimal satu jenis tiket wajib sebelum pengajuan.", {}, 400);
   }
+  if (String(e.inventory_mode) === "RESERVED_SEATING") {
+    const { getSeatMap } = await import("@/lib/server/event-extras");
+    const map = await getSeatMap(id);
+    if (!map || map.status !== "READY" || !map.url) {
+      throw new AppError("SEAT_MAP_REQUIRED", "Unggah gambar denah beserta teks alternatif dan legenda sebelum mengajukan.", {}, 400);
+    }
+  }
   const n = await execute(
     `UPDATE events SET status='PENDING_REVIEW'::event_status, submitted_at=CURRENT_TIMESTAMP, updated_at=CURRENT_TIMESTAMP, version=version+1
      WHERE id=$1 AND version=$2 AND status IN ('DRAFT','REJECTED')`,

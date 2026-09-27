@@ -1,6 +1,7 @@
 "use client";
 
 import { type ReactNode } from "react";
+import { usePathname } from "next/navigation";
 import { WorkspaceShell, type WorkspaceNavItem } from "@/components/dashboard/WorkspaceShell";
 import { type IconName } from "@/components/ui/Icon";
 
@@ -30,15 +31,25 @@ function pageTitle(pathname: string): string {
 }
 
 export function AdminShell({ children }: { children: ReactNode }) {
+  const pathname = usePathname() || "";
+  const organizerQueue = pathname.startsWith("/admin/organizers");
   return (
     <WorkspaceShell
       nav={NAV}
       navAriaLabel="Menu admin"
       storageKey="mti-admin-nav"
       titleForPath={pageTitle}
-      searchPlaceholder="Cari event untuk dimoderasi"
-      searchPath={(q) => (q ? `/admin/events?q=${encodeURIComponent(q)}` : "/admin/events")}
-      notificationsHref="/notifications"
+      searchPlaceholder={organizerQueue ? "Cari nama organizer" : "Cari event untuk dimoderasi"}
+      searchPath={(q) =>
+        organizerQueue
+          ? q
+            ? `/admin/organizers?q=${encodeURIComponent(q)}`
+            : "/admin/organizers"
+          : q
+            ? `/admin/events?q=${encodeURIComponent(q)}`
+            : "/admin/events"
+      }
+      notificationsHref="/dashboard/notifications"
       primaryHref="/admin/operations"
       primaryLabel="Antrean"
     >

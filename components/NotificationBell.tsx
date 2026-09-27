@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Icon } from "@/components/ui/Icon";
 
-export function NotificationBell({ compact = false, href = "/notifications" }: { compact?: boolean; href?: string }) {
+export function NotificationBell({ compact = false, href = "/dashboard/notifications" }: { compact?: boolean; href?: string }) {
   const [count, setCount] = useState<number | null>(null);
   useEffect(() => {
     fetch("/api/me/notifications?filter=unread&limit=1", { credentials: "include", cache: "no-store" })

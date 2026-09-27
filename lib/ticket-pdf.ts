@@ -33,24 +33,21 @@ export type EventTicketPdf = {
   holderEmail?: string;
   holderPhone?: string;
   holderNik?: string;
+  eventEnded?: boolean;
 };
 
-const STATUS_LABEL: Record<string, string> = {
-  UNUSED: "Siap dipakai",
-  USED: "Sudah check-in",
-  CANCELLED: "Dibatalkan",
-};
-
-function stampLabel(status: string) {
-  if (status === "UNUSED") return "SIAP DIPAKAI";
+function stampLabel(status: string, eventEnded = false) {
   if (status === "USED") return "SUDAH CHECK-IN";
   if (status === "CANCELLED") return "DIBATALKAN";
+  if (eventEnded) return "TIDAK BERLAKU";
+  if (status === "UNUSED") return "SIAP DIPAKAI";
   return status;
 }
 
-function stampColor(status: string): PdfColor {
-  if (status === "UNUSED") return PDF_BRAND_DARK;
+function stampColor(status: string, eventEnded = false): PdfColor {
   if (status === "USED") return PDF_PAID;
+  if (status === "CANCELLED" || (eventEnded && status === "UNUSED")) return PDF_MUTED;
+  if (status === "UNUSED") return PDF_BRAND_DARK;
   return PDF_MUTED;
 }
 
@@ -86,8 +83,9 @@ export function buildEventTicketPdfBytes(ticket: EventTicketPdf, qrJpeg?: Uint8A
   const right = w - margin;
   const innerW = right - margin;
   const cancelled = ticket.status === "CANCELLED";
+  const ended = Boolean(ticket.eventEnded);
   const printedAt = when(new Date().toISOString());
-  const checkIn = checkInLine(ticket.startsAt, ticket.timezone);
+  const checkIn = ended ? "" : checkInLine(ticket.startsAt, ticket.timezone);
   const nik = maskNik(ticket.holderNik);
 
   doc.fillRect(0, h - 72, w, 72, PDF_BRAND_DARK);
@@ -109,22 +107,24 @@ export function buildEventTicketPdfBytes(ticket: EventTicketPdf, qrJpeg?: Uint8A
   doc.text(`${ticket.ticketNumber}  ·  Hal. 1/1`, right, 22, { size: 7.5, color: PDF_MUTED, align: "right" });
 
   let y = h - 92;
-  const bannerPaid = ticket.status === "UNUSED";
-  doc.fillRect(margin, y - 24, innerW, 32, bannerPaid ? { r: 0.9, g: 0.97, b: 0.93 } : PDF_CANVAS);
+  const bannerPaid = ticket.status === "UNUSED" && !ended && !cancelled;
+  doc.fillRect(margin, y - 24, innerW, 32, ended || cancelled ? PDF_CANVAS : bannerPaid ? { r: 0.9, g: 0.97, b: 0.93 } : PDF_CANVAS);
   doc.text(
     cancelled
       ? "TIKET DIBATALKAN  ·  Kode QR tidak disertakan pada dokumen ini."
-      : "E-TIKET SANDBOX  ·  QR hanya berisi token check-in, bukan data pribadi.",
+      : ended
+        ? "EVENT TELAH SELESAI  ·  Tiket ini arsip pembelian. Check-in tidak lagi berlaku."
+        : "E-TIKET SANDBOX  ·  QR hanya berisi token check-in, bukan data pribadi.",
     margin + 10,
     y - 10,
-    { size: 7.5, color: cancelled ? PDF_WARN : PDF_PAID, maxWidth: innerW - 20 },
+    { size: 7.5, color: cancelled || ended ? PDF_WARN : PDF_PAID, maxWidth: innerW - 20 },
   );
   y -= 48;
 
   doc.text("E-TIKET", margin, y, { size: 18, bold: true, color: PDF_INK });
-  const stamp = stampLabel(ticket.status);
+  const stamp = stampLabel(ticket.status, ended);
   const stampW = helveticaWidth(stamp, 11) + 20;
-  const color = stampColor(ticket.status);
+  const color = stampColor(ticket.status, ended);
   doc.strokeRect(right - stampW, y - 10, stampW, 22, color, 1.6);
   doc.text(stamp, right - stampW / 2, y - 3, { size: 11, bold: true, color, align: "center" });
   y -= 28;
@@ -181,7 +181,7 @@ export function buildEventTicketPdfBytes(ticket: EventTicketPdf, qrJpeg?: Uint8A
     const qy0 = boxTop - 28 - qSize;
     doc.fillRect(qx0 - 8, qy0 - 8, qSize + 16, qSize + 16, PDF_PAPER);
     doc.drawJpeg(img, qx0, qy0, qSize, qSize);
-    doc.text("Tunjukkan kepada petugas", qx + qrColW / 2, qy0 - 18, {
+    doc.text(ended ? "Event telah selesai" : "Tunjukkan kepada petugas", qx + qrColW / 2, qy0 - 18, {
       size: 8,
       color: PDF_MUTED,
       align: "center",
@@ -217,7 +217,9 @@ export function buildEventTicketPdfBytes(ticket: EventTicketPdf, qrJpeg?: Uint8A
   doc.text("KETERANGAN", margin, y, { size: 8, bold: true, color: PDF_MUTED });
   y -= 14;
   const notes = [
-    "Dokumen ini adalah e-tiket MyTicketIn. Satu tiket paling banyak untuk satu check-in berhasil.",
+    ended
+      ? "Event sudah terlaksana. Dokumen ini arsip e-tiket; check-in di venue tidak lagi berlaku."
+      : "Dokumen ini adalah e-tiket MyTicketIn. Satu tiket paling banyak untuk satu check-in berhasil.",
     "Jangan membagikan berkas ini. QR dan kode cadangan setara dengan tiket fisik.",
     "NIK pada PDF dipotong (4 digit terakhir) untuk mengurangi risiko kebocoran data.",
   ];

@@ -7,6 +7,7 @@ import BrandMark from "@/components/BrandMark";
 import LogoutButton from "@/components/LogoutButton";
 import { NotificationBell } from "@/components/NotificationBell";
 import { ProfileMenu } from "@/components/shared/ProfileMenu";
+import { LiveClock } from "@/components/LiveClock";
 import { Icon, type IconName } from "@/components/ui/Icon";
 
 export type WorkspaceNavItem = {
@@ -23,8 +24,8 @@ function navActive(pathname: string, item: WorkspaceNavItem): boolean {
   if (item.href === "/dashboard/event") {
     return pathname === "/dashboard/event" || (pathname.startsWith("/dashboard/event/") && pathname !== "/dashboard/event/new");
   }
-  if (item.href === "/dashboard") {
-    return pathname === "/dashboard";
+  if (item.href === "/dashboard/organizer/apply") {
+    return pathname.startsWith("/dashboard/organizer") || pathname.startsWith("/organizer/apply") || pathname.startsWith("/organizer/status");
   }
   return pathname === item.href || pathname.startsWith(`${item.href}/`);
 }
@@ -152,7 +153,7 @@ export function WorkspaceShell({
   const toggleLabel = isDesktopNav() ? (wide ? "Ciutkan menu" : "Bentangkan menu") : open ? "Tutup menu" : "Buka menu";
 
   return (
-    <div className="flex h-dvh min-h-0 w-full bg-[#f7f8fd]">
+    <div className="workspace-root flex h-dvh max-h-dvh min-h-0 w-full overflow-hidden bg-[#f7f8fd]">
       <aside
         className={`hidden h-full shrink-0 flex-col border-r border-stone-200 bg-white py-4 transition-[width] duration-200 ease-out lg:flex ${
           wide ? "w-60 px-3" : "w-[4.75rem] px-2"
@@ -186,7 +187,7 @@ export function WorkspaceShell({
       </aside>
 
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-        <header className="sticky top-0 z-30 border-b border-stone-200/70 bg-[#f7f8fd]/95 px-3 py-3 backdrop-blur sm:px-6">
+        <header data-clock-host className="sticky top-0 z-30 border-b border-stone-200/70 bg-[#f7f8fd]/95 px-3 py-3 backdrop-blur sm:px-6">
           <div className="flex items-center gap-2 sm:gap-3">
             <button
               ref={buttonRef}
@@ -201,6 +202,7 @@ export function WorkspaceShell({
             </button>
             <h1 className="min-w-0 flex-1 truncate font-display text-xl text-ink sm:text-2xl lg:flex-none lg:text-3xl">{title}</h1>
             <div className="ml-auto flex shrink-0 items-center gap-1 sm:gap-2">
+              <LiveClock />
               {primaryHref && primaryLabel ? (
                 <Link
                   href={primaryHref}
@@ -229,7 +231,9 @@ export function WorkspaceShell({
           ) : null}
         </header>
 
-        <div className="min-h-0 flex-1 overflow-y-auto px-3 py-5 sm:px-6 lg:px-8">{children}</div>
+        <div className="h-0 min-h-0 flex-1 overflow-x-hidden overflow-y-auto">
+          <div className="px-3 py-5 sm:px-6 lg:px-8">{children}</div>
+        </div>
       </div>
 
       {open ? (

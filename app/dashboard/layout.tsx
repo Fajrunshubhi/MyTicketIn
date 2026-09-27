@@ -1,8 +1,6 @@
 import type { ReactNode } from "react";
 import { redirect } from "next/navigation";
-import { AdminShell } from "@/components/dashboard/AdminShell";
-import { BuyerShell } from "@/components/dashboard/BuyerShell";
-import { OrganizerShell } from "@/components/dashboard/OrganizerShell";
+import { DashboardFrame } from "@/components/dashboard/DashboardFrame";
 import { loadSessionUser } from "@/lib/session";
 
 export default async function DashboardLayout({ children }: { children: ReactNode }) {
@@ -13,11 +11,13 @@ export default async function DashboardLayout({ children }: { children: ReactNod
   if (user.access?.kind === "staff") {
     redirect("/petugas");
   }
-  if (user.access?.canOrganize) {
-    return <OrganizerShell>{children}</OrganizerShell>;
+  if (user.access?.kind === "organizer") {
+    return <DashboardFrame role="organizer" canWrite={Boolean(user.access.canOrganize)}>
+      {children}
+    </DashboardFrame>;
   }
   if (user.access?.isAdmin || user.role === "ADMIN") {
-    return <AdminShell>{children}</AdminShell>;
+    return <DashboardFrame role="admin">{children}</DashboardFrame>;
   }
-  return <BuyerShell>{children}</BuyerShell>;
+  return <DashboardFrame role="buyer">{children}</DashboardFrame>;
 }

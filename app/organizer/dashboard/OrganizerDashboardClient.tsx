@@ -10,7 +10,8 @@ import { Button } from "@/components/ui/Button";
 import { Container } from "@/components/ui/Container";
 import { LoadingState } from "@/components/ui/LoadingState";
 import { readApiError } from "@/lib/api";
-import { formatDateTime, formatRupiah } from "@/lib/format";
+import { Icon } from "@/components/ui/Icon";
+import { eventLifecycle, formatDateTime, formatRupiah } from "@/lib/format";
 import { SalesBreakdownCharts, type SalesBar } from "@/components/dashboard/SalesBreakdownCharts";
 
 type Summary = {
@@ -26,6 +27,9 @@ type EventRow = {
   id: string;
   title: string;
   status: string;
+  startsAt?: string;
+  endsAt?: string;
+  timezone?: string;
   paidOrderCount: number;
   ticketsSold: number;
   grossSandboxRupiah: number;
@@ -117,10 +121,9 @@ export default function OrganizerDashboardClient({ embedded = false }: { embedde
 
   const summary = data?.summary;
   const body = (
-    <>
-      <p className="mb-2 text-sm text-gold-800">SANDBOX / TRANSAKSI UJI · bukan settlement</p>
+    <div>
       {!embedded ? <h1 className="font-display text-3xl text-ink">Dashboard penjualan</h1> : null}
-      <p className={`${embedded ? "" : "mt-2"} text-ink/65`}>Angka dihitung dari order Paid, tiket terbit, dan check-in. Bukan laba atau pencairan.</p>
+      <p className={`${embedded ? "" : "mt-2"} text-ink/65`}>Ringkasan pesanan lunas, tiket terjual, dan check-in.</p>
       <form
         className="mt-6 flex flex-wrap items-end gap-3"
         onSubmit={(e) => {
@@ -155,7 +158,7 @@ export default function OrganizerDashboardClient({ embedded = false }: { embedde
       {summary ? (
         <ul className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <li className="rounded-2xl border border-stone-200 bg-white p-5">
-            <h2 className="text-sm text-ink/55">Order Paid</h2>
+            <h2 className="text-sm text-ink/55">Pesanan lunas</h2>
             <p className="mt-2 text-3xl text-ink">{summary.paidOrderCount}</p>
           </li>
           <li className="rounded-2xl border border-stone-200 bg-white p-5">
@@ -163,9 +166,8 @@ export default function OrganizerDashboardClient({ embedded = false }: { embedde
             <p className="mt-2 text-3xl text-ink">{summary.ticketsSold}</p>
           </li>
           <li className="rounded-2xl border border-stone-200 bg-white p-5">
-            <h2 className="text-sm text-ink/55">Bruto sandbox</h2>
+            <h2 className="text-sm text-ink/55">Pendapatan</h2>
             <p className="mt-2 text-2xl text-ink">{formatRupiah(summary.grossSandboxRupiah)}</p>
-            <p className="mt-1 text-xs text-gold-800">Nilai bruto sandbox—bukan settlement</p>
           </li>
           <li className="rounded-2xl border border-stone-200 bg-white p-5">
             <h2 className="text-sm text-ink/55">Check-in</h2>
@@ -189,14 +191,13 @@ export default function OrganizerDashboardClient({ embedded = false }: { embedde
         <section className="mt-10">
           <h2 className="font-display text-2xl text-ink">Tren penjualan</h2>
           <p className="mt-1 text-sm text-ink/60">Timezone {trend.timezone}. Tabel ekuivalen grafik opsional.</p>
-          <table className="mt-4 w-full min-w-0 text-left text-sm text-ink/80">
-            <caption className="sr-only">Agregat harian penjualan sandbox</caption>
+          <table className="mt-4 w-full min-w-0 text-left text-sm text-ink/80" aria-label="Agregat harian penjualan">
             <thead>
               <tr>
                 <th className="py-2">Periode</th>
-                <th>Order Paid</th>
+                <th>Pesanan lunas</th>
                 <th>Tiket</th>
-                <th>Bruto sandbox</th>
+                <th>Pendapatan</th>
               </tr>
             </thead>
             <tbody>
@@ -212,29 +213,96 @@ export default function OrganizerDashboardClient({ embedded = false }: { embedde
           </table>
         </section>
       ) : null}
-      <section className="mt-10">
-        <h2 className="font-display text-2xl text-ink">Event</h2>
-        {!loading && data && data.events.length === 0 ? (
-          <p className="mt-3 text-ink/65">Belum ada event atau penjualan pada filter ini.</p>
-        ) : (
-          <ul className="mt-4 grid gap-3">
-            {(data?.events || []).map((ev) => (
-              <li key={ev.id} className="rounded-2xl border border-stone-200 bg-white p-4">
-                <p className="font-semibold text-ink">{ev.title}</p>
-                <p className="mt-1 text-sm text-ink/65">
-                  {ev.status} · {ev.paidOrderCount} order Paid · {ev.ticketsSold} tiket · {formatRupiah(ev.grossSandboxRupiah)} · {ev.checkInCount} check-in
-                </p>
-                <p className="mt-2 flex flex-wrap gap-3 text-sm">
-                  <Link className="text-gold-700 underline" href={`/dashboard/event/${ev.id}`}>Kelola</Link>
-                  <Link className="text-gold-700 underline" href={`/dashboard/laporan?eventId=${ev.id}`}>Filter kartu</Link>
-                  <a className="text-gold-700 underline" href={`/api/organizer/events/${ev.id}/participants.csv`}>CSV</a>
-                </p>
-              </li>
-            ))}
-          </ul>
-        )}
+      <section className="mt-6" aria-labelledby="daftar-event-laporan">
+        <div className="overflow-hidden rounded-3xl bg-white shadow-sm">
+          <div className="flex flex-col gap-1 border-b border-stone-100 px-5 py-4 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+              <h2 id="daftar-event-laporan" className="text-lg font-semibold text-ink">
+                Kinerja per event
+              </h2>
+              <p className="mt-1 text-sm text-ink/55">Pesanan lunas, tiket, pendapatan, dan check-in.</p>
+            </div>
+            {data?.events?.length ? (
+              <p className="text-sm tabular-nums text-ink/45">{data.events.length} event</p>
+            ) : null}
+          </div>
+          {!loading && data && data.events.length === 0 ? (
+            <p className="px-5 py-10 text-sm text-ink/60">Belum ada event pada filter ini.</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[44rem] text-left text-sm">
+                <thead>
+                  <tr className="border-b border-stone-100 text-xs font-medium uppercase tracking-wide text-ink/45">
+                    <th className="px-5 py-3 font-medium">Event</th>
+                    <th className="px-3 py-3 font-medium">Status</th>
+                    <th className="px-3 py-3 text-right font-medium">Pesanan</th>
+                    <th className="px-3 py-3 text-right font-medium">Tiket</th>
+                    <th className="px-3 py-3 text-right font-medium">Pendapatan</th>
+                    <th className="px-3 py-3 text-right font-medium">Check-in</th>
+                    <th className="px-5 py-3 text-right font-medium">Aksi</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(data?.events || []).map((ev) => {
+                    const attendance = ev.ticketsSold ? Math.round((ev.checkInCount / ev.ticketsSold) * 100) : null;
+                    const muted = ev.ticketsSold === 0 && ev.paidOrderCount === 0;
+                    const life = eventLifecycle(ev.status, ev.startsAt, ev.endsAt);
+                    return (
+                      <tr key={ev.id} className="border-b border-stone-50 last:border-0 hover:bg-stone-50/80">
+                        <td className="px-5 py-4">
+                          <Link href={`/dashboard/event/${ev.id}`} className={`font-medium hover:text-gold-700 ${muted ? "text-ink/70" : "text-ink"}`}>
+                            {ev.title}
+                          </Link>
+                          {life.key === "ended" ? <p className="mt-1 text-xs text-ink/50">{life.hint}</p> : null}
+                        </td>
+                        <td className="px-3 py-4">
+                          <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${life.badgeClass}`}>{life.label}</span>
+                        </td>
+                        <td className={`px-3 py-4 text-right tabular-nums ${muted ? "text-ink/40" : "text-ink/80"}`}>{ev.paidOrderCount}</td>
+                        <td className={`px-3 py-4 text-right tabular-nums ${muted ? "text-ink/40" : "text-ink/80"}`}>{ev.ticketsSold}</td>
+                        <td className={`px-3 py-4 text-right tabular-nums ${muted ? "text-ink/40" : "text-ink"}`}>
+                          {formatRupiah(ev.grossSandboxRupiah)}
+                        </td>
+                        <td className="px-3 py-4 text-right tabular-nums text-ink/80">
+                          {ev.checkInCount}
+                          {attendance == null ? "" : <span className="ml-1 text-xs text-ink/40">{attendance}%</span>}
+                        </td>
+                        <td className="px-5 py-4">
+                          <div className="flex flex-wrap items-center justify-end gap-1">
+                            <Link
+                              href={`/dashboard/event/${ev.id}`}
+                              className="inline-flex min-h-11 items-center rounded-full px-3 text-sm font-medium text-gold-700 hover:bg-gold-50"
+                            >
+                              Kelola
+                            </Link>
+                            <Link
+                              href={`/dashboard/laporan?eventId=${encodeURIComponent(ev.id)}`}
+                              aria-current={eventId === ev.id ? "page" : undefined}
+                              className={`inline-flex min-h-11 items-center rounded-full px-3 text-sm font-medium ${
+                                eventId === ev.id ? "bg-ink text-white" : "text-ink/70 hover:bg-stone-100"
+                              }`}
+                            >
+                              Fokus
+                            </Link>
+                            <a
+                              href={`/api/organizer/events/${ev.id}/participants.csv`}
+                              className="inline-flex min-h-11 items-center gap-1 rounded-full px-3 text-sm font-medium text-ink/70 hover:bg-stone-100"
+                            >
+                              <Icon name="file" className="h-3.5 w-3.5" />
+                              CSV
+                            </a>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
       </section>
-    </>
+    </div>
   );
 
   if (embedded) {

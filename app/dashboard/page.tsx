@@ -5,7 +5,7 @@ import { AdminWorkspace } from "@/components/dashboard/AdminWorkspace";
 
 export default async function DashboardPage() {
   const user = await loadSessionUser();
-  if (user?.access?.canOrganize) {
+  if (user?.access?.kind === "organizer") {
     return <OrganizerDashboardGate />;
   }
   if (user?.access?.isAdmin || user?.role === "ADMIN") {

@@ -2,6 +2,7 @@ import { AppError, query } from "@/lib/server/http";
 import { dummyCover } from "@/lib/event-cover";
 import { publicImageSrc } from "@/lib/server/gallery";
 import { emptyRatingSummary, ratingSummaryByEventIds } from "@/lib/server/reviews";
+import { organizerSalesBlocked } from "@/lib/organizer-sales";
 
 export { dummyCover } from "@/lib/event-cover";
 
@@ -18,6 +19,7 @@ export type CatalogCard = {
   saleStatus: string;
   ratingAverage: number;
   ratingCount: number;
+  purchasable?: boolean;
 };
 
 type EventRow = {
@@ -42,6 +44,7 @@ type EventRow = {
   status: string;
   inventory_mode: string;
   organizer_profile_id: string;
+  organizer_status?: string;
 };
 
 type TicketRow = {
@@ -124,6 +127,7 @@ async function toCatalogCards(page: EventRow[], saleOverride?: string): Promise<
     const urls = await galleryUrls(e.id, e.category, e.title);
     const starts = new Date(e.starts_at);
     const rating = ratings.get(e.id) || emptyRatingSummary();
+    const blocked = organizerSalesBlocked(e.organizer_status);
     items.push({
       slug: e.slug,
       title: e.title,
@@ -133,9 +137,10 @@ async function toCatalogCards(page: EventRow[], saleOverride?: string): Promise<
       timezone: e.timezone,
       image: cover(e.title, e.category, urls),
       priceFromRupiah: priceFrom(e.status, starts, tickets, now),
-      saleStatus: saleOverride || listSaleStatus(e.status, starts, tickets, now),
+      saleStatus: saleOverride || (blocked ? "ORGANIZER_SUSPENDED" : listSaleStatus(e.status, starts, tickets, now)),
       ratingAverage: rating.average,
       ratingCount: rating.count,
+      purchasable: !blocked && !saleOverride,
     });
   }
   return items;
@@ -164,8 +169,10 @@ export async function listCatalog(params: {
   const rows = await query<EventRow>(
     `SELECT e.id, e.organizer_profile_id, e.slug, e.title, e.description, e.category, e.venue_name, e.address_line,
             e.city, e.province, e.latitude, e.longitude, e.tags, e.timezone, e.starts_at::text, e.ends_at::text,
-            e.terms, e.contact_email, e.contact_phone, e.status::text AS status, e.inventory_mode::text AS inventory_mode
+            e.terms, e.contact_email, e.contact_phone, e.status::text AS status, e.inventory_mode::text AS inventory_mode,
+            p.status::text AS organizer_status
      FROM events e
+     JOIN organizer_profiles p ON p.id = e.organizer_profile_id
      WHERE ${scope}
        AND ($1 = '' OR e.search_document @@ plainto_tsquery('simple', $1)
             OR e.title ILIKE '%' || $1 || '%'
@@ -204,10 +211,12 @@ export async function listOrganizerPublicEvents(organizerProfileId: string): Pro
   if (!id) return { upcoming: [], past: [] };
   const select = `e.id, e.organizer_profile_id, e.slug, e.title, e.description, e.category, e.venue_name, e.address_line,
             e.city, e.province, e.latitude, e.longitude, e.tags, e.timezone, e.starts_at::text, e.ends_at::text,
-            e.terms, e.contact_email, e.contact_phone, e.status::text AS status, e.inventory_mode::text AS inventory_mode`;
+            e.terms, e.contact_email, e.contact_phone, e.status::text AS status, e.inventory_mode::text AS inventory_mode,
+            p.status::text AS organizer_status`;
   const upcomingRows = await query<EventRow>(
     `SELECT ${select}
      FROM events e
+     JOIN organizer_profiles p ON p.id = e.organizer_profile_id
      WHERE e.organizer_profile_id = $1 AND e.status = 'PUBLISHED' AND e.starts_at > NOW()
      ORDER BY e.starts_at ASC, e.id ASC
      LIMIT 24`,
@@ -216,6 +225,7 @@ export async function listOrganizerPublicEvents(organizerProfileId: string): Pro
   const pastRows = await query<EventRow>(
     `SELECT ${select}
      FROM events e
+     JOIN organizer_profiles p ON p.id = e.organizer_profile_id
      WHERE e.organizer_profile_id = $1 AND e.ends_at <= NOW() AND e.status IN ('PUBLISHED', 'COMPLETED')
      ORDER BY e.ends_at DESC, e.id DESC
      LIMIT 24`,
@@ -283,8 +293,11 @@ export async function getPublicEvent(slug: string) {
   const rows = await query<EventRow>(
     `SELECT e.id, e.organizer_profile_id, e.slug, e.title, e.description, e.category, e.venue_name, e.address_line,
             e.city, e.province, e.latitude, e.longitude, e.tags, e.timezone, e.starts_at::text, e.ends_at::text,
-            e.terms, e.contact_email, e.contact_phone, e.status::text AS status, e.inventory_mode::text AS inventory_mode
-     FROM events e WHERE e.slug = $1 LIMIT 1`,
+            e.terms, e.contact_email, e.contact_phone, e.status::text AS status, e.inventory_mode::text AS inventory_mode,
+            p.status::text AS organizer_status
+     FROM events e
+     JOIN organizer_profiles p ON p.id = e.organizer_profile_id
+     WHERE e.slug = $1 LIMIT 1`,
     [key],
   );
   const e = rows[0];
@@ -299,11 +312,39 @@ export async function getPublicEvent(slug: string) {
     `SELECT id, name, ticket_type_id FROM venue_sections WHERE event_id = $1 ORDER BY sort_order, id`,
     [e.id],
   );
-  const seats = await query<{ id: string; section_id: string; label: string }>(
-    `SELECT id, section_id, label FROM event_seats WHERE event_id = $1 ORDER BY label, id`,
+  const seats = await query<{ id: string; section_id: string; label: string; sale_status: string }>(
+    `SELECT s.id, s.section_id, s.label,
+            CASE
+              WHEN EXISTS (
+                SELECT 1 FROM tickets tk
+                WHERE tk.event_seat_id = s.id AND tk.status <> 'CANCELLED'::ticket_status
+              ) OR EXISTS (
+                SELECT 1 FROM inventory_reservations r
+                WHERE r.event_seat_id = s.id AND r.released_at IS NULL
+              ) THEN 'UNAVAILABLE'
+              ELSE 'AVAILABLE'
+            END AS sale_status
+     FROM event_seats s
+     WHERE s.event_id = $1
+     ORDER BY s.label, s.id`,
     [e.id],
   );
-  const org = await query<{ name: string }>(`SELECT name FROM organizer_profiles WHERE id = $1 LIMIT 1`, [e.organizer_profile_id]);
+  const map = await query<{ alt_text: string; legend: string; status: string; storage_key: string }>(
+    `SELECT alt_text, legend, status::text AS status, storage_key FROM seat_map_assets WHERE event_id = $1 LIMIT 1`,
+    [e.id],
+  );
+  const org = await query<{ name: string; status: string }>(
+    `SELECT name, status::text AS status FROM organizer_profiles WHERE id = $1 LIMIT 1`,
+    [e.organizer_profile_id],
+  );
+  const mapUrl = map[0]
+    ? (() => {
+        const key = String(map[0].storage_key || "").trim();
+        if (!key || key.startsWith("seat-map/")) return "";
+        return publicImageSrc(key, "");
+      })()
+    : "";
+  const blocked = organizerSalesBlocked(org[0]?.status);
   const urls = await galleryUrls(e.id, e.category, e.title);
   const now = new Date();
   const starts = new Date(e.starts_at);
@@ -311,7 +352,7 @@ export async function getPublicEvent(slug: string) {
     url,
     alt: i === 0 ? e.title : `${e.title} — ${i + 1}`,
   }));
-  const sale = listSaleStatus(e.status, starts, tickets, now);
+  const sale = blocked ? "ORGANIZER_SUSPENDED" : listSaleStatus(e.status, starts, tickets, now);
   const rating = (await ratingSummaryByEventIds([e.id])).get(e.id) || emptyRatingSummary();
   return {
     id: e.id,
@@ -337,11 +378,20 @@ export async function getPublicEvent(slug: string) {
     image: images[0],
     images,
     seatMap:
-      e.inventory_mode === "RESERVED_SEATING"
-        ? { url: "/placeholder-event.svg", altText: "Denah venue belum tersedia", legend: "Denah statis akan tampil setelah diunggah organizer." }
+      map[0] && map[0].status === "READY" && mapUrl
+        ? {
+            url: mapUrl,
+            altText: map[0].alt_text,
+            legend: map[0].legend,
+          }
         : null,
     sections: sections.map((s) => ({ id: s.id, name: s.name, ticketTypeId: s.ticket_type_id })),
-    seats: seats.map((s) => ({ id: s.id, sectionId: s.section_id, label: s.label, saleStatus: sale })),
+    seats: seats.map((s) => ({
+      id: s.id,
+      sectionId: s.section_id,
+      label: s.label,
+      saleStatus: blocked ? "ORGANIZER_SUSPENDED" : s.sale_status,
+    })),
     ticketTypes: tickets.map((t) => {
       const quota = Number(t.quota) || 0;
       const remaining = Math.max(0, quota - Number(t.reserved_quantity || 0) - Number(t.paid_quantity || 0));
@@ -358,13 +408,16 @@ export async function getPublicEvent(slug: string) {
         saleStartsAt: new Date(t.sale_starts_at).toISOString(),
         saleEndsAt: new Date(t.sale_ends_at).toISOString(),
         maxPerAccount: Number(t.max_per_account) || 0,
-        saleStatus: ticketSaleStatus(e.status, starts, t, now),
+        saleStatus: blocked ? "ORGANIZER_SUSPENDED" : ticketSaleStatus(e.status, starts, t, now),
         remaining,
         stockLabel,
       };
     }),
-    availabilityDisclaimer: "Label stok bersifat informatif. Kuota dan hold 15 menit dipastikan ulang saat checkout.",
+    availabilityDisclaimer: blocked
+      ? "Penjualan ditahan karena akun penyelenggara ditangguhkan. Detail event tetap dapat dilihat."
+      : "Label stok bersifat informatif. Kuota dan hold 15 menit dipastikan ulang saat checkout.",
     ratingAverage: rating.average,
     ratingCount: rating.count,
+    purchasable: !blocked,
   };
 }

@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 
 test("pengajuan organizer tanpa sesi diarahkan ke masuk", async ({ page }) => {
-  await page.goto("/organizer/apply");
+  await page.goto("/dashboard/organizer/apply");
   await expect(page).toHaveURL(/\/login/);
   await expect(page.getByRole("heading", { name: "Masuk" })).toBeVisible();
 });

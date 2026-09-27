@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import type { ReactNode } from "react";
 import LogoutButton from "@/components/LogoutButton";
 import BrandMark from "@/components/BrandMark";
+import { LiveClock } from "@/components/LiveClock";
 import { loadSessionUser } from "@/lib/session";
 
 export default async function StaffLayout({ children }: { children: ReactNode }) {
@@ -14,9 +15,10 @@ export default async function StaffLayout({ children }: { children: ReactNode })
   }
   return (
     <div className="min-h-screen bg-[#fbfafd]">
-      <header className="flex items-center justify-between border-b border-stone-200 bg-white px-4 py-3">
+      <header data-clock-host className="flex items-center justify-between border-b border-stone-200 bg-white px-4 py-3">
         <BrandMark compact />
         <div className="flex items-center gap-3">
+          <LiveClock />
           <p className="text-sm text-ink/70">Petugas check-in</p>
           <LogoutButton />
         </div>

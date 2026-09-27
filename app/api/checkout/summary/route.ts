@@ -6,7 +6,7 @@ import { summarize } from "@/lib/server/orders";
 export const POST = routeHandler(async (req: NextRequest) => {
   requireMutating(req);
   const user = await requireBuyer(req);
-  const body = await readJson<{ eventId: string; items?: { ticketTypeId: string; quantity: number }[] }>(req);
+  const body = await readJson<{ eventId: string; items?: { ticketTypeId: string; quantity: number }[]; seatIds?: string[] }>(req);
   const out = await summarize(user, body);
   return jsonData(out, 200, req);
 });

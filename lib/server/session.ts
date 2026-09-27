@@ -2,6 +2,7 @@ import bcrypt from "bcryptjs";
 import { NextRequest } from "next/server";
 import { accessFor, type AuthUser } from "@/lib/server/access";
 import { AppError, COOKIE_SESSION, newId, query, randomToken, SESSION_TTL_MS, tokenHash } from "@/lib/server/http";
+import { sendPasswordResetMail, passwordResetUrl } from "@/lib/server/mail";
 import { readCookie } from "@/lib/server/cookies";
 
 type SessionRow = {
@@ -329,10 +330,20 @@ export async function resolveGoogle(
   return created;
 }
 
-export async function requestPasswordReset(emailRaw: string): Promise<void> {
+export async function requestPasswordReset(emailRaw: string, ip = ""): Promise<void> {
+  const started = Date.now();
+  const dummy = "$2a$10$abcdefghijklmnopqrstuuABCDEFGHIJKLMNOPQRSTUVWX12";
   const email = emailRaw.trim().toLowerCase();
+  await bcrypt.compare("dummy-reset-probe", dummy);
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254) {
+    await padResetTiming(started);
+    return;
+  }
   const user = await findUserByIdentifier(email);
-  if (!user || !user.passwordHash || user.status !== "ACTIVE") return;
+  if (!user || !user.passwordHash || user.status !== "ACTIVE") {
+    await padResetTiming(started);
+    return;
+  }
   const raw = randomToken();
   const now = new Date();
   await query(`UPDATE password_reset_tokens SET revoked_at = $2 WHERE user_id = $1 AND used_at IS NULL AND revoked_at IS NULL`, [
@@ -342,8 +353,15 @@ export async function requestPasswordReset(emailRaw: string): Promise<void> {
   await query(
     `INSERT INTO password_reset_tokens (id, user_id, token_hash, expires_at, requested_ip_hash)
      VALUES ($1, $2, $3, $4, $5)`,
-    [newId(), user.id, tokenHash(raw), new Date(now.getTime() + 30 * 60 * 1000).toISOString(), tokenHash("request")],
+    [newId(), user.id, tokenHash(raw), new Date(now.getTime() + 30 * 60 * 1000).toISOString(), tokenHash(ip || "unknown")],
   );
+  await sendPasswordResetMail({ to: user.email, name: user.name, resetUrl: passwordResetUrl(raw) });
+  await padResetTiming(started);
+}
+
+async function padResetTiming(started: number) {
+  const wait = 450 - (Date.now() - started);
+  if (wait > 0) await new Promise((resolve) => setTimeout(resolve, wait));
 }
 
 export async function confirmPasswordReset(token: string, password: string, confirm: string): Promise<void> {
@@ -353,13 +371,16 @@ export async function confirmPasswordReset(token: string, password: string, conf
     });
   }
   const hash = tokenHash(token.trim());
-  const rows = await query<{ id: string; user_id: string; expires_at: string; used_at: string | null; revoked_at: string | null }>(
-    `SELECT id, user_id, expires_at::text, used_at::text, revoked_at::text FROM password_reset_tokens WHERE token_hash = $1 LIMIT 1`,
+  const consumed = await query<{ id: string; user_id: string }>(
+    `UPDATE password_reset_tokens
+     SET used_at = CURRENT_TIMESTAMP
+     WHERE token_hash = $1 AND used_at IS NULL AND revoked_at IS NULL AND expires_at > CURRENT_TIMESTAMP
+     RETURNING id, user_id`,
     [hash],
   );
-  const tok = rows[0];
-  if (!tok || tok.used_at || tok.revoked_at || !(Date.now() < new Date(tok.expires_at).getTime())) {
-    throw new AppError("AUTH_RESET_TOKEN_INVALID", "Token pemulihan tidak valid.", {}, 400);
+  const tok = consumed[0];
+  if (!tok) {
+    throw new AppError("AUTH_RESET_TOKEN_INVALID", "Tautan pemulihan tidak valid atau sudah dipakai.", {}, 400);
   }
   const passwordHash = await bcrypt.hash(password, 12);
   await query(`UPDATE users SET password_hash = $2, auth_version = auth_version + 1, updated_at = CURRENT_TIMESTAMP WHERE id = $1`, [
@@ -367,7 +388,11 @@ export async function confirmPasswordReset(token: string, password: string, conf
     passwordHash,
   ]);
   await query(`DELETE FROM auth_sessions WHERE user_id = $1`, [tok.user_id]);
-  await query(`UPDATE password_reset_tokens SET used_at = CURRENT_TIMESTAMP WHERE id = $1`, [tok.id]);
+  await query(
+    `UPDATE password_reset_tokens SET revoked_at = CURRENT_TIMESTAMP
+     WHERE user_id = $1 AND id <> $2 AND used_at IS NULL AND revoked_at IS NULL`,
+    [tok.user_id, tok.id],
+  );
 }
 
 export async function assistPasswordReset(admin: AuthUser, userId: string, reason: string): Promise<string> {
@@ -390,6 +415,7 @@ export async function assistPasswordReset(admin: AuthUser, userId: string, reaso
      VALUES ($1, $2, $3, $4, $5, $6)`,
     [newId(), target.id, tokenHash(raw), new Date(now.getTime() + 30 * 60 * 1000).toISOString(), tokenHash("admin"), admin.id],
   );
+  await sendPasswordResetMail({ to: target.email, name: target.name, resetUrl: passwordResetUrl(raw) });
   return raw;
 }
 

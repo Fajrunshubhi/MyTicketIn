@@ -56,6 +56,11 @@ export default async function OrganizerDetailPage({ params }: { params: { id: st
           </p>
           <p className="mt-4 text-xs font-semibold uppercase tracking-[0.2em] text-gold-700">Penyelenggara</p>
           <h1 className="mt-2 text-3xl font-semibold tracking-tight text-ink">{organizer.name}</h1>
+          {organizer.status === "SUSPENDED" ? (
+            <p className="mt-3 max-w-2xl rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
+              Penyelenggara ini sedang ditangguhkan. Event tetap dapat dilihat, tetapi tiket tidak dijual sampai akun dipulihkan.
+            </p>
+          ) : null}
           {organizer.description ? (
             <p className="mt-3 max-w-2xl whitespace-pre-wrap text-ink/70">{organizer.description}</p>
           ) : (

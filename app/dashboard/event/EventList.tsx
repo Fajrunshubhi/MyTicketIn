@@ -8,6 +8,7 @@ import { OrganizerEventCard } from "@/components/dashboard/OrganizerEventCard";
 import { OrganizerEventFilters } from "@/components/dashboard/OrganizerEventFilters";
 import { type EventRecord } from "@/components/events/event-types";
 import { readApiError } from "@/lib/api";
+import { eventLifecycle } from "@/lib/format";
 
 export function DashboardEventList() {
   const router = useRouter();
@@ -83,9 +84,20 @@ export function DashboardEventList() {
     return rows;
   }, [items, q, status, category, city, province, dateFrom, dateTo, sort]);
 
+  const active = useMemo(
+    () => visible.filter((item) => eventLifecycle(item.status, item.startsAt, item.endsAt).key !== "ended"),
+    [visible],
+  );
+  const ended = useMemo(() => {
+    const rows = visible.filter((item) => eventLifecycle(item.status, item.startsAt, item.endsAt).key === "ended");
+    return [...rows].sort((a, b) => new Date(b.endsAt).getTime() - new Date(a.endsAt).getTime());
+  }, [visible]);
+
   return (
     <div>
-      <p className="max-w-2xl text-ink/65">Kelola draf dan event terbit milik Anda. Event pending belum tampil di katalog publik.</p>
+      <p className="max-w-2xl text-ink/65">
+        Kelola draf dan event terbit milik Anda. Event yang sudah dilaksanakan ditampilkan terpisah di bawah. Event pending belum tampil di katalog publik.
+      </p>
       {loading ? <div className="mt-6"><LoadingState /></div> : (
         <div className="mt-6">
           <OrganizerEventFilters
@@ -96,14 +108,46 @@ export function DashboardEventList() {
         </div>
       )}
       {error ? <div className="mt-6"><Alert tone="error" title="Tidak dapat memuat">{error}</Alert></div> : null}
-      <ul className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        {visible.map((item) => (
-          <li key={item.id}>
-            <OrganizerEventCard event={item} />
-          </li>
-        ))}
-      </ul>
-      {!loading && !error && visible.length === 0 ? <p className="mt-6 text-ink/70">Belum ada event yang cocok.</p> : null}
+
+      <section className="mt-8" aria-labelledby="event-aktif-heading">
+        <h2 id="event-aktif-heading" className="text-2xl font-semibold tracking-tight text-ink">
+          Draf dan event aktif
+        </h2>
+        <p className="mt-2 max-w-2xl text-ink/65">Event yang belum atau sedang berlangsung, termasuk draf dan pengajuan moderasi.</p>
+        {loading || error ? null : active.length === 0 ? (
+          <p className="mt-6 text-ink/70">Belum ada draf atau event aktif yang cocok.</p>
+        ) : (
+          <ul className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            {active.map((item) => (
+              <li key={item.id}>
+                <OrganizerEventCard event={item} />
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+
+      {!loading && !error ? (
+        <section className="mt-16 pb-4" aria-labelledby="event-selesai-heading">
+          <h2 id="event-selesai-heading" className="text-2xl font-semibold tracking-tight text-ink">
+            Event yang telah selesai
+          </h2>
+          <p className="mt-2 max-w-2xl text-ink/65">
+            Event yang sudah dilaksanakan. Tiket tidak lagi dijual. Kartu tetap dapat dibuka untuk laporan, peserta, dan riwayat check-in.
+          </p>
+          {ended.length === 0 ? (
+            <p className="mt-6 text-ink/70">Belum ada event yang selesai ditampilkan.</p>
+          ) : (
+            <ul className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+              {ended.map((item) => (
+                <li key={item.id}>
+                  <OrganizerEventCard event={item} />
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      ) : null}
     </div>
   );
 }

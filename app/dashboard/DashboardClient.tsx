@@ -65,25 +65,25 @@ export function DashboardClient() {
           <DashLink href="/dashboard/profile" icon="user">
             Edit profil
           </DashLink>
-          <DashLink href="/notifications" icon="bell">
+          <DashLink href="/dashboard/notifications" icon="bell">
             Notifikasi
           </DashLink>
           {!admin ? (
             <>
-              <DashLink href="/orders" icon="orders">
+              <DashLink href="/dashboard/order" icon="orders">
                 Order saya
               </DashLink>
-              <DashLink href="/tickets" icon="ticket">
+              <DashLink href="/dashboard/ticket" icon="ticket">
                 Tiket saya
               </DashLink>
             </>
           ) : null}
           {applying ? (
             <>
-              <DashLink href="/organizer/apply" icon="userPlus">
+              <DashLink href="/dashboard/organizer/apply" icon="userPlus">
                 Ajukan sebagai penyelenggara
               </DashLink>
-              <DashLink href="/organizer/status" icon="file">
+              <DashLink href="/dashboard/organizer/status" icon="file">
                 Status pengajuan
               </DashLink>
             </>

@@ -12,10 +12,22 @@ body {
   overflow-x: hidden;
 }
 
-#konten-utama:has(.auth-lock) {
+#konten-utama:has(.auth-lock),
+#konten-utama:has(.workspace-root) {
   height: 100dvh;
   max-height: 100dvh;
   overflow: hidden;
+}
+
+html:has(.workspace-root),
+body:has(.workspace-root) {
+  height: 100dvh;
+  max-height: 100dvh;
+  overflow: hidden;
+}
+
+body:has([data-clock-host]) .live-clock-global {
+  display: none;
 }
 
 body {

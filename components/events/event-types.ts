@@ -77,6 +77,7 @@ export type SeatMapRecord = {
   altText: string;
   legend: string;
   status: string;
+  url?: string;
 };
 
 export const TIMEZONES = ["Asia/Jakarta", "Asia/Makassar", "Asia/Jayapura"] as const;

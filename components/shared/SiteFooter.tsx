@@ -52,10 +52,10 @@ export async function SiteFooter() {
                 {buyer ? (
                   <>
                     <li>
-                      <FooterLink href="/tickets">Tiket saya</FooterLink>
+                      <FooterLink href="/dashboard/ticket">Tiket saya</FooterLink>
                     </li>
                     <li>
-                      <FooterLink href="/orders">Order saya</FooterLink>
+                      <FooterLink href="/dashboard/order">Order saya</FooterLink>
                     </li>
                   </>
                 ) : (
@@ -64,7 +64,7 @@ export async function SiteFooter() {
                   </li>
                 )}
                 <li>
-                  <FooterLink href="/notifications">Notifikasi</FooterLink>
+                  <FooterLink href="/dashboard/notifications">Notifikasi</FooterLink>
                 </li>
               </>
             ) : (
@@ -76,7 +76,7 @@ export async function SiteFooter() {
                   <FooterLink href="/register">Daftar</FooterLink>
                 </li>
                 <li>
-                  <FooterLink href="/tickets">Tiket saya</FooterLink>
+                  <FooterLink href="/dashboard/ticket">Tiket saya</FooterLink>
                 </li>
               </>
             )}
@@ -92,7 +92,7 @@ export async function SiteFooter() {
                   <FooterLink href="/dashboard">Dashboard</FooterLink>
                 </li>
                 <li>
-                  <FooterLink href="/organizer/apply">Pengajuan organizer</FooterLink>
+                  <FooterLink href="/dashboard/organizer/apply">Pengajuan organizer</FooterLink>
                 </li>
               </>
             ) : (

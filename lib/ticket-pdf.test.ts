@@ -41,4 +41,13 @@ describe("buildEventTicketPdfBytes", () => {
     expect(raw).toContain("QR tidak ditampilkan");
     expect(raw).not.toContain("SIAP DIPAKAI");
   });
+
+  it("labels ended events as archive, not entry credentials", () => {
+    const raw = new TextDecoder("latin1").decode(buildEventTicketPdfBytes({ ...ticket, eventEnded: true }));
+    expect(raw).toContain("EVENT TELAH SELESAI");
+    expect(raw).toContain("TIDAK BERLAKU");
+    expect(raw).toContain("Check-in tidak lagi berlaku");
+    expect(raw).not.toContain("SIAP DIPAKAI");
+    expect(raw).not.toContain("Tunjukkan kepada petugas");
+  });
 });

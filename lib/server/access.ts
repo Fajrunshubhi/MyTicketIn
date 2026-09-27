@@ -52,13 +52,18 @@ export async function accessFor(user: AuthUser): Promise<Access> {
   const status = rows[0]?.status;
   if (!status) return acc;
   acc.organizerStatus = status;
-  if (status.toUpperCase() === "APPROVED") {
-    acc.canOrganize = true;
+  const st = status.toUpperCase();
+  if (st === "APPROVED" || st === "SUSPENDED") {
+    acc.kind = "organizer";
     acc.canBuy = false;
     acc.canApplyOrganizer = false;
-    acc.kind = "organizer";
+    acc.canOrganize = st === "APPROVED";
   }
   return acc;
+}
+
+export function hasOrganizerWorkspace(acc: Access): boolean {
+  return acc.kind === "organizer";
 }
 
 export function parsePortal(raw: string): string {
@@ -95,7 +100,9 @@ export function authorizePortal(portal: string, acc: Access): string | null {
   if (portal === "organizer") {
     if (acc.isAdmin) return "Akun admin harus masuk melalui portal Admin aplikasi.";
     if (acc.kind === "staff") return "Akun petugas harus masuk melalui portal Petugas check-in.";
-    if (!acc.canOrganize) return "Masuk sebagai pembeli tiket. Pengajuan sebagai penyelenggara dilakukan setelah Anda masuk.";
+    if (acc.kind !== "organizer") {
+      return "Masuk sebagai pembeli tiket. Pengajuan sebagai penyelenggara dilakukan setelah Anda masuk.";
+    }
     return null;
   }
   if (portal === "staff") {
@@ -106,7 +113,7 @@ export function authorizePortal(portal: string, acc: Access): string | null {
   if (portal === "buyer") {
     if (acc.isAdmin) return "Akun admin harus masuk melalui portal Admin aplikasi.";
     if (acc.kind === "staff") return "Akun petugas harus masuk melalui portal Petugas check-in.";
-    if (acc.canOrganize) return "Akun ini adalah penyelenggara event. Masuk melalui portal Penyelenggara event.";
+    if (acc.kind === "organizer") return "Akun ini adalah penyelenggara event. Masuk melalui portal Penyelenggara event.";
     return null;
   }
   return "Jenis akun tidak cocok dengan portal yang dipilih.";

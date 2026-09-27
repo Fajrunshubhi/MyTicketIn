@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { formatCheckInBefore, formatDateTime, formatRupiah } from "@/lib/format";
-import { SALE_LABEL, type PublicEvent } from "@/components/events/catalog-types";
+import { type PublicEvent } from "@/components/events/catalog-types";
 import { TicketTypeList } from "@/components/events/TicketTypeList";
 import { TicketSelector } from "@/components/events/TicketSelector";
 import { SimilarEvents } from "@/components/recommendations/SimilarEvents";
@@ -114,21 +114,17 @@ export async function EventDetail({ event }: { event: PublicEvent }) {
             </section>
           ) : null}
 
-          {event.seatMap ? (
+          {event.seatMap?.url ? (
             <figure>
-              <img src={event.seatMap.url} alt={event.seatMap.altText} className="w-full rounded-2xl border border-stone-200" />
-              <figcaption className="mt-2 text-sm text-ink/60">{event.seatMap.legend}</figcaption>
+              <img src={event.seatMap.url} alt={event.seatMap.altText} className="w-full rounded-2xl border border-stone-200 bg-white object-contain" />
+              {event.seatMap.legend ? <figcaption className="mt-2 text-sm text-ink/60">{event.seatMap.legend}</figcaption> : null}
             </figure>
           ) : null}
 
-          {event.seats && event.seats.length > 0 ? (
-            <ul className="grid grid-cols-2 gap-2" aria-label="Daftar kursi">
-              {event.seats.map((seat) => (
-                <li key={seat.id} className="rounded-xl border border-stone-200 bg-white px-3 py-2 text-sm text-ink/80">
-                  {seat.label} · {SALE_LABEL[seat.saleStatus] || seat.saleStatus}
-                </li>
-              ))}
-            </ul>
+          {event.inventoryMode === "RESERVED_SEATING" && event.seats && event.seats.length > 0 ? (
+            <p className="text-sm text-ink/65">
+              {event.seats.filter((s) => s.saleStatus === "AVAILABLE").length} kursi masih tersedia dari {event.seats.length} kursi.
+            </p>
           ) : null}
         </div>
 
@@ -139,7 +135,14 @@ export async function EventDetail({ event }: { event: PublicEvent }) {
             <p className="mt-2 text-sm text-ink/70">{formatDateTime(event.startsAt, event.timezone)}</p>
             <p className="text-sm text-ink/55">{formatCheckInBefore(event.startsAt, event.timezone)}</p>
             <div className="mt-4">
-              {canPurchase ? (
+              {event.purchasable === false ? (
+                <>
+                  <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950">
+                    Penyelenggara sedang ditangguhkan. Event ini tetap dapat dilihat, tetapi tiket tidak dijual sampai akun dipulihkan.
+                  </p>
+                  <TicketTypeList types={event.ticketTypes} timezone={event.timezone} />
+                </>
+              ) : canPurchase ? (
                 <TicketSelector event={event} />
               ) : (
                 <>

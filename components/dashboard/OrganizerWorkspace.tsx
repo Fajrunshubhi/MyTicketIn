@@ -5,8 +5,9 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { OrganizerEventCard } from "@/components/dashboard/OrganizerEventCard";
 import { type EventRecord, type TicketTypeRecord } from "@/components/events/event-types";
+import { Icon, type IconName } from "@/components/ui/Icon";
 import { type AccountProfile } from "@/lib/account";
-import { formatDateTime, formatRelativeId, formatRupiah } from "@/lib/format";
+import { formatDateTime, formatRelativeId, formatRupiah, eventHasEnded } from "@/lib/format";
 import { SalesBreakdownCharts, type SalesBar } from "@/components/dashboard/SalesBreakdownCharts";
 
 type DashEvent = {
@@ -34,6 +35,7 @@ type Dash = {
     categories?: SalesBar[];
     ticketTypes?: SalesBar[];
   };
+  asOf?: string;
 };
 
 type Notice = {
@@ -52,17 +54,133 @@ type EventDetail = {
 
 type TrendPoint = { startAt: string; ticketsSold: number; grossSandboxRupiah: number };
 
-const TYPE_THEMES = [
-  { wrap: "bg-sky-50", code: "text-sky-600", bar: "bg-sky-500" },
-  { wrap: "bg-amber-50", code: "text-amber-700", bar: "bg-amber-500" },
-  { wrap: "bg-emerald-50", code: "text-emerald-700", bar: "bg-emerald-500" },
-];
+function greetingId(): string {
+  const hour = Number(
+    new Intl.DateTimeFormat("en-GB", { hour: "numeric", hour12: false, timeZone: "Asia/Jakarta" }).format(new Date()),
+  );
+  if (hour < 11) return "Selamat pagi";
+  if (hour < 15) return "Selamat siang";
+  if (hour < 18) return "Selamat sore";
+  return "Selamat malam";
+}
 
-function initials(name: string): string {
-  const parts = name.trim().split(/\s+/).filter(Boolean);
-  if (parts.length === 0) return "—";
-  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
-  return (parts[0][0] + parts[1][0]).toUpperCase();
+function ticketSoldCount(ticket: TicketTypeRecord): number {
+  return ticket.paidQuantity ?? Math.max(0, ticket.quota - (ticket.remaining ?? ticket.quota));
+}
+
+function percent(part: number, whole: number): number | null {
+  if (!whole || whole < 0) return null;
+  return Math.round((part / whole) * 100);
+}
+
+function compactRupiah(n: number): string {
+  if (n >= 1_000_000) return `Rp${(n / 1_000_000).toFixed(n % 1_000_000 === 0 ? 0 : 1)} jt`;
+  if (n >= 1_000) return `Rp${Math.round(n / 1_000)} rb`;
+  return formatRupiah(n);
+}
+
+function TicketTypeSalesChart({ types }: { types: TicketTypeRecord[] }) {
+  const [metric, setMetric] = useState<"tickets" | "revenue">("tickets");
+  const rows = types.map((ticket) => {
+    const ticketsSold = ticketSoldCount(ticket);
+    return {
+      id: ticket.id,
+      name: ticket.name,
+      ticketsSold,
+      revenue: ticketsSold * ticket.priceRupiah,
+    };
+  });
+  const hasSales = rows.some((row) => row.ticketsSold > 0);
+  const max = Math.max(...rows.map((row) => (metric === "tickets" ? row.ticketsSold : row.revenue)), 1);
+
+  return (
+    <div>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h3 className="text-sm font-semibold text-ink">Penjualan jenis tiket</h3>
+        <div className="flex gap-1" role="group" aria-label="Metrik grafik jenis tiket">
+          {(
+            [
+              { id: "tickets" as const, label: "Tiket" },
+              { id: "revenue" as const, label: "Pendapatan" },
+            ]
+          ).map((opt) => (
+            <button
+              key={opt.id}
+              type="button"
+              aria-pressed={metric === opt.id}
+              className={`inline-flex min-h-11 items-center rounded-lg px-3 text-xs font-medium ${
+                metric === opt.id ? "bg-ink text-white" : "border border-stone-200 text-ink/70 hover:bg-stone-50"
+              }`}
+              onClick={() => setMetric(opt.id)}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+      </div>
+      <p className="mt-1 text-xs text-ink/50">Kolom vertikal untuk event yang dipilih.</p>
+      {!hasSales ? (
+        <p className="mt-6 text-sm text-ink/55">Belum ada penjualan lunas pada event ini.</p>
+      ) : (
+        <div className="mt-4 overflow-x-auto">
+          <ul className="flex h-56 min-w-0 items-end justify-center gap-3 px-1" role="img" aria-label="Grafik kolom penjualan jenis tiket">
+            {rows.map((row) => {
+              const value = metric === "tickets" ? row.ticketsSold : row.revenue;
+              const height = Math.max(value > 0 ? 8 : 0, Math.round((value / max) * 100));
+              const valueLabel = metric === "tickets" ? String(row.ticketsSold) : compactRupiah(row.revenue);
+              return (
+                <li key={row.id} className="flex h-full min-w-[3.25rem] max-w-[5.5rem] flex-1 flex-col items-center justify-end">
+                  <p className="mb-1 text-[11px] tabular-nums text-ink/70">{valueLabel}</p>
+                  <div className="flex h-[11.5rem] w-full items-end justify-center">
+                    <div
+                      className="w-[70%] max-w-[2.75rem] rounded-t-lg bg-[#6d4aff]"
+                      style={{ height: `${height}%` }}
+                      title={`${row.name}: ${metric === "tickets" ? `${row.ticketsSold} tiket` : formatRupiah(row.revenue)}`}
+                      aria-label={`${row.name}: ${metric === "tickets" ? `${row.ticketsSold} tiket` : formatRupiah(row.revenue)}`}
+                    />
+                  </div>
+                  <p className="mt-2 w-full truncate text-center text-xs font-medium text-ink" title={row.name}>
+                    {row.name}
+                  </p>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function dayLabel(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  return new Intl.DateTimeFormat("id-ID", { day: "numeric", month: "short", timeZone: "Asia/Jakarta" }).format(d);
+}
+
+function KpiCard({
+  label,
+  value,
+  hint,
+  icon,
+}: {
+  label: string;
+  value: string;
+  hint?: string;
+  icon: IconName;
+}) {
+  return (
+    <li className="rounded-3xl bg-white p-5 shadow-sm">
+      <div className="flex items-start justify-between gap-3">
+        <p className="text-sm text-ink/55">{label}</p>
+        <span className="inline-flex h-9 w-9 items-center justify-center rounded-2xl bg-gold-50 text-gold-700">
+          <Icon name={icon} className="h-4 w-4" />
+        </span>
+      </div>
+      <p className="mt-3 font-display text-2xl tabular-nums text-ink sm:text-3xl">{value}</p>
+      {hint ? <p className="mt-1 text-xs text-ink/45">{hint}</p> : null}
+    </li>
+  );
 }
 
 function smoothLine(points: { x: number; y: number }[]): string {
@@ -83,24 +201,15 @@ function smoothLine(points: { x: number; y: number }[]): string {
   return d;
 }
 
-function hourLabel(iso: string): string {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "";
-  const parts = new Intl.DateTimeFormat("id-ID", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "Asia/Jakarta" }).formatToParts(d);
-  const hh = parts.find((p) => p.type === "hour")?.value ?? "00";
-  const mm = parts.find((p) => p.type === "minute")?.value ?? "00";
-  return `${hh}.${mm}`;
-}
-
 function SalesChart({ series }: { series: TrendPoint[] }) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const [tip, setTip] = useState<{ i: number; x: number; y: number } | null>(null);
-  const w = 280;
-  const h = 150;
-  const padL = 8;
-  const padR = 8;
-  const padT = 12;
-  const padB = 28;
+  const w = 720;
+  const h = 240;
+  const padL = 36;
+  const padR = 12;
+  const padT = 16;
+  const padB = 32;
   const plotW = w - padL - padR;
   const plotH = h - padT - padB;
   const max = Math.max(...series.map((p) => p.ticketsSold), 1);
@@ -113,39 +222,52 @@ function SalesChart({ series }: { series: TrendPoint[] }) {
   const area = points.length
     ? `${line} L ${points[points.length - 1].x} ${padT + plotH} L ${points[0].x} ${padT + plotH} Z`
     : "";
-  const ticks = series.length <= 4
-    ? series
-    : [series[0], series[Math.floor(series.length / 3)], series[Math.floor((series.length * 2) / 3)], series[series.length - 1]];
+  const ticks =
+    series.length <= 6
+      ? series
+      : [series[0], series[Math.floor(series.length / 3)], series[Math.floor((series.length * 2) / 3)], series[series.length - 1]];
+  const yTicks = [0, 0.5, 1];
   const hitW = series.length <= 1 ? plotW : plotW / Math.max(series.length - 1, 1);
   const highlight = tip ? series[tip.i] : null;
 
   return (
     <figure>
       {series.length === 0 ? (
-        <p className="mt-8 text-sm text-ink/55">Belum ada penjualan Paid pada rentang ini.</p>
+        <p className="mt-8 text-sm text-ink/55">Belum ada penjualan pada 30 hari terakhir.</p>
       ) : (
         <div ref={wrapRef} className="relative" onMouseLeave={() => setTip(null)}>
-          <svg viewBox={`0 0 ${w} ${h}`} className="mt-2 h-36 w-full" role="img" aria-label="Tren penjualan tiket">
+          <svg viewBox={`0 0 ${w} ${h}`} className="mt-2 h-56 w-full sm:h-64" role="img" aria-label="Tren tiket laku 30 hari">
             <defs>
               <linearGradient id="ticket-selling-fill" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="#f0b429" stopOpacity="0.35" />
-                <stop offset="100%" stopColor="#f0b429" stopOpacity="0.02" />
+                <stop offset="0%" stopColor="#6d4aff" stopOpacity="0.28" />
+                <stop offset="100%" stopColor="#6d4aff" stopOpacity="0.02" />
               </linearGradient>
             </defs>
+            {yTicks.map((t) => {
+              const y = padT + plotH * (1 - t);
+              return (
+                <g key={t}>
+                  <line x1={padL} x2={w - padR} y1={y} y2={y} stroke="#f5f5f4" strokeWidth="1" />
+                  <text x={padL - 8} y={y + 4} textAnchor="end" fontSize="11" fill="#a8a29e">
+                    {Math.round(max * t)}
+                  </text>
+                </g>
+              );
+            })}
             <path d={area} fill="url(#ticket-selling-fill)" />
-            <path d={line} fill="none" stroke="#e8a317" strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round" />
+            <path d={line} fill="none" stroke="#6d4aff" strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round" />
             {tip ? (
-              <line x1={points[tip.i].x} x2={points[tip.i].x} y1={padT} y2={padT + plotH} stroke="#f0b429" strokeDasharray="3 3" opacity="0.7" />
+              <line x1={points[tip.i].x} x2={points[tip.i].x} y1={padT} y2={padT + plotH} stroke="#6d4aff" strokeDasharray="3 3" opacity="0.45" />
             ) : null}
             {points.map((p, i) => (
-              <circle key={series[i].startAt} cx={p.x} cy={p.y} r={tip?.i === i ? 4 : 0} fill="#e8a317" />
+              <circle key={series[i].startAt} cx={p.x} cy={p.y} r={tip?.i === i ? 4.5 : 0} fill="#6d4aff" />
             ))}
             {ticks.map((row) => {
               const i = series.indexOf(row);
               const x = points[i]?.x ?? padL;
               return (
-                <text key={`tick-${row.startAt}`} x={x} y={h - 6} textAnchor="middle" fontSize="9" fill="#a8a29e">
-                  {hourLabel(row.startAt)}
+                <text key={`tick-${row.startAt}`} x={x} y={h - 8} textAnchor="middle" fontSize="11" fill="#78716c">
+                  {dayLabel(row.startAt)}
                 </text>
               );
             })}
@@ -184,7 +306,7 @@ function SalesChart({ series }: { series: TrendPoint[] }) {
               role="tooltip"
               className="pointer-events-none absolute z-20 min-w-[9rem] rounded-xl bg-ink px-3 py-2 text-white shadow-lg"
               style={{
-                left: Math.min(Math.max(tip.x, 72), (wrapRef.current?.clientWidth || 280) - 72),
+                left: Math.min(Math.max(tip.x, 72), (wrapRef.current?.clientWidth || 720) - 72),
                 top: Math.max(tip.y - 10, 8),
                 transform: "translate(-50%, -100%)",
               }}
@@ -209,6 +331,7 @@ export function OrganizerWorkspace({ me }: { me: AccountProfile }) {
   const [notices, setNotices] = useState<Notice[]>([]);
   const [trend, setTrend] = useState<TrendPoint[]>([]);
   const [trendEventId, setTrendEventId] = useState("");
+  const [capacityEventId, setCapacityEventId] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
 
@@ -228,7 +351,7 @@ export function OrganizerWorkspace({ me }: { me: AccountProfile }) {
           return;
         }
         if (dashRes.status === 403 || listRes.status === 403) {
-          setError("Dashboard ini hanya untuk penyelenggara yang disetujui.");
+          setError("Dashboard ini hanya untuk penyelenggara.");
           setLoading(false);
           return;
         }
@@ -302,148 +425,319 @@ export function OrganizerWorkspace({ me }: { me: AccountProfile }) {
   const upcoming = filtered
     .filter((row) => row.event.status === "PUBLISHED" && new Date(row.event.startsAt).getTime() > now)
     .sort((a, b) => new Date(a.event.startsAt).getTime() - new Date(b.event.startsAt).getTime());
+  const ended = filtered
+    .filter((row) => {
+      const publishedOrDone = row.event.status === "PUBLISHED" || row.event.status === "COMPLETED";
+      return publishedOrDone && eventHasEnded(row.event.endsAt, row.event.startsAt, now);
+    })
+    .sort((a, b) => new Date(b.event.endsAt).getTime() - new Date(a.event.endsAt).getTime());
   const drafts = filtered.filter((row) => row.event.status === "DRAFT" || row.event.status === "PENDING_REVIEW");
 
-  const ticketCards = filtered
-    .flatMap((row) => row.ticketTypes.map((ticket) => ({ event: row.event, ticket })))
-    .slice(0, 6);
+  const capacityChoices = useMemo(() => {
+    const seen = new Set<string>();
+    const rows: EventDetail[] = [];
+    for (const row of [...ongoing, ...upcoming, ...ended, ...drafts, ...filtered]) {
+      if (!row.ticketTypes.length || seen.has(row.event.id)) continue;
+      seen.add(row.event.id);
+      rows.push(row);
+    }
+    return rows;
+  }, [ongoing, upcoming, ended, drafts, filtered]);
+  const capacityRow =
+    capacityChoices.find((row) => row.event.id === capacityEventId) || capacityChoices[0] || null;
+  const capacityTypes = capacityRow
+    ? [...capacityRow.ticketTypes].sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name, "id"))
+    : [];
+
+  const featuredTitle = dash?.events.find((e) => e.id === trendEventId)?.title;
+  const summary = dash?.summary;
+  const attendancePct =
+    summary?.attendanceRate == null ? null : Math.round(summary.attendanceRate * 100);
+  const displayName = me.name?.trim() || me.username;
 
   return (
     <div>
-      <p className="text-sm text-gold-800">SANDBOX / TRANSAKSI UJI · bukan settlement</p>
-      <p className="sr-only">Masuk sebagai {me.name || me.username}</p>
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <h2 className="font-display text-2xl text-ink sm:text-3xl">
+            {greetingId()}, {displayName}
+          </h2>
+          <p className="mt-1 text-sm text-ink/55">
+            Ringkasan penjualan dan kehadiran event Anda.
+            {dash?.asOf ? ` Per ${formatDateTime(dash.asOf)}.` : ""}
+          </p>
+        </div>
+        <Link
+          href="/dashboard/laporan"
+          className="inline-flex min-h-11 items-center text-sm font-medium text-gold-700"
+        >
+          Laporan lengkap
+          <span aria-hidden="true" className="ml-1">›</span>
+        </Link>
+      </div>
+      <p className="sr-only">Masuk sebagai {displayName}</p>
       {error ? <p role="alert" className="mt-4 text-sm text-red-700">{error}</p> : null}
       {loading ? <p role="status" className="mt-6 text-ink/60">Memuat dashboard penyelenggara…</p> : null}
 
-          <div className="mt-6 grid gap-6 xl:grid-cols-[minmax(0,1fr)_18.5rem]">
-            <div className="min-w-0 space-y-6">
-              <SalesBreakdownCharts
-                events={dash?.charts?.events}
-                categories={dash?.charts?.categories}
-                ticketTypes={dash?.charts?.ticketTypes}
-              />
-              <section aria-labelledby="kapasitas-tiket">
-                <h2 id="kapasitas-tiket" className="text-lg font-semibold text-ink">Jenis tiket</h2>
-                {ticketCards.length === 0 ? (
-                  <p className="mt-4 rounded-3xl border border-dashed border-stone-200 bg-white px-5 py-8 text-sm text-ink/60">
-                    Belum ada jenis tiket. Tambahkan tiket pada event, lalu kuota dan sisa akan tampil di sini.
-                  </p>
-                ) : (
-                  <ul className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-                    {ticketCards.map(({ event, ticket }, i) => {
-                      const theme = TYPE_THEMES[i % TYPE_THEMES.length];
-                      const used = ticket.paidQuantity ?? Math.max(0, ticket.quota - (ticket.remaining ?? ticket.quota));
+      {summary && !loading ? (
+        <ul className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+          <KpiCard
+            label="Pesanan lunas"
+            value={String(summary.paidOrderCount)}
+            hint="Pesanan yang sudah dibayar"
+            icon="orders"
+          />
+          <KpiCard
+            label="Tiket terjual"
+            value={String(summary.ticketsSold)}
+            hint="Tiket yang sudah terbit"
+            icon="ticket"
+          />
+          <KpiCard
+            label="Pendapatan"
+            value={formatRupiah(summary.grossSandboxRupiah)}
+            hint="Total penjualan kotor"
+            icon="chart"
+          />
+          <KpiCard
+            label="Check-in"
+            value={String(summary.checkInCount)}
+            hint={attendancePct == null ? "Rasio kehadiran belum tersedia" : `Kehadiran ${attendancePct}% dari tiket terjual`}
+            icon="success"
+          />
+          <KpiCard
+            label="Refund selesai"
+            value={formatRupiah(summary.completedRefundRupiah)}
+            icon="file"
+          />
+        </ul>
+      ) : null}
+
+      <div className="mt-6 grid gap-6 xl:grid-cols-[minmax(0,1fr)_20rem]">
+        <section className="min-w-0 rounded-3xl bg-white p-5 shadow-sm" aria-labelledby="tren-penjualan">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <h2 id="tren-penjualan" className="text-lg font-semibold text-ink">Tren 30 hari</h2>
+              <p className="mt-1 text-sm text-ink/55">
+                Tiket laku per hari
+                {featuredTitle ? ` · ${featuredTitle}` : ""} (zona Asia/Jakarta).
+              </p>
+            </div>
+            <Link
+              href={trendEventId ? `/dashboard/laporan?eventId=${encodeURIComponent(trendEventId)}` : "/dashboard/laporan"}
+              className="inline-flex min-h-11 items-center text-sm font-medium text-gold-700"
+            >
+              Filter event
+              <span aria-hidden="true" className="ml-1">›</span>
+            </Link>
+          </div>
+          <SalesChart series={trend} />
+        </section>
+
+        <div className="space-y-6">
+          <section className="rounded-3xl bg-white p-5 shadow-sm" aria-labelledby="perlu-tindak">
+            <h2 id="perlu-tindak" className="text-lg font-semibold text-ink">Perlu tindak lanjut</h2>
+            {drafts.length === 0 ? (
+              <p className="mt-4 text-sm text-ink/55">Tidak ada draf atau event menunggu tinjauan.</p>
+            ) : (
+              <ul className="mt-4 space-y-3">
+                {drafts.slice(0, 6).map((row) => (
+                  <li key={row.event.id}>
+                    <Link href={`/dashboard/event/${row.event.id}`} className="block rounded-2xl bg-stone-50 px-3 py-3 hover:bg-stone-100">
+                      <p className="truncate text-sm font-medium text-ink">{row.event.title}</p>
+                      <p className="mt-0.5 text-xs text-ink/50">
+                        {row.event.status === "PENDING_REVIEW" ? "Menunggu tinjauan admin" : "Draf · belum diajukan"}
+                      </p>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+
+          <section className="rounded-3xl bg-white p-5 shadow-sm" aria-labelledby="notif-panel">
+            <div className="flex items-center justify-between gap-3">
+              <h2 id="notif-panel" className="text-lg font-semibold text-ink">Notifikasi</h2>
+              <Link href="/dashboard/notifications" className="text-sm text-gold-700">Semua</Link>
+            </div>
+            {notices.length === 0 ? (
+              <p className="mt-6 text-sm text-ink/55">Belum ada notifikasi.</p>
+            ) : (
+              <ul className="mt-4 space-y-4">
+                {notices.slice(0, 5).map((n) => (
+                  <li key={n.id} className="flex gap-3">
+                    <span className={`mt-1 h-2.5 w-2.5 shrink-0 rounded-full ${n.readAt ? "bg-stone-300" : "bg-gold-500"}`} aria-hidden="true" />
+                    <div className="min-w-0">
+                      <p className="text-sm text-ink">
+                        <span className="font-semibold">{n.title}</span>
+                        <span className="text-ink/70"> — {n.body}</span>
+                      </p>
+                      <p className="mt-1 text-xs text-ink/40">
+                        {n.readAt ? "Sudah dibaca" : "Belum dibaca"} · {formatRelativeId(n.createdAt)}
+                      </p>
+                      {n.actionPath ? (
+                        <Link href={n.actionPath} className="mt-1 inline-block text-xs font-medium text-gold-700">
+                          Buka
+                        </Link>
+                      ) : null}
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+        </div>
+      </div>
+
+      <div className="mt-6 space-y-6">
+          <SalesBreakdownCharts
+            events={dash?.charts?.events}
+            categories={dash?.charts?.categories}
+            hideTicketTypes
+          />
+
+          <section className="rounded-3xl bg-white p-5 shadow-sm" aria-labelledby="kapasitas-tiket">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+              <div>
+                <h2 id="kapasitas-tiket" className="text-lg font-semibold text-ink">Kapasitas tiket</h2>
+                <p className="mt-1 text-sm text-ink/55">Kuota dan penjualan jenis tiket untuk satu event.</p>
+              </div>
+              {capacityRow ? (
+                <Link href={`/dashboard/event/${capacityRow.event.id}`} className="text-sm font-medium text-gold-700">
+                  Kelola event ini
+                </Link>
+              ) : (
+                <Link href="/dashboard/event" className="text-sm text-gold-700">Kelola event</Link>
+              )}
+            </div>
+            {capacityChoices.length > 1 ? (
+              <label className="mt-4 block text-sm text-ink/80">
+                Pilih event
+                <select
+                  className="mt-1 block min-h-11 w-full max-w-lg rounded-xl border border-stone-200 bg-white px-3 text-sm text-ink"
+                  value={capacityRow?.event.id || ""}
+                  onChange={(e) => setCapacityEventId(e.target.value)}
+                >
+                  {capacityChoices.map((row) => (
+                    <option key={row.event.id} value={row.event.id}>
+                      {row.event.title}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : null}
+            {capacityTypes.length === 0 ? (
+              <p className="mt-4 text-sm text-ink/60">Belum ada jenis tiket. Tambahkan tiket pada event, lalu kuota tampil di sini.</p>
+            ) : (
+              <div className="mt-4 grid gap-8 lg:grid-cols-2 lg:items-start">
+                <div className="min-w-0 max-h-[22rem] overflow-auto">
+                <table className="w-full min-w-[28rem] text-left text-sm">
+                  <caption className="sr-only">Kuota jenis tiket untuk {capacityRow?.event.title}</caption>
+                  <thead>
+                    <tr className="border-b border-stone-100 text-xs font-medium uppercase tracking-wide text-ink/45">
+                      <th className="py-2 pr-3 font-medium">Jenis tiket</th>
+                      <th className="py-2 pr-3 text-right font-medium">Terjual</th>
+                      <th className="py-2 pr-3 text-right font-medium">Sisa</th>
+                      <th className="py-2 pr-3 font-medium">Kuota</th>
+                      <th className="py-2 text-right font-medium">Harga</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {capacityTypes.map((ticket) => {
+                      const used = ticketSoldCount(ticket);
+                      const remaining = ticket.remaining ?? Math.max(0, ticket.quota - used);
+                      const soldPct = percent(used, ticket.quota) ?? 0;
                       return (
-                        <li key={ticket.id} className={`rounded-3xl ${theme.wrap} p-5`}>
-                          <p className={`text-xs font-semibold uppercase tracking-wider ${theme.code}`}>{initials(ticket.name)}</p>
-                          <p className="mt-2 font-semibold text-ink">{ticket.name}</p>
-                          <p className="mt-1 text-sm text-ink/55">
-                            Terjual <span className={`font-semibold ${theme.code}`}>{used}</span>/{ticket.quota} tiket
-                          </p>
-                          <p className="mt-1 text-xs text-ink/45">Sisa {ticket.remaining ?? Math.max(0, ticket.quota - used)} · {formatRupiah(ticket.priceRupiah)}</p>
-                          <p className="mt-2 truncate text-xs text-ink/40">{event.title}</p>
-                        </li>
+                        <tr key={ticket.id} className="border-b border-stone-50 last:border-0">
+                          <td className="py-3 pr-3 font-medium text-ink">{ticket.name}</td>
+                          <td className="py-3 pr-3 text-right tabular-nums text-ink/80">
+                            {used}
+                            <span className="ml-1 text-xs text-ink/40">{soldPct}%</span>
+                          </td>
+                          <td className="py-3 pr-3 text-right tabular-nums text-ink/70">{remaining}</td>
+                          <td className="py-3 pr-3">
+                            <div className="flex items-center gap-2">
+                              <span className="w-8 shrink-0 tabular-nums text-ink/55">{ticket.quota}</span>
+                              <span className="h-1.5 min-w-[4rem] flex-1 overflow-hidden rounded-full bg-stone-100" aria-hidden="true">
+                                <span className="block h-full rounded-full bg-gold-500" style={{ width: `${soldPct}%` }} />
+                              </span>
+                            </div>
+                          </td>
+                          <td className="py-3 text-right tabular-nums text-ink/80">{formatRupiah(ticket.priceRupiah)}</td>
+                        </tr>
                       );
                     })}
-                  </ul>
-                )}
-              </section>
-
-              <section className="rounded-3xl bg-white p-5 shadow-sm" aria-labelledby="berlangsung">
-                <div className="flex items-center justify-between gap-3">
-                  <h2 id="berlangsung" className="text-lg font-semibold text-ink">Event berlangsung</h2>
-                  <Link href="/dashboard/event" className="text-sm text-gold-700">Semua</Link>
+                  </tbody>
+                </table>
                 </div>
-                {ongoing.length === 0 ? (
-                  <p className="mt-6 text-sm text-ink/55">Tidak ada event terbit yang sedang berlangsung.</p>
-                ) : (
-                  <ul className="mt-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-                    {ongoing.slice(0, 4).map((row) => (
+                <TicketTypeSalesChart types={capacityTypes} />
+              </div>
+            )}
+          </section>
+
+          <section className="rounded-3xl bg-white p-5 shadow-sm" aria-labelledby="berlangsung">
+            <div className="flex items-center justify-between gap-3">
+              <h2 id="berlangsung" className="text-lg font-semibold text-ink">Event berlangsung</h2>
+              <Link href="/dashboard/event" className="text-sm text-gold-700">Semua</Link>
+            </div>
+            {ongoing.length === 0 ? (
+              <p className="mt-6 text-sm text-ink/55">Tidak ada event terbit yang sedang berlangsung.</p>
+            ) : (
+              <ul className="mt-4 grid gap-4 sm:grid-cols-2">
+                {ongoing.slice(0, 4).map((row) => (
+                  <li key={row.event.id}>
+                    <OrganizerEventCard event={row.event} />
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+
+          <section className="rounded-3xl bg-white p-5 shadow-sm" aria-labelledby="mendatang">
+            <div className="flex items-center justify-between gap-3">
+              <h2 id="mendatang" className="text-lg font-semibold text-ink">Event mendatang</h2>
+              <Link href="/dashboard/event" className="text-sm text-gold-700">Semua</Link>
+            </div>
+            {upcoming.length === 0 && drafts.length === 0 ? (
+              <p className="mt-6 text-sm text-ink/55">Belum ada event terbit yang akan datang.</p>
+            ) : (
+              <ul className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                {upcoming.slice(0, 6).map((row) => (
+                  <li key={row.event.id}>
+                    <OrganizerEventCard event={row.event} />
+                  </li>
+                ))}
+                {upcoming.length === 0
+                  ? drafts.slice(0, 4).map((row) => (
                       <li key={row.event.id}>
                         <OrganizerEventCard event={row.event} />
                       </li>
-                    ))}
-                  </ul>
-                )}
-              </section>
-            </div>
-
-            <div className="space-y-6">
-              <section className="rounded-3xl bg-white p-5 shadow-sm" aria-labelledby="notif-panel">
-                <div className="flex items-center justify-between gap-3">
-                  <h2 id="notif-panel" className="text-lg font-semibold text-ink">Notifikasi</h2>
-                  <Link href="/dashboard/notifications" className="text-sm text-gold-700">Semua</Link>
-                </div>
-                {notices.length === 0 ? (
-                  <p className="mt-6 text-sm text-ink/55">Belum ada notifikasi.</p>
-                ) : (
-                  <ul className="mt-4 space-y-4">
-                    {notices.slice(0, 5).map((n) => (
-                      <li key={n.id} className="flex gap-3">
-                        <span className={`mt-1 h-2.5 w-2.5 shrink-0 rounded-full ${n.readAt ? "bg-stone-300" : "bg-gold-500"}`} aria-hidden="true" />
-                        <div className="min-w-0">
-                          <p className="text-sm text-ink">
-                            <span className="font-semibold">{n.title}</span>
-                            <span className="text-ink/70"> — {n.body}</span>
-                          </p>
-                          <p className="mt-1 text-xs text-ink/40">
-                            {n.readAt ? "Sudah dibaca" : "Belum dibaca"} · {formatRelativeId(n.createdAt)}
-                          </p>
-                          {n.actionPath ? (
-                            <Link href={n.actionPath} className="mt-1 inline-block text-xs font-medium text-gold-700">
-                              Buka
-                            </Link>
-                          ) : null}
-                        </div>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </section>
-            </div>
-          </div>
-
-          <div className="mt-6 grid gap-6 xl:grid-cols-[minmax(0,1fr)_20rem]">
-            <section className="rounded-3xl bg-white p-5 shadow-sm" aria-labelledby="mendatang">
-              <div className="flex items-center justify-between gap-3">
-                <h2 id="mendatang" className="text-lg font-semibold text-ink">Event mendatang</h2>
-                <Link href="/dashboard/event" className="text-sm text-gold-700">Semua</Link>
+                    ))
+                  : null}
+              </ul>
+            )}
+          </section>
+          <section className="rounded-3xl bg-white p-5 shadow-sm" aria-labelledby="selesai">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <h2 id="selesai" className="text-lg font-semibold text-ink">Event selesai</h2>
+                <p className="mt-1 text-sm text-ink/55">Jadwal sudah berakhir, termasuk yang status katalognya masih Terbit.</p>
               </div>
-              {upcoming.length === 0 && drafts.length === 0 ? (
-                <p className="mt-6 text-sm text-ink/55">Belum ada event terbit yang akan datang.</p>
-              ) : (
-                <ul className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-                  {upcoming.slice(0, 4).map((row) => (
-                    <li key={row.event.id}>
-                      <OrganizerEventCard event={row.event} />
-                    </li>
-                  ))}
-                  {upcoming.length === 0
-                    ? drafts.slice(0, 4).map((row) => (
-                        <li key={row.event.id}>
-                          <OrganizerEventCard event={row.event} />
-                        </li>
-                      ))
-                    : null}
-                </ul>
-              )}
-            </section>
-
-            <section className="rounded-3xl bg-white p-5 shadow-sm" aria-labelledby="jual-tiket">
-              <div className="flex items-start justify-between gap-3">
-                <h2 id="jual-tiket" className="text-base font-semibold text-ink">Penjualan tiket</h2>
-                <span className="text-ink/30" aria-hidden="true">···</span>
-              </div>
-              <SalesChart series={trend} />
-              <Link
-                href={trendEventId ? `/dashboard/laporan?eventId=${encodeURIComponent(trendEventId)}` : "/dashboard/laporan"}
-                className="mt-2 inline-flex min-h-11 items-center text-sm font-medium text-gold-700"
-              >
-                Selengkapnya
-                <span aria-hidden="true" className="ml-1">›</span>
-              </Link>
-            </section>
-          </div>
+              <Link href="/dashboard/event" className="text-sm text-gold-700">Semua</Link>
+            </div>
+            {ended.length === 0 ? (
+              <p className="mt-6 text-sm text-ink/55">Belum ada event yang jadwalnya berakhir.</p>
+            ) : (
+              <ul className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                {ended.slice(0, 6).map((row) => (
+                  <li key={row.event.id}>
+                    <OrganizerEventCard event={row.event} />
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+      </div>
     </div>
   );
 }

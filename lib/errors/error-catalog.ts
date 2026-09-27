@@ -25,6 +25,13 @@ export const errorCatalog: Record<string, CatalogEntry> = {
     message: "Data tidak valid.",
     recovery: "Perbaiki isian yang bertanda, lalu kirim ulang.",
   },
+  AUTH_RESET_TOKEN_INVALID: {
+    category: "AUTHENTICATION",
+    status: 400,
+    retryable: false,
+    message: "Tautan pemulihan tidak valid atau sudah dipakai.",
+    recovery: "Minta tautan baru dari halaman lupa kata sandi.",
+  },
   AUTH_REQUIRED: {
     category: "AUTHENTICATION",
     status: 401,
@@ -73,6 +80,27 @@ export const errorCatalog: Record<string, CatalogEntry> = {
     retryable: true,
     message: "Layanan tidak siap.",
     recovery: "Coba lagi. Jangan ulangi pembayaran sebelum status order terbarui.",
+  },
+  ORDER_NOT_PURCHASABLE: {
+    category: "CONFLICT",
+    status: 409,
+    retryable: false,
+    message: "Event tidak dapat dibeli.",
+    recovery: "Event masih dapat dilihat. Tunggu penyelenggara dipulihkan, atau pilih event lain.",
+  },
+  ORGANIZER_SUSPENDED: {
+    category: "AUTHORIZATION",
+    status: 403,
+    retryable: false,
+    message: "Akses tulis ditahan.",
+    recovery: "Data event lama tetap dapat dilihat. Kirim sanggahan dari halaman status.",
+  },
+  ORGANIZER_APPEAL_INVALID: {
+    category: "CONFLICT",
+    status: 409,
+    retryable: false,
+    message: "Sanggahan hanya untuk organizer yang ditangguhkan.",
+    recovery: "Muat ulang status pengajuan.",
   },
   INTERNAL_ERROR: {
     category: "INTERNAL",

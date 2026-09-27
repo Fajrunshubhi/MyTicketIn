@@ -1,5 +1,6 @@
 import { AppError, execute, newId, query } from "@/lib/server/http";
-import { detailsEditable, getOwnedEvent, markEventCancelled, normalizeTicketInput, type OrgEvent } from "@/lib/server/events-organizer";
+import { authoringMutable, detailsEditable, getOwnedEvent, markEventCancelled, normalizeTicketInput, type OrgEvent } from "@/lib/server/events-organizer";
+import { inspectImageBytes, publicImageSrc, saveGalleryFile } from "@/lib/server/gallery";
 
 function iso(v: unknown): string {
   return new Date(String(v)).toISOString();
@@ -58,14 +59,73 @@ export async function listSeats(eventId: string) {
   return rows.map((r) => ({ id: r.id, eventId: r.event_id, sectionId: r.section_id, label: r.label }));
 }
 
+export function seatMapPublicUrl(storageKey: string): string {
+  const key = String(storageKey || "").trim();
+  if (!key || key.startsWith("seat-map/")) return "";
+  return publicImageSrc(key, "");
+}
+
 export async function getSeatMap(eventId: string) {
-  const rows = await query<{ id: string; alt_text: string; legend: string; status: string }>(
-    `SELECT id, alt_text, legend, status::text AS status FROM seat_map_assets WHERE event_id=$1 LIMIT 1`,
+  const rows = await query<{ id: string; alt_text: string; legend: string; status: string; storage_key: string }>(
+    `SELECT id, alt_text, legend, status::text AS status, storage_key FROM seat_map_assets WHERE event_id=$1 LIMIT 1`,
     [eventId],
   );
   const m = rows[0];
   if (!m) return null;
-  return { id: m.id, altText: m.alt_text, legend: m.legend, status: m.status };
+  const url = seatMapPublicUrl(m.storage_key);
+  return { id: m.id, altText: m.alt_text, legend: m.legend, status: m.status, url, storageKey: m.storage_key };
+}
+
+export async function saveSeatMap(
+  orgId: string,
+  eventId: string,
+  altText: string,
+  legend: string,
+  expectedVersion: number,
+  image?: Buffer,
+) {
+  const e = await getOwnedEvent(orgId, eventId);
+  if (e.version !== expectedVersion) throw new AppError("EVENT_VERSION_CONFLICT", "Data berubah.", {}, 409);
+  const alt = altText.trim();
+  const leg = legend.trim();
+  if (alt.length < 3 || leg.length < 3) {
+    throw new AppError("VALIDATION_ERROR", "Teks alternatif dan legenda denah wajib diisi (minimal 3 karakter).", {}, 400);
+  }
+  const existing = await getSeatMap(eventId);
+  let storageKey = existing?.storageKey || "";
+  let mime = "image/png";
+  let byteSize = 0;
+  if (image && image.length) {
+    const meta = inspectImageBytes(image);
+    storageKey = await saveGalleryFile(image);
+    mime = meta.mime;
+    byteSize = image.length;
+  }
+  const ready = Boolean(seatMapPublicUrl(storageKey));
+  if (!ready) {
+    throw new AppError("VALIDATION_ERROR", "Unggah gambar denah JPEG, PNG, atau WebP (maks. 5 MB).", {}, 400);
+  }
+  const status = "READY";
+  if (existing) {
+    if (image && image.length) {
+      await execute(
+        `UPDATE seat_map_assets SET alt_text=$1, legend=$2, storage_key=$3, mime_type=$4, byte_size=$5, status=$6::image_asset_status WHERE event_id=$7`,
+        [alt, leg, storageKey, mime, byteSize, status, eventId],
+      );
+    } else {
+      await execute(
+        `UPDATE seat_map_assets SET alt_text=$1, legend=$2, status=$3::image_asset_status WHERE event_id=$4`,
+        [alt, leg, status, eventId],
+      );
+    }
+  } else {
+    await execute(
+      `INSERT INTO seat_map_assets (id, event_id, storage_key, mime_type, byte_size, alt_text, legend, status)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8::image_asset_status)`,
+      [newId(), eventId, storageKey, mime, byteSize, alt, leg, status],
+    );
+  }
+  await execute(`UPDATE events SET updated_at=CURRENT_TIMESTAMP, version=version+1 WHERE id=$1`, [eventId]);
 }
 
 export async function listGalleryUrls(eventId: string): Promise<string[]> {
@@ -92,15 +152,27 @@ export async function replaceGalleryUrls(eventId: string, urls: string[]) {
 export async function putSections(orgId: string, eventId: string, sections: { id?: string; ticketTypeId: string; name: string; sortOrder?: number }[], expectedVersion: number) {
   const e = await getOwnedEvent(orgId, eventId);
   if (e.version !== expectedVersion) throw new AppError("EVENT_VERSION_CONFLICT", "Data berubah.", {}, 409);
-  await execute(`DELETE FROM event_seats WHERE event_id=$1`, [eventId]);
-  await execute(`DELETE FROM venue_sections WHERE event_id=$1`, [eventId]);
-  for (let i = 0; i < sections.length; i++) {
-    const s = sections[i];
-    const name = String(s.name || "").trim();
-    if (!name) continue;
+  const next = sections
+    .map((s, i) => ({
+      id: String(s.id || "").trim() || newId(),
+      ticketTypeId: s.ticketTypeId,
+      name: String(s.name || "").trim(),
+      sortOrder: Number(s.sortOrder ?? i),
+    }))
+    .filter((s) => s.name && s.ticketTypeId);
+  const keep = next.map((s) => s.id);
+  if (keep.length) {
+    await execute(`DELETE FROM event_seats WHERE event_id=$1 AND NOT (section_id = ANY($2::text[]))`, [eventId, keep]);
+    await execute(`DELETE FROM venue_sections WHERE event_id=$1 AND NOT (id = ANY($2::text[]))`, [eventId, keep]);
+  } else {
+    await execute(`DELETE FROM event_seats WHERE event_id=$1`, [eventId]);
+    await execute(`DELETE FROM venue_sections WHERE event_id=$1`, [eventId]);
+  }
+  for (const s of next) {
     await execute(
-      `INSERT INTO venue_sections (id, event_id, ticket_type_id, name, sort_order) VALUES ($1,$2,$3,$4,$5)`,
-      [s.id?.trim() || newId(), eventId, s.ticketTypeId, name, Number(s.sortOrder ?? i)],
+      `INSERT INTO venue_sections (id, event_id, ticket_type_id, name, sort_order) VALUES ($1,$2,$3,$4,$5)
+       ON CONFLICT (id) DO UPDATE SET ticket_type_id=EXCLUDED.ticket_type_id, name=EXCLUDED.name, sort_order=EXCLUDED.sort_order`,
+      [s.id, eventId, s.ticketTypeId, s.name, s.sortOrder],
     );
   }
   await execute(`UPDATE events SET updated_at=CURRENT_TIMESTAMP, version=version+1 WHERE id=$1`, [eventId]);
@@ -123,22 +195,31 @@ export async function putSeats(orgId: string, eventId: string, seats: { sectionI
   await execute(`UPDATE events SET updated_at=CURRENT_TIMESTAMP, version=version+1 WHERE id=$1`, [eventId]);
 }
 
-export async function saveSeatMap(orgId: string, eventId: string, altText: string, legend: string, expectedVersion: number) {
-  const e = await getOwnedEvent(orgId, eventId);
-  if (e.version !== expectedVersion) throw new AppError("EVENT_VERSION_CONFLICT", "Data berubah.", {}, 409);
-  const alt = altText.trim();
-  const leg = legend.trim();
-  if (alt.length < 3 || leg.length < 3) throw new AppError("VALIDATION_ERROR", "Teks alternatif dan legenda wajib diisi.", {}, 400);
-  const existing = await getSeatMap(eventId);
-  if (existing) {
-    await execute(`UPDATE seat_map_assets SET alt_text=$1, legend=$2, status='READY'::image_asset_status WHERE event_id=$3`, [alt, leg, eventId]);
-  } else {
-    await execute(
-      `INSERT INTO seat_map_assets (id, event_id, storage_key, mime_type, byte_size, alt_text, legend, status)
-       VALUES ($1,$2,$3,'image/png',1,$4,$5,'READY'::image_asset_status)`,
-      [newId(), eventId, `seat-map/${eventId}.png`, alt, leg],
-    );
+export async function deleteTicket(orgId: string, eventId: string, ticketId: string, expectedVersion: number) {
+  const event = await getOwnedEvent(orgId, eventId);
+  if (!authoringMutable(String(event.status))) {
+    throw new AppError("EVENT_STATUS_INVALID", "Jenis tiket hanya dapat dihapus saat event masih draf atau ditolak.", {}, 409);
   }
+  const rows = await listTicketRows(eventId);
+  const t = rows.find((r) => String(r.id) === ticketId);
+  if (!t) throw new AppError("NOT_FOUND", "Jenis tiket tidak ditemukan.", {}, 404);
+  if (Number(t.version || 0) !== expectedVersion) {
+    throw new AppError("EVENT_VERSION_CONFLICT", "Data berubah.", {}, 409);
+  }
+  if (Number(t.paid_quantity || 0) + Number(t.reserved_quantity || 0) > 0) {
+    throw new AppError("TICKET_TYPE_IN_USE", "Jenis tiket yang sudah terpesan atau terjual tidak dapat dihapus.", {}, 409);
+  }
+  await execute(
+    `DELETE FROM event_seats WHERE section_id IN (SELECT id FROM venue_sections WHERE event_id=$1 AND ticket_type_id=$2)`,
+    [eventId, ticketId],
+  );
+  await execute(`DELETE FROM venue_sections WHERE event_id=$1 AND ticket_type_id=$2`, [eventId, ticketId]);
+  const n = await execute(`DELETE FROM event_ticket_types WHERE id=$1 AND event_id=$2 AND version=$3`, [
+    ticketId,
+    eventId,
+    expectedVersion,
+  ]);
+  if (!n) throw new AppError("EVENT_VERSION_CONFLICT", "Data berubah.", {}, 409);
   await execute(`UPDATE events SET updated_at=CURRENT_TIMESTAMP, version=version+1 WHERE id=$1`, [eventId]);
 }
 

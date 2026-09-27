@@ -44,12 +44,16 @@ export async function organizerDashboard(orgId: string, eventId = "", from = "",
     id: string;
     title: string;
     status: string;
+    starts_at: string;
+    ends_at: string;
+    timezone: string;
     paid_order_count: string;
     tickets_sold: string;
     gross: string;
     check_in_count: string;
   }>(
     `SELECT e.id, e.title, e.status::text AS status,
+            e.starts_at::text AS starts_at, e.ends_at::text AS ends_at, e.timezone,
             COALESCE(pay.paid_orders,0)::text AS paid_order_count,
             COALESCE(tk.tickets_sold,0)::text AS tickets_sold,
             COALESCE(pay.gross,0)::text AS gross,
@@ -96,7 +100,20 @@ export async function organizerDashboard(orgId: string, eventId = "", from = "",
     [orgId, evFilter],
   );
   const bar = (rows: { id: string; label: string; tickets: string; amount: string }[]) =>
-    rows.map((r) => ({ id: r.id, label: r.label, ticketsSold: n(r.tickets), grossSandboxRupiah: n(r.amount) }));
+    rows.map((r) => ({ key: r.id, label: r.label, ticketsSold: n(r.tickets), grossSandboxRupiah: n(r.amount) }));
+  const byTicketType = await query<{ id: string; label: string; tickets: string; amount: string }>(
+    `SELECT oi.ticket_type_name AS id, oi.ticket_type_name AS label,
+            COALESCE(SUM(oi.quantity),0)::text AS tickets,
+            COALESCE(SUM(oi.line_total_rupiah),0)::text AS amount
+     FROM order_items oi
+     JOIN orders o ON o.id = oi.order_id AND o.status = 'PAID'
+     JOIN events e ON e.id = o.event_id
+     WHERE e.organizer_profile_id=$1 AND ($2='' OR e.id=$2)
+     GROUP BY oi.ticket_type_name
+     ORDER BY COALESCE(SUM(oi.line_total_rupiah),0) DESC
+     LIMIT 12`,
+    [orgId, evFilter],
+  );
   return {
     summary: {
       paidOrderCount: n(s?.paid_orders),
@@ -110,13 +127,16 @@ export async function organizerDashboard(orgId: string, eventId = "", from = "",
       id: e.id,
       title: e.title,
       status: e.status,
+      startsAt: new Date(e.starts_at).toISOString(),
+      endsAt: new Date(e.ends_at).toISOString(),
+      timezone: e.timezone,
       paidOrderCount: n(e.paid_order_count),
       ticketsSold: n(e.tickets_sold),
       grossSandboxRupiah: n(e.gross),
       checkInCount: n(e.check_in_count),
     })),
     nextCursor: "",
-    charts: { events: bar(byEvent), categories: bar(byCategory), ticketTypes: [] as { id: string; label: string; ticketsSold: number; grossSandboxRupiah: number }[] },
+    charts: { events: bar(byEvent), categories: bar(byCategory), ticketTypes: bar(byTicketType) },
     range: { from, to },
     asOf: new Date().toISOString(),
     sandbox: true,

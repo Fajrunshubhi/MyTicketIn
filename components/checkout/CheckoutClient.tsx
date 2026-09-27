@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import BrandMark from "@/components/BrandMark";
 import LogoutButton from "@/components/LogoutButton";
+import { LiveClock } from "@/components/LiveClock";
 import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -298,18 +299,19 @@ export function CheckoutClient({ slug }: { slug: string }) {
     }
     const id = (body.data as { order?: { id: string } })?.order?.id;
     sessionStorage.removeItem("mti_checkout");
-    if (id) router.push(`/orders/${id}`);
+    if (id) router.push(`/dashboard/order/${id}`);
   }
 
   return (
     <div className="min-h-screen bg-[#f7f5fc]">
-      <header className="fixed inset-x-0 top-0 z-50 bg-white">
+      <header data-clock-host className="fixed inset-x-0 top-0 z-50 bg-white">
         <div className="mx-auto flex w-full max-w-6xl items-center justify-between gap-3 px-4 py-3 sm:px-6">
           <BrandMark compact href="/" />
           <p className="hidden min-w-0 truncate text-sm font-medium text-ink/70 sm:block">
             {summary?.event?.title || "Checkout tiket"}
           </p>
           <div className="flex shrink-0 items-center gap-2">
+            <LiveClock />
             <Link
               href={eventHref}
               className="inline-flex min-h-11 items-center rounded-xl px-3 text-sm font-medium text-gold-800 hover:underline"
@@ -346,6 +348,13 @@ export function CheckoutClient({ slug }: { slug: string }) {
         {error ? (
           <div className="mt-4">
             <Alert tone="error" title={error} />
+            {/ditangguhkan|tidak dapat dibeli/i.test(error) ? (
+              <p className="mt-3 text-sm">
+                <Link href={`/events/${slug}`} className="font-medium text-gold-800 underline-offset-2 hover:underline">
+                  Kembali ke detail event
+                </Link>
+              </p>
+            ) : null}
           </div>
         ) : null}
 

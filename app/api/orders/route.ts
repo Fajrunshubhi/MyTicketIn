@@ -15,6 +15,8 @@ export const POST = routeHandler(async (req: NextRequest) => {
   const body = await readJson<{
     eventId: string;
     items?: { ticketTypeId: string; quantity: number; attendees?: { fullName?: string; email?: string; phone?: string; identityNumber?: string }[] }[];
+    seatIds?: string[];
+    attendees?: { fullName?: string; email?: string; phone?: string; identityNumber?: string }[];
     confirmed?: boolean;
     redeemPoints?: number;
   }>(req);

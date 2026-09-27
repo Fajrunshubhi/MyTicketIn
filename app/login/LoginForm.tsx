@@ -49,7 +49,7 @@ type SessionUser = {
 
 function sessionAllowsPortal(user: SessionUser, portal: AuthPortal): boolean {
   const admin = Boolean(user.access?.isAdmin || user.role === "ADMIN");
-  const organizer = Boolean(user.access?.canOrganize);
+  const organizer = user.access?.kind === "organizer" || Boolean(user.access?.canOrganize);
   const staff = user.access?.kind === "staff";
   if (portal === "admin") return admin;
   if (admin) return false;

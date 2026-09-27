@@ -1,6 +1,8 @@
 import { createHash } from "crypto";
 import { AppError, execute, newId, query, tokenHash } from "@/lib/server/http";
 import type { AuthUser } from "@/lib/server/access";
+import { organizerSalesBlocked } from "@/lib/organizer-sales";
+import { issueTicketsForPaidOrder } from "@/lib/server/tickets";
 
 type CheckoutLine = {
   ticketTypeId: string;
@@ -9,6 +11,7 @@ type CheckoutLine = {
 };
 
 export async function listOrders(user: AuthUser, limit: number) {
+  await expireDueForBuyer(user.id);
   const lim = Math.min(Math.max(limit || 20, 1), 50);
   const rows = await query<Record<string, unknown>>(
     `SELECT o.id, o.order_number, o.event_id, o.status::text AS status, o.currency, o.subtotal_rupiah, o.loyalty_discount_rupiah,
@@ -43,9 +46,24 @@ export async function getOrder(user: AuthUser, id: string) {
      FROM orders WHERE id = $1 LIMIT 1`,
     [id],
   );
-  const o = rows[0];
+  let o = rows[0];
   if (!o) throw new AppError("NOT_FOUND", "Order tidak ditemukan.", {}, 404);
   if (o.buyer_user_id !== user.id && user.role !== "ADMIN") throw new AppError("NOT_FOUND", "Order tidak ditemukan.", {}, 404);
+  if (o.status === "PENDING") {
+    const expired = await expireOrderById(String(o.id));
+    if (expired) {
+      const refreshed = await query<Record<string, unknown>>(
+        `SELECT id, order_number, buyer_user_id, event_id, status::text AS status, currency, subtotal_rupiah,
+                loyalty_discount_rupiah, total_payable_rupiah, redeemed_points, expires_at::text, created_at::text, version
+         FROM orders WHERE id = $1 LIMIT 1`,
+        [id],
+      );
+      if (refreshed[0]) o = refreshed[0];
+    }
+  }
+  if (o.status === "PAID") {
+    await issueTicketsForPaidOrder(String(o.id), user);
+  }
   const items = await query<Record<string, unknown>>(
     `SELECT id, ticket_type_id, ticket_type_name, section_name, seat_label, event_seat_id, unit_price_rupiah, quantity, line_total_rupiah
      FROM order_items WHERE order_id = $1 ORDER BY id`,
@@ -142,7 +160,7 @@ function maxRedeemablePoints(subtotalRupiah: number): number {
   return Math.floor(Math.floor(subtotalRupiah / 5) / 10);
 }
 
-export async function summarize(user: AuthUser, body: { eventId: string; items?: CheckoutLine[]; redeemPoints?: number }) {
+export async function summarize(user: AuthUser, body: { eventId: string; items?: CheckoutLine[]; seatIds?: string[]; redeemPoints?: number }) {
   const plan = await planCheckout(body);
   const requested = Math.max(0, Number(body.redeemPoints || 0));
   if (!Number.isInteger(requested)) throw new AppError("VALIDATION_ERROR", "Poin harus bilangan bulat.", {}, 400);
@@ -171,6 +189,7 @@ export async function summarize(user: AuthUser, body: { eventId: string; items?:
       quantity: line.quantity,
       unitPriceRupiah: line.unit,
       lineTotalRupiah: line.lineTotal,
+      seatLabel: line.seatLabel,
     })),
     subtotalRupiah: plan.subtotal,
     requestedRedeemPoints: requested,
@@ -187,7 +206,7 @@ export async function summarize(user: AuthUser, body: { eventId: string; items?:
   };
 }
 
-async function planCheckout(body: { eventId: string; items?: CheckoutLine[] }) {
+async function planCheckout(body: { eventId: string; items?: CheckoutLine[]; seatIds?: string[] }) {
   const eventId = String(body.eventId || "");
   const ev = await query<{
     id: string;
@@ -196,32 +215,104 @@ async function planCheckout(body: { eventId: string; items?: CheckoutLine[] }) {
     slug: string;
     timezone: string;
     organizer_profile_id: string;
+    inventory_mode: string;
   }>(
-    `SELECT id, status::text AS status, title, slug, timezone, organizer_profile_id FROM events WHERE id = $1 LIMIT 1`,
+    `SELECT id, status::text AS status, title, slug, timezone, organizer_profile_id, inventory_mode::text AS inventory_mode
+     FROM events WHERE id = $1 LIMIT 1`,
     [eventId],
   );
   if (!ev[0] || ev[0].status !== "PUBLISHED") throw new AppError("ORDER_NOT_PURCHASABLE", "Event tidak dapat dibeli.", {}, 409);
-  const org = await query<{ name: string }>(`SELECT name FROM organizer_profiles WHERE id=$1 LIMIT 1`, [ev[0].organizer_profile_id]);
-  const items = body.items || [];
-  if (!items.length) throw new AppError("CHECKOUT_INVALID", "Checkout tidak valid.", {}, 400);
-  const lines: { ticketTypeId: string; name: string; quantity: number; unit: number; lineTotal: number }[] = [];
-  let subtotal = 0;
-  for (const it of items) {
-    const qty = Number(it.quantity || 0);
-    if (!Number.isInteger(qty) || qty < 1) throw new AppError("CHECKOUT_INVALID", "Checkout tidak valid.", {}, 400);
-    const t = await query<{ id: string; name: string; price_rupiah: string | number; quota: number; reserved_quantity: number; paid_quantity: number }>(
-      `SELECT id, name, price_rupiah, quota, reserved_quantity, paid_quantity FROM event_ticket_types WHERE id = $1 AND event_id = $2 LIMIT 1`,
-      [it.ticketTypeId, eventId],
-    );
-    const ticket = t[0];
-    if (!ticket) throw new AppError("CHECKOUT_INVALID", "Checkout tidak valid.", {}, 400);
-    const remaining = ticket.quota - ticket.reserved_quantity - ticket.paid_quantity;
-    if (remaining < qty) throw new AppError("INVENTORY_UNAVAILABLE", "Kuota tidak mencukupi.", {}, 409);
-    const unit = Number(ticket.price_rupiah);
-    const lineTotal = unit * qty;
-    subtotal += lineTotal;
-    lines.push({ ticketTypeId: ticket.id, name: ticket.name, quantity: qty, unit, lineTotal });
+  const org = await query<{ name: string; status: string }>(
+    `SELECT name, status::text AS status FROM organizer_profiles WHERE id=$1 LIMIT 1`,
+    [ev[0].organizer_profile_id],
+  );
+  if (organizerSalesBlocked(org[0]?.status)) {
+    throw new AppError("ORDER_NOT_PURCHASABLE", "Penyelenggara ditangguhkan. Event masih dapat dilihat, tetapi tiket tidak dapat dibeli.", {}, 409);
   }
+  const lines: {
+    ticketTypeId: string;
+    name: string;
+    quantity: number;
+    unit: number;
+    lineTotal: number;
+    eventSeatId?: string;
+    sectionName?: string;
+    seatLabel?: string;
+  }[] = [];
+  let subtotal = 0;
+
+  const seatIds = [...new Set((body.seatIds || []).map((id) => String(id || "").trim()).filter(Boolean))];
+  if (ev[0].inventory_mode === "RESERVED_SEATING") {
+    if (seatIds.length < 1 || seatIds.length > 5) {
+      throw new AppError("CHECKOUT_INVALID", "Pilih 1–5 kursi yang masih tersedia.", {}, 400);
+    }
+    for (const seatId of seatIds) {
+      const seat = await query<{
+        id: string;
+        label: string;
+        section_name: string;
+        ticket_type_id: string;
+        ticket_name: string;
+        price_rupiah: string | number;
+        quota: number;
+        reserved_quantity: number;
+        paid_quantity: number;
+      }>(
+        `SELECT s.id, s.label, vs.name AS section_name, tt.id AS ticket_type_id, tt.name AS ticket_name, tt.price_rupiah,
+                tt.quota, tt.reserved_quantity, tt.paid_quantity
+         FROM event_seats s
+         JOIN venue_sections vs ON vs.id = s.section_id
+         JOIN event_ticket_types tt ON tt.id = vs.ticket_type_id
+         WHERE s.id = $1 AND s.event_id = $2 LIMIT 1`,
+        [seatId, eventId],
+      );
+      const row = seat[0];
+      if (!row) throw new AppError("CHECKOUT_INVALID", "Kursi tidak valid.", {}, 400);
+      const held = await query<{ id: string }>(
+        `SELECT id FROM inventory_reservations WHERE event_seat_id=$1 AND released_at IS NULL LIMIT 1`,
+        [seatId],
+      );
+      const sold = await query<{ id: string }>(
+        `SELECT id FROM tickets WHERE event_seat_id=$1 AND status <> 'CANCELLED'::ticket_status LIMIT 1`,
+        [seatId],
+      );
+      if (held[0] || sold[0]) throw new AppError("INVENTORY_UNAVAILABLE", "Kursi sudah dipesan atau terjual.", {}, 409);
+      const remaining = row.quota - row.reserved_quantity - row.paid_quantity;
+      if (remaining < 1) throw new AppError("INVENTORY_UNAVAILABLE", "Kuota zona tidak mencukupi.", {}, 409);
+      const unit = Number(row.price_rupiah);
+      subtotal += unit;
+      lines.push({
+        ticketTypeId: row.ticket_type_id,
+        name: row.ticket_name,
+        quantity: 1,
+        unit,
+        lineTotal: unit,
+        eventSeatId: row.id,
+        sectionName: row.section_name,
+        seatLabel: row.label,
+      });
+    }
+  } else {
+    const items = body.items || [];
+    if (!items.length) throw new AppError("CHECKOUT_INVALID", "Checkout tidak valid.", {}, 400);
+    for (const it of items) {
+      const qty = Number(it.quantity || 0);
+      if (!Number.isInteger(qty) || qty < 1) throw new AppError("CHECKOUT_INVALID", "Checkout tidak valid.", {}, 400);
+      const t = await query<{ id: string; name: string; price_rupiah: string | number; quota: number; reserved_quantity: number; paid_quantity: number }>(
+        `SELECT id, name, price_rupiah, quota, reserved_quantity, paid_quantity FROM event_ticket_types WHERE id = $1 AND event_id = $2 LIMIT 1`,
+        [it.ticketTypeId, eventId],
+      );
+      const ticket = t[0];
+      if (!ticket) throw new AppError("CHECKOUT_INVALID", "Checkout tidak valid.", {}, 400);
+      const remaining = ticket.quota - ticket.reserved_quantity - ticket.paid_quantity;
+      if (remaining < qty) throw new AppError("INVENTORY_UNAVAILABLE", "Kuota tidak mencukupi.", {}, 409);
+      const unit = Number(ticket.price_rupiah);
+      const lineTotal = unit * qty;
+      subtotal += lineTotal;
+      lines.push({ ticketTypeId: ticket.id, name: ticket.name, quantity: qty, unit, lineTotal });
+    }
+  }
+  if (!lines.length) throw new AppError("CHECKOUT_INVALID", "Checkout tidak valid.", {}, 400);
   return {
     eventId,
     event: {
@@ -237,14 +328,27 @@ async function planCheckout(body: { eventId: string; items?: CheckoutLine[] }) {
   };
 }
 
-export async function createOrder(user: AuthUser, body: { eventId: string; items?: CheckoutLine[]; confirmed?: boolean; redeemPoints?: number }, idemKey: string) {
+export async function createOrder(
+  user: AuthUser,
+  body: {
+    eventId: string;
+    items?: CheckoutLine[];
+    seatIds?: string[];
+    attendees?: { fullName?: string; email?: string; phone?: string; identityNumber?: string }[];
+    confirmed?: boolean;
+    redeemPoints?: number;
+  },
+  idemKey: string,
+) {
   if (!body.confirmed) throw new AppError("CHECKOUT_INVALID", "Checkout tidak valid.", {}, 400);
   if (!idemKey || idemKey.length < 16 || idemKey.length > 128) {
     throw new AppError("IDEMPOTENCY_KEY_INVALID", "Idempotency-Key wajib 16–128 karakter.", {}, 400);
   }
   const plan = await planCheckout(body);
   const keyHash = tokenHash(idemKey);
-  const reqHash = createHash("sha256").update(JSON.stringify({ eventId: body.eventId, items: body.items })).digest("hex");
+  const reqHash = createHash("sha256")
+    .update(JSON.stringify({ eventId: body.eventId, items: body.items, seatIds: body.seatIds }))
+    .digest("hex");
   const claimId = newId();
   await query(
     `INSERT INTO idempotency_keys (id, actor_user_id, scope, key_hash, request_hash, status, expires_at, created_at, updated_at)
@@ -277,20 +381,35 @@ export async function createOrder(user: AuthUser, body: { eventId: string; items
   );
   const order = orderRows[0];
   if (!order) throw new AppError("INTERNAL_ERROR", "Terjadi kesalahan internal.", {}, 500);
+  let seatAttendee = 0;
   for (const line of plan.lines) {
     const iid = newId();
     await query(
-      `INSERT INTO order_items (id, order_id, ticket_type_id, ticket_type_name, unit_price_rupiah, quantity, line_total_rupiah)
-       VALUES ($1,$2,$3,$4,$5,$6,$7)`,
-      [iid, oid, line.ticketTypeId, line.name, line.unit, line.quantity, line.lineTotal],
+      `INSERT INTO order_items (id, order_id, ticket_type_id, ticket_type_name, section_name, seat_label, event_seat_id, unit_price_rupiah, quantity, line_total_rupiah)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+      [
+        iid,
+        oid,
+        line.ticketTypeId,
+        line.name,
+        line.sectionName || null,
+        line.seatLabel || null,
+        line.eventSeatId || null,
+        line.unit,
+        line.quantity,
+        line.lineTotal,
+      ],
     );
     const rid = newId();
     await query(
-      `INSERT INTO inventory_reservations (id, order_id, order_item_id, ticket_type_id, quantity, expires_at)
-       SELECT $1,$2,$3,$4,$5, expires_at FROM orders WHERE id=$2`,
-      [rid, oid, iid, line.ticketTypeId, line.quantity],
+      `INSERT INTO inventory_reservations (id, order_id, order_item_id, ticket_type_id, event_seat_id, quantity, expires_at)
+       SELECT $1,$2,$3,$4,$5,$6, expires_at FROM orders WHERE id=$2`,
+      [rid, oid, iid, line.ticketTypeId, line.eventSeatId || null, line.quantity],
     );
-    const attendees = (body.items || []).find((it) => it.ticketTypeId === line.ticketTypeId)?.attendees || [];
+    const attendees = line.eventSeatId
+      ? (body.attendees || []).slice(seatAttendee, seatAttendee + 1)
+      : (body.items || []).find((it) => it.ticketTypeId === line.ticketTypeId)?.attendees || [];
+    if (line.eventSeatId) seatAttendee += 1;
     for (let seq = 1; seq <= line.quantity; seq += 1) {
       const person = attendees[seq - 1];
       if (!person) continue;
@@ -350,6 +469,60 @@ export async function loyaltyAccount(user: AuthUser, organizerProfileId: string)
   };
 }
 
+export async function expireOrderById(orderId: string): Promise<boolean> {
+  const marked = await query<{ id: string }>(
+    `UPDATE orders SET status='EXPIRED'::order_status, expired_at=CURRENT_TIMESTAMP, updated_at=CURRENT_TIMESTAMP, version=version+1
+     WHERE id=$1 AND status='PENDING' AND expires_at <= CURRENT_TIMESTAMP
+     RETURNING id`,
+    [orderId],
+  );
+  if (!marked[0]) return false;
+  await execute(
+    `UPDATE payments SET status='EXPIRED'::payment_status, updated_at=CURRENT_TIMESTAMP
+     WHERE order_id=$1 AND status IN ('CREATED'::payment_status, 'PENDING'::payment_status)`,
+    [orderId],
+  );
+  const res = await query<{ id: string; ticket_type_id: string; quantity: number }>(
+    `UPDATE inventory_reservations SET released_at=CURRENT_TIMESTAMP, release_reason='EXPIRED'
+     WHERE order_id=$1 AND released_at IS NULL RETURNING id, ticket_type_id, quantity`,
+    [orderId],
+  );
+  for (const r of res) {
+    await execute(
+      `UPDATE event_ticket_types SET reserved_quantity = reserved_quantity - $2, updated_at=CURRENT_TIMESTAMP, version=version+1
+       WHERE id=$1 AND reserved_quantity >= $2`,
+      [r.ticket_type_id, r.quantity],
+    );
+  }
+  const points = await query<{ account_id: string; points: number }>(
+    `UPDATE loyalty_point_reservations
+     SET status='RELEASED'::loyalty_reservation_status,
+         release_reason='ORDER_EXPIRED'::loyalty_release_reason,
+         released_at=CURRENT_TIMESTAMP,
+         updated_at=CURRENT_TIMESTAMP,
+         version=version+1
+     WHERE order_id=$1 AND status='ACTIVE'
+     RETURNING account_id, points`,
+    [orderId],
+  );
+  for (const p of points) {
+    await execute(
+      `UPDATE loyalty_accounts SET reserved_points = reserved_points - $2, updated_at=CURRENT_TIMESTAMP, version=version+1
+       WHERE id=$1 AND reserved_points >= $2`,
+      [p.account_id, p.points],
+    );
+  }
+  return true;
+}
+
+async function expireDueForBuyer(buyerUserId: string) {
+  const due = await query<{ id: string }>(
+    `SELECT id FROM orders WHERE buyer_user_id=$1 AND status='PENDING' AND expires_at <= CURRENT_TIMESTAMP ORDER BY expires_at ASC`,
+    [buyerUserId],
+  );
+  for (const row of due) await expireOrderById(row.id);
+}
+
 export async function expireDue(batch: number) {
   const n = Math.min(Math.max(batch || 20, 1), 100);
   const due = await query<{ id: string }>(
@@ -358,25 +531,7 @@ export async function expireDue(batch: number) {
   );
   let expired = 0;
   for (const row of due) {
-    const ok = await execute(
-      `UPDATE orders SET status='EXPIRED'::order_status, expired_at=CURRENT_TIMESTAMP, updated_at=CURRENT_TIMESTAMP, version=version+1
-       WHERE id=$1 AND status='PENDING'`,
-      [row.id],
-    );
-    if (!ok) continue;
-    const res = await query<{ id: string; ticket_type_id: string; quantity: number }>(
-      `UPDATE inventory_reservations SET released_at=CURRENT_TIMESTAMP, release_reason='EXPIRED'
-       WHERE order_id=$1 AND released_at IS NULL RETURNING id, ticket_type_id, quantity`,
-      [row.id],
-    );
-    for (const r of res) {
-      await execute(
-        `UPDATE event_ticket_types SET reserved_quantity = reserved_quantity - $2, updated_at=CURRENT_TIMESTAMP, version=version+1
-         WHERE id=$1 AND reserved_quantity >= $2`,
-        [r.ticket_type_id, r.quantity],
-      );
-    }
-    expired += 1;
+    if (await expireOrderById(row.id)) expired += 1;
   }
   return { expired, scanned: due.length };
 }

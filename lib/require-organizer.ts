@@ -6,8 +6,16 @@ export async function requireOrganizer(callback: string) {
   if (!user) {
     redirect(`/login?callbackUrl=${encodeURIComponent(callback)}&portal=organizer`);
   }
-  if (!user.access?.canOrganize) {
+  if (user.access?.kind !== "organizer") {
     redirect("/dashboard");
+  }
+  return user;
+}
+
+export async function requireOrganizerWrite(callback: string) {
+  const user = await requireOrganizer(callback);
+  if (!user.access?.canOrganize) {
+    redirect("/dashboard/organizer/status");
   }
   return user;
 }

@@ -106,11 +106,11 @@ export function BuyerWorkspace() {
       {applying ? (
         <p className="mt-4 text-sm text-ink/65">
           Ingin menjual tiket?{" "}
-          <Link href="/organizer/apply" className="font-medium text-gold-700">
+          <Link href="/dashboard/organizer/apply" className="font-medium text-gold-700">
             Ajukan sebagai penyelenggara
           </Link>
           {" · "}
-          <Link href="/organizer/status" className="font-medium text-gold-700">
+          <Link href="/dashboard/organizer/status" className="font-medium text-gold-700">
             Cek status pengajuan
           </Link>
         </p>
@@ -135,7 +135,7 @@ export function BuyerWorkspace() {
         <section className="rounded-3xl bg-white p-5 shadow-sm" aria-labelledby="buyer-notif">
           <div className="flex items-center justify-between gap-3">
             <h2 id="buyer-notif" className="text-lg font-semibold text-ink">Notifikasi</h2>
-            <Link href="/notifications" className="text-sm text-gold-700">Semua</Link>
+            <Link href="/dashboard/notifications" className="text-sm text-gold-700">Semua</Link>
           </div>
           {notices.length === 0 ? (
             <p className="mt-6 text-sm text-ink/55">Belum ada notifikasi.</p>
@@ -156,7 +156,7 @@ export function BuyerWorkspace() {
         <section className="rounded-3xl bg-white p-5 shadow-sm">
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-semibold text-ink">Order terbaru</h2>
-            <Link href="/orders" className="text-sm text-gold-700">Semua</Link>
+            <Link href="/dashboard/order" className="text-sm text-gold-700">Semua</Link>
           </div>
           {orders.length === 0 ? (
             <p className="mt-4 text-sm text-ink/55">Belum ada order. Checkout berbayar belum diimplementasikan.</p>
@@ -164,7 +164,7 @@ export function BuyerWorkspace() {
             <ul className="mt-4 space-y-3">
               {orders.slice(0, 5).map((o) => (
                 <li key={o.id} className="flex items-center justify-between gap-3 text-sm">
-                  <Link href={`/orders/${o.id}`} className="font-medium text-gold-700">
+                  <Link href={`/dashboard/order/${o.id}`} className="font-medium text-gold-700">
                     {o.orderNumber}
                   </Link>
                   <span className="text-ink/60">
@@ -178,7 +178,7 @@ export function BuyerWorkspace() {
         <section className="rounded-3xl bg-white p-5 shadow-sm">
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-semibold text-ink">Tiket saya</h2>
-            <Link href="/tickets" className="text-sm text-gold-700">Semua</Link>
+            <Link href="/dashboard/ticket" className="text-sm text-gold-700">Semua</Link>
           </div>
           {tickets.length === 0 ? (
             <p className="mt-4 flex items-start gap-2 text-sm text-ink/55">
@@ -189,7 +189,7 @@ export function BuyerWorkspace() {
             <ul className="mt-4 space-y-3">
               {tickets.slice(0, 5).map((t) => (
                 <li key={t.id} className="text-sm">
-                  <Link href={`/tickets/${t.id}`} className="font-medium text-gold-700">
+                  <Link href={`/dashboard/ticket/${t.id}`} className="font-medium text-gold-700">
                     {t.ticketNumber}
                   </Link>
                   <p className="text-ink/60">

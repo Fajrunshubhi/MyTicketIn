@@ -34,6 +34,18 @@ describe("portal", () => {
     expect(msg).toMatch(/pembeli/i);
   });
 
+  it("allows organizer portal while suspended", () => {
+    const msg = authorizePortal("organizer", {
+      kind: "organizer",
+      isAdmin: false,
+      canBuy: false,
+      canOrganize: false,
+      canApplyOrganizer: false,
+      organizerStatus: "SUSPENDED",
+    });
+    expect(msg).toBeNull();
+  });
+
   it("accepts staff portal and rejects register intent", () => {
     expect(parsePortal("staff")).toBe("staff");
     expect(() => parseRegisterIntent("staff")).toThrow();

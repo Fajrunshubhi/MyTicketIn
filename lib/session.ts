@@ -12,6 +12,7 @@ export type PublicSessionUser = {
     canOrganize?: boolean;
     canBuy?: boolean;
     kind?: string;
+    organizerStatus?: string | null;
   };
 };
 

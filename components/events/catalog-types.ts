@@ -4,6 +4,7 @@ export const SALE_LABEL: Record<string, string> = {
   ENDED: "Penjualan berakhir",
   STOPPED: "Dihentikan",
   PAST: "Selesai",
+  ORGANIZER_SUSPENDED: "Tidak dijual",
 };
 
 export type CatalogCard = {
@@ -18,6 +19,7 @@ export type CatalogCard = {
   saleStatus: string;
   ratingAverage: number;
   ratingCount: number;
+  purchasable?: boolean;
 };
 
 export type PublicEvent = {
@@ -62,4 +64,5 @@ export type PublicEvent = {
   availabilityDisclaimer: string;
   ratingAverage: number;
   ratingCount: number;
+  purchasable?: boolean;
 };
