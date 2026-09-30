@@ -5,6 +5,9 @@ import { listNotifications } from "@/lib/server/notifications";
 
 export const GET = routeHandler(async (req: NextRequest) => {
   const user = await requireAuth(req);
-  const items = await listNotifications(user, Number(req.nextUrl.searchParams.get("limit") || 20));
-  return jsonData({ items }, 200, req);
+  const items = await listNotifications(user, {
+    filter: req.nextUrl.searchParams.get("filter") || "all",
+    limit: Number(req.nextUrl.searchParams.get("limit") || 20),
+  });
+  return jsonData(items, 200, req);
 });

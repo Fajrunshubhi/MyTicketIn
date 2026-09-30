@@ -1,6 +1,7 @@
 import { dummyCover } from "@/lib/event-cover";
 import { publicImageSrc } from "@/lib/server/gallery";
 import { AppError, execute, newId, query } from "@/lib/server/http";
+import { eventOwnerUserId, notify, notifyAdmins, paidTicketBuyerIds } from "@/lib/server/notifications";
 
 const EVENT_COLS = `id, organizer_profile_id, slug, title, description, category, venue_name, address_line, city, province,
   latitude, longitude, tags, timezone, starts_at::text, ends_at::text, terms, contact_email, contact_phone,
@@ -415,6 +416,16 @@ export async function submitEvent(orgId: string, id: string, expectedVersion: nu
     [id, expectedVersion],
   );
   if (!n) throw new AppError("EVENT_VERSION_CONFLICT", "Data berubah.", {}, 409);
+  await notifyAdmins({
+    type: "MODERATION_NEEDED",
+    title: "Event menunggu moderasi",
+    body: `“${e.title}” diajukan dan menunggu keputusan terbit atau tolak.`,
+    actionPath: `/admin/events/${id}`,
+    entityType: "Event",
+    entityId: id,
+    deduplicationKey: `event-submit:${id}:${expectedVersion + 1}`,
+    domainEventId: `event-submit:${id}:${expectedVersion + 1}`,
+  });
   return getOwnedEvent(orgId, id);
 }
 
@@ -497,6 +508,23 @@ export async function decideEvent(adminId: string, id: string, decision: string,
   if (!n) throw new AppError("EVENT_VERSION_CONFLICT", "Data berubah.", {}, 409);
   const next = await query<OrgEvent>(`SELECT ${EVENT_COLS} FROM events WHERE id=$1 LIMIT 1`, [id]);
   if (!next[0]) throw new AppError("NOT_FOUND", "Event tidak ditemukan.", {}, 404);
+  const owner = await eventOwnerUserId(id);
+  if (owner) {
+    await notify({
+      recipientUserId: owner,
+      type: status === "PUBLISHED" ? "EVENT_PUBLISHED" : "EVENT_REJECTED",
+      title: status === "PUBLISHED" ? "Event diterbitkan" : "Event ditolak",
+      body:
+        status === "PUBLISHED"
+          ? `“${next[0].title}” tampil di katalog sesuai jadwal penjualan.`
+          : `“${next[0].title}” ditolak. ${reasonTrim.slice(0, 400)}`,
+      actionPath: `/dashboard/event/${id}`,
+      entityType: "Event",
+      entityId: id,
+      deduplicationKey: `event-decision:${id}:${next[0].version}`,
+      domainEventId: `event-decision:${id}:${next[0].version}`,
+    });
+  }
   return next[0];
 }
 
@@ -519,4 +547,34 @@ export async function markEventCancelled(eventId: string, actorId: string, reaso
     [actorId, why, eventId, expectedVersion ?? null],
   );
   if (!n) throw new AppError("EVENT_STATUS_INVALID", "Event tidak dapat dibatalkan.", {}, 409);
+  const ev = await query<{ title: string }>(`SELECT title FROM events WHERE id=$1`, [eventId]);
+  const title = ev[0]?.title || "Event";
+  const owner = await eventOwnerUserId(eventId);
+  if (owner) {
+    await notify({
+      recipientUserId: owner,
+      type: "EVENT_CANCELLED",
+      title: "Event dibatalkan",
+      body: `“${title}” dibatalkan. Penjualan dan check-in dihentikan.`,
+      actionPath: `/dashboard/event/${eventId}`,
+      entityType: "Event",
+      entityId: eventId,
+      deduplicationKey: `event-cancelled:${eventId}`,
+      domainEventId: `event-cancelled:${eventId}`,
+    });
+  }
+  const buyers = await paidTicketBuyerIds(eventId);
+  for (const buyerId of buyers) {
+    await notify({
+      recipientUserId: buyerId,
+      type: "EVENT_CANCELLED",
+      title: "Event tiket Anda dibatalkan",
+      body: `“${title}” dibatalkan penyelenggara atau admin. Cek status order dan refund sandbox jika ada.`,
+      actionPath: "/dashboard/order",
+      entityType: "Event",
+      entityId: eventId,
+      deduplicationKey: `event-cancelled:${eventId}:${buyerId}`,
+      domainEventId: `event-cancelled:${eventId}`,
+    });
+  }
 }

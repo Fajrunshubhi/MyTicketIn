@@ -416,6 +416,18 @@ export async function assistPasswordReset(admin: AuthUser, userId: string, reaso
     [newId(), target.id, tokenHash(raw), new Date(now.getTime() + 30 * 60 * 1000).toISOString(), tokenHash("admin"), admin.id],
   );
   await sendPasswordResetMail({ to: target.email, name: target.name, resetUrl: passwordResetUrl(raw) });
+  const { notify } = await import("@/lib/server/notifications");
+  await notify({
+    recipientUserId: target.id,
+    type: "PASSWORD_RESET_ASSISTED",
+    title: "Pemulihan kata sandi disiapkan",
+    body: "Admin menyiapkan tautan pemulihan. Periksa email sandbox atau ikuti instruksi yang diserahkan melalui kanal terkontrol. Tautan sekali pakai, 30 menit.",
+    actionPath: "/login",
+    entityType: "User",
+    entityId: target.id,
+    deduplicationKey: `pwd-assist:${target.id}:${now.toISOString()}`,
+    domainEventId: `pwd-assist:${target.id}:${now.getTime()}`,
+  });
   return raw;
 }
 

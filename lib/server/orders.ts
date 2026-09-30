@@ -3,6 +3,7 @@ import { AppError, execute, newId, query, tokenHash } from "@/lib/server/http";
 import type { AuthUser } from "@/lib/server/access";
 import { organizerSalesBlocked } from "@/lib/organizer-sales";
 import { issueTicketsForPaidOrder } from "@/lib/server/tickets";
+import { notify } from "@/lib/server/notifications";
 
 type CheckoutLine = {
   ticketTypeId: string;
@@ -470,10 +471,10 @@ export async function loyaltyAccount(user: AuthUser, organizerProfileId: string)
 }
 
 export async function expireOrderById(orderId: string): Promise<boolean> {
-  const marked = await query<{ id: string }>(
+  const marked = await query<{ id: string; buyer_user_id: string; order_number: string }>(
     `UPDATE orders SET status='EXPIRED'::order_status, expired_at=CURRENT_TIMESTAMP, updated_at=CURRENT_TIMESTAMP, version=version+1
      WHERE id=$1 AND status='PENDING' AND expires_at <= CURRENT_TIMESTAMP
-     RETURNING id`,
+     RETURNING id, buyer_user_id, order_number`,
     [orderId],
   );
   if (!marked[0]) return false;
@@ -512,6 +513,17 @@ export async function expireOrderById(orderId: string): Promise<boolean> {
       [p.account_id, p.points],
     );
   }
+  await notify({
+    recipientUserId: marked[0].buyer_user_id,
+    type: "PAYMENT_FAILED",
+    title: "Pembayaran tidak selesai",
+    body: `Order ${marked[0].order_number} kedaluwarsa sebelum dibayar. Kuota dikembalikan; buat order baru jika masih ingin membeli.`,
+    actionPath: "/dashboard/order",
+    entityType: "Order",
+    entityId: orderId,
+    deduplicationKey: `pay-fail:${orderId}`,
+    domainEventId: `pay-fail:${orderId}`,
+  });
   return true;
 }
 

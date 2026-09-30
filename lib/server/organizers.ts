@@ -1,4 +1,5 @@
 import { AppError, execute, newId, query } from "@/lib/server/http";
+import { notify, notifyAdmins } from "@/lib/server/notifications";
 import type { AuthUser } from "@/lib/server/access";
 
 const PROFILE_SELECT = `id, owner_user_id, name, contact_email, contact_phone, description, status::text AS status,
@@ -198,6 +199,16 @@ export async function submitApplication(actor: AuthUser, body: { name: string; c
     type: "SUBMITTED",
     toStatus: "PENDING",
   });
+  await notifyAdmins({
+    type: "MODERATION_NEEDED",
+    title: "Pengajuan organizer baru",
+    body: `${rows[0].name} mengajukan diri sebagai penyelenggara. Tinjau berkas sebelum menyetujui.`,
+    actionPath: `/admin/organizers/${rows[0].id}`,
+    entityType: "OrganizerProfile",
+    entityId: rows[0].id,
+    deduplicationKey: `org-app:${rows[0].id}:submit`,
+    domainEventId: `org-app:${rows[0].id}:submit`,
+  });
   return rows[0];
 }
 
@@ -246,6 +257,16 @@ export async function resubmitApplication(actor: AuthUser, expectedVersion: numb
     type: "RESUBMITTED",
     fromStatus: "REJECTED",
     toStatus: "PENDING",
+  });
+  await notifyAdmins({
+    type: "MODERATION_NEEDED",
+    title: "Pengajuan organizer diajukan ulang",
+    body: `${next.name} mengirim ulang berkas penyelenggara.`,
+    actionPath: `/admin/organizers/${next.id}`,
+    entityType: "OrganizerProfile",
+    entityId: next.id,
+    deduplicationKey: `org-app:${next.id}:resubmit:${next.version}`,
+    domainEventId: `org-app:${next.id}:resubmit:${next.version}`,
   });
   return next;
 }
@@ -302,6 +323,27 @@ export async function decide(admin: AuthUser, id: string, decision: string, reas
     toStatus: next,
     note: r,
   });
+  const type =
+    next === "APPROVED" ? "ORGANIZER_APPROVED" : next === "SUSPENDED" ? "ORGANIZER_SUSPENDED" : "ORGANIZER_REJECTED";
+  const titles = {
+    ORGANIZER_APPROVED: "Akun penyelenggara disetujui",
+    ORGANIZER_SUSPENDED: "Akun penyelenggara ditangguhkan",
+    ORGANIZER_REJECTED: "Pengajuan penyelenggara ditolak",
+  } as const;
+  await notify({
+    recipientUserId: out.owner_user_id,
+    type,
+    title: titles[type],
+    body:
+      type === "ORGANIZER_APPROVED"
+        ? "Anda dapat membuat event dan membuka portal penyelenggara."
+        : `Keputusan admin: ${r.slice(0, 400)}`,
+    actionPath: "/dashboard/organizer/status",
+    entityType: "OrganizerProfile",
+    entityId: out.id,
+    deduplicationKey: `org-decision:${out.id}:${out.version}`,
+    domainEventId: `org-decision:${out.id}:${out.version}`,
+  });
   return out;
 }
 
@@ -330,6 +372,16 @@ export async function appealSuspension(actor: AuthUser, reason: string, expected
     fromStatus: "SUSPENDED",
     toStatus: "SUSPENDED",
     note: why,
+  });
+  await notifyAdmins({
+    type: "MODERATION_NEEDED",
+    title: "Sanggahan penangguhan",
+    body: `${next.name} mengirim sanggahan atas penangguhan akun.`,
+    actionPath: `/admin/organizers/${next.id}`,
+    entityType: "OrganizerProfile",
+    entityId: next.id,
+    deduplicationKey: `org-appeal:${next.id}:${next.version}`,
+    domainEventId: `org-appeal:${next.id}:${next.version}`,
   });
   return next;
 }

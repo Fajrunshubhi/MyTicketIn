@@ -1,5 +1,6 @@
 import { AppError, execute, newId, query } from "@/lib/server/http";
 import { getOwnedEvent, markEventCancelled } from "@/lib/server/events-organizer";
+import { eventOwnerUserId, notify, notifyAdmins } from "@/lib/server/notifications";
 
 const LIFE_COLS = `r.id, r.event_id, r.ticket_type_id, r.kind, r.status, r.reason, e.title AS event_title,
   COALESCE(p.name,'') AS organizer_name, COALESCE(t.name,'') AS ticket_type_name`;
@@ -65,7 +66,18 @@ export async function requestCancel(orgId: string, eventId: string, userId: stri
     [id, eventId, why, userId],
   );
   const rows = await listEventLifecycle(eventId);
-  return rows.find((r) => r.id === id)!;
+  const created = rows.find((r) => r.id === id)!;
+  await notifyAdmins({
+    type: "MODERATION_NEEDED",
+    title: "Pengajuan pembatalan event",
+    body: `${created.organizer_name || "Organizer"} meminta membatalkan “${created.event_title}”.`,
+    actionPath: "/admin/operations",
+    entityType: "LifecycleRequest",
+    entityId: id,
+    deduplicationKey: `life:${id}`,
+    domainEventId: `life:${id}`,
+  });
+  return created;
 }
 
 export async function requestStopSales(orgId: string, eventId: string, ticketId: string, userId: string, reason: string) {
@@ -85,7 +97,18 @@ export async function requestStopSales(orgId: string, eventId: string, ticketId:
     [id, eventId, ticketId, why, userId],
   );
   const rows = await listEventLifecycle(eventId);
-  return rows.find((r) => r.id === id)!;
+  const created = rows.find((r) => r.id === id)!;
+  await notifyAdmins({
+    type: "MODERATION_NEEDED",
+    title: "Pengajuan hentikan penjualan",
+    body: `${created.organizer_name || "Organizer"} meminta menghentikan penjualan “${created.ticket_type_name || "tiket"}” pada ${created.event_title}.`,
+    actionPath: "/admin/operations",
+    entityType: "LifecycleRequest",
+    entityId: id,
+    deduplicationKey: `life:${id}`,
+    domainEventId: `life:${id}`,
+  });
+  return created;
 }
 
 export async function decideLifecycle(adminId: string, requestId: string, decision: string, decisionReason: string) {
@@ -133,5 +156,22 @@ export async function decideLifecycle(adminId: string, requestId: string, decisi
      WHERE r.id=$1`,
     [requestId],
   );
-  return next[0];
+  const out = next[0];
+  if (out && d === "REJECT") {
+    const owner = await eventOwnerUserId(out.event_id);
+    if (owner) {
+      await notify({
+        recipientUserId: owner,
+        type: "EVENT_REJECTED",
+        title: out.kind === "STOP_SALES" ? "Pengajuan hentikan penjualan ditolak" : "Pengajuan pembatalan ditolak",
+        body: `“${out.event_title}”: ${decisionReason.trim().slice(0, 400)}`,
+        actionPath: `/dashboard/event/${out.event_id}`,
+        entityType: "LifecycleRequest",
+        entityId: requestId,
+        deduplicationKey: `life-decision:${requestId}`,
+        domainEventId: `life-decision:${requestId}`,
+      });
+    }
+  }
+  return out;
 }

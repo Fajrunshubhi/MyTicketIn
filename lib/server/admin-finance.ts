@@ -1,4 +1,5 @@
 import { AppError, execute, newId, query } from "@/lib/server/http";
+import { notify } from "@/lib/server/notifications";
 
 export async function requestRefund(adminId: string, orderId: string, amount: number, reason: string) {
   const why = reason.trim();
@@ -43,6 +44,26 @@ export async function decideRefund(adminId: string, refundId: string, decision: 
   );
   const r = rows[0];
   if (!r) throw new AppError("NOT_FOUND", "Refund tidak ditemukan.", {}, 404);
+  const buyers = await query<{ buyer_user_id: string }>(
+    `SELECT o.buyer_user_id FROM refunds rf JOIN orders o ON o.id = rf.order_id WHERE rf.id=$1 LIMIT 1`,
+    [refundId],
+  );
+  if (buyers[0]) {
+    await notify({
+      recipientUserId: buyers[0].buyer_user_id,
+      type: "REFUND_UPDATED",
+      title: status === "APPROVED" ? "Refund disetujui (sandbox)" : "Refund ditolak",
+      body:
+        status === "APPROVED"
+          ? `Refund ${r.refund_number} disetujui sebagai catatan uji. Tidak ada transfer uang nyata.`
+          : `Refund ${r.refund_number} ditolak. ${why.slice(0, 400)}`,
+      actionPath: "/dashboard/order",
+      entityType: "Refund",
+      entityId: refundId,
+      deduplicationKey: `refund:${refundId}:${status}`,
+      domainEventId: `refund:${refundId}`,
+    });
+  }
   return { id: r.id, refundNumber: r.refund_number, status: r.status, amountRupiah: Number(r.amount_rupiah), sandbox: true };
 }
 

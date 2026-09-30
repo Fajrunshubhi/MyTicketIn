@@ -2,6 +2,7 @@ import { AppError, newId, query } from "@/lib/server/http";
 import type { AuthUser } from "@/lib/server/access";
 import { getOrder } from "@/lib/server/orders";
 import { issueTicketsForPaidOrder } from "@/lib/server/tickets";
+import { eventOwnerUserId, notify } from "@/lib/server/notifications";
 
 export async function createPayment(user: AuthUser, orderId: string, methodRaw: string) {
   const order = await getOrder(user, orderId);
@@ -82,5 +83,31 @@ export async function sandboxSettle(user: AuthUser, orderId: string) {
     [orderId],
   );
   await issueTicketsForPaidOrder(orderId, user);
+  const order = await getOrder(user, orderId);
+  await notify({
+    recipientUserId: user.id,
+    type: "PAYMENT_SUCCEEDED",
+    title: "Pembayaran berhasil",
+    body: `Order ${order.orderNumber} sudah lunas (sandbox). Tiket diproses ke dompet Anda.`,
+    actionPath: `/dashboard/order/${orderId}`,
+    entityType: "Order",
+    entityId: orderId,
+    deduplicationKey: `pay-ok:${orderId}`,
+    domainEventId: `pay-ok:${orderId}`,
+  });
+  const owner = await eventOwnerUserId(String(order.eventId || ""));
+  if (owner) {
+    await notify({
+      recipientUserId: owner,
+      type: "PAYMENT_SUCCEEDED",
+      title: "Penjualan tiket baru",
+      body: `Ada order lunas untuk event Anda. Cek laporan penjualan (sandbox, bukan uang nyata).`,
+      actionPath: "/dashboard/laporan",
+      entityType: "Order",
+      entityId: orderId,
+      deduplicationKey: `sale:${orderId}:${owner}`,
+      domainEventId: `pay-ok:${orderId}`,
+    });
+  }
   return { status: "PAID" };
 }

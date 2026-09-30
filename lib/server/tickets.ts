@@ -2,6 +2,7 @@ import { createCipheriv, createDecipheriv, randomBytes, createHash } from "crypt
 import { AppError, execute, newId, query, randomToken, tokenHash } from "@/lib/server/http";
 import { publicImageSrc } from "@/lib/server/gallery";
 import type { AuthUser } from "@/lib/server/access";
+import { notify } from "@/lib/server/notifications";
 
 function qrKeyMaterial(): string[] {
   const candidates = [
@@ -385,6 +386,17 @@ export async function issueTicketsForPaidOrder(orderId: string, buyer?: AuthUser
       );
     }
   }
+  await notify({
+    recipientUserId: o.buyer_user_id,
+    type: "TICKET_ISSUED",
+    title: "Tiket siap digunakan",
+    body: "E-ticket dan kode QR tersedia di menu Tiket. Jangan bagikan QR kepada orang lain.",
+    actionPath: "/dashboard/ticket",
+    entityType: "Order",
+    entityId: orderId,
+    deduplicationKey: `ticket-issued:${orderId}`,
+    domainEventId: `ticket-issued:${orderId}`,
+  });
 }
 
 export function normalizeManualCode(raw: string): string {

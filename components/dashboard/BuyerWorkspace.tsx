@@ -145,6 +145,11 @@ export function BuyerWorkspace() {
                 <li key={n.id}>
                   <p className="text-sm font-semibold text-ink">{n.title}</p>
                   <p className="text-sm text-ink/65">{n.body}</p>
+                  {n.actionPath ? (
+                    <Link href={n.actionPath} className="mt-1 inline-block text-xs font-medium text-gold-700">
+                      Buka
+                    </Link>
+                  ) : null}
                 </li>
               ))}
             </ul>
