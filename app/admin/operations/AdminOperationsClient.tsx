@@ -31,7 +31,7 @@ function detailHref(item: Item): string {
   if (item.entityType === "OrganizerProfile") return `/admin/organizers/${item.entityId}`;
   if (item.entityType === "Event") return `/admin/events/${item.entityId}`;
   if (item.entityType === "PaymentReconciliation") return "/admin/payment-reconciliations";
-  if (item.entityType === "Refund") return "/admin/refunds";
+  if (item.entityType === "Refund") return `/admin/refunds?refund=${encodeURIComponent(item.entityId)}`;
   return "/admin/payment-reconciliations";
 }
 

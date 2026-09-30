@@ -88,6 +88,20 @@ export const errorCatalog: Record<string, CatalogEntry> = {
     message: "Event tidak dapat dibeli.",
     recovery: "Event masih dapat dilihat. Tunggu penyelenggara dipulihkan, atau pilih event lain.",
   },
+  REFUND_NOT_ALLOWED: {
+    category: "CONFLICT",
+    status: 409,
+    retryable: false,
+    message: "Refund tidak dapat diproses.",
+    recovery: "Pastikan tiket belum check-in dan order masih Paid.",
+  },
+  REFUND_AMOUNT_INVALID: {
+    category: "VALIDATION",
+    status: 400,
+    retryable: false,
+    message: "Nominal refund tidak valid.",
+    recovery: "Gunakan nominal integer yang tidak melebihi sisa pembayaran.",
+  },
   ORGANIZER_SUSPENDED: {
     category: "AUTHORIZATION",
     status: 403,

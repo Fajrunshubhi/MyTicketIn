@@ -1,5 +1,16 @@
 import { formatDateTime, formatRupiah } from "@/lib/format";
 import {
+  completedRefunds,
+  completedRefundTotal,
+  orderDocumentKind,
+  orderDocumentTitle,
+  orderStampLabel,
+  orderStatusUiLabel,
+  refundSourceUiLabel,
+  type OrderDocumentKind,
+  type RefundSnippet,
+} from "@/lib/order-refund-display";
+import {
   downloadPdfBytes,
   helveticaWidth,
   PdfDocument,
@@ -42,14 +53,8 @@ export type ReceiptOrder = {
     seatLabel?: string;
     attendees?: { fullName: string; email?: string; identityNumber?: string }[];
   }[];
-};
-
-const STATUS_LABEL: Record<string, string> = {
-  PENDING: "Menunggu pembayaran",
-  PAID: "Lunas",
-  EXPIRED: "Kedaluwarsa",
-  CANCELLED: "Dibatalkan",
-  FAILED: "Gagal",
+  refunds?: RefundSnippet[];
+  ticketsCancelled?: boolean;
 };
 
 const MARGIN = 40;
@@ -80,37 +85,46 @@ function when(iso?: string | null, tz?: string) {
   }
 }
 
-function documentTitle(status: string) {
-  return status === "PAID" ? "BUKTI PEMBAYARAN" : "RINGKASAN ORDER";
+function documentKind(order: ReceiptOrder): OrderDocumentKind {
+  return orderDocumentKind(order.status, order.refunds, Boolean(order.ticketsCancelled));
 }
 
-function stampLabel(status: string) {
-  if (status === "PAID") return "LUNAS";
-  if (status === "PENDING") return "BELUM LUNAS";
-  if (status === "EXPIRED") return "KEDALUWARSA";
-  if (status === "CANCELLED") return "BATAL";
-  if (status === "FAILED") return "GAGAL";
-  return status;
-}
-
-function stampColor(status: string): PdfColor {
-  if (status === "PAID") return PDF_PAID;
-  if (status === "PENDING") return PDF_WARN;
+function stampColor(kind: OrderDocumentKind): PdfColor {
+  if (kind === "paid") return PDF_PAID;
+  if (kind === "pending") return PDF_WARN;
+  if (kind === "cancelled" || kind === "refunded") return PDF_WARN;
   return PDF_MUTED;
 }
 
+function bannerText(kind: OrderDocumentKind): string {
+  if (kind === "paid") {
+    return "TRANSAKSI UJI SANDBOX  ·  Dokumen ini sah sebagai bukti pembayaran di MyTicketIn, bukan faktur pajak.";
+  }
+  if (kind === "cancelled") {
+    return "TRANSAKSI UJI SANDBOX  ·  Pembatalan selesai. Tiket tidak berlaku untuk masuk. Refund dicatat tanpa transfer uang.";
+  }
+  if (kind === "refunded") {
+    return "TRANSAKSI UJI SANDBOX  ·  Refund selesai. Tiket tidak berlaku. Bukan transfer uang nyata.";
+  }
+  return "ORDER BELUM LUNAS  ·  Ringkasan ini bukan bukti pembayaran sampai status menjadi Lunas.";
+}
+
 export function buildOrderReceiptLines(order: ReceiptOrder, paymentMethod?: string): string[] {
-  const paid = order.status === "PAID";
+  const kind = documentKind(order);
+  const livePaid = kind === "paid";
+  const refunded = completedRefundTotal(order.refunds);
+  const leftover = Math.max(0, order.totalPayableRupiah - refunded);
   const lines: string[] = [
     "MyTicketIn",
     "Platform tiket event tatap muka",
     "",
-    documentTitle(order.status),
-    paid ? "Transaksi sandbox (bukan faktur pajak)" : "Order belum lunas (bukan bukti bayar)",
+    orderDocumentTitle(kind),
+    bannerText(kind),
     "",
     `Nomor order    : ${order.orderNumber}`,
     `Tanggal        : ${when(order.createdAt)}`,
-    `Status         : ${STATUS_LABEL[order.status] || order.status}`,
+    `Status         : ${orderStatusUiLabel(kind)}`,
+    `Cap dokumen    : ${orderStampLabel(kind)}`,
   ];
   if (paymentMethod) lines.push(`Metode bayar   : ${paymentMethod}`);
   lines.push("");
@@ -138,11 +152,22 @@ export function buildOrderReceiptLines(order: ReceiptOrder, paymentMethod?: stri
     lines.push(`Diskon poin (${order.redeemedPoints} poin)  - ${money(order.loyaltyDiscountRupiah)}`);
   }
   lines.push(`TOTAL DIBAYAR            ${money(order.totalPayableRupiah)}`);
+  if (refunded > 0) {
+    lines.push(`REFUND SANDBOX          - ${money(refunded)}`);
+    if (kind === "cancelled") lines.push(`TIDAK DIKEMBALIKAN       ${money(leftover)}`);
+    else lines.push(`SISA SETELAH REFUND      ${money(leftover)}`);
+    for (const rf of completedRefunds(order.refunds)) {
+      const src = refundSourceUiLabel(rf.source);
+      lines.push(`  ${rf.refundNumber || "Refund"} ${src ? `(${src}) ` : ""}${money(rf.amountRupiah)}`);
+    }
+  }
   lines.push("");
   lines.push("Catatan");
   lines.push("Dokumen ini adalah receipt order MyTicketIn.");
   lines.push("Poin loyalty sandbox tidak bernilai tunai dan tidak dapat diuangkan.");
-  if (paid) {
+  if (kind === "cancelled" || kind === "refunded") {
+    lines.push("Tiket QR tidak berlaku untuk masuk. Simpan file ini sebagai arsip transaksi.");
+  } else if (livePaid) {
     lines.push("Simpan file ini sebagai bukti pembelian. Tiket QR ada di menu Tiket.");
   } else {
     lines.push("Selesaikan pembayaran sebelum waktu hold habis agar tiket diterbitkan.");
@@ -176,9 +201,9 @@ function drawChrome(doc: PdfDocument, order: ReceiptOrder, page: number, pages: 
   });
 }
 
-function drawStamp(doc: PdfDocument, status: string, x: number, y: number) {
-  const label = stampLabel(status);
-  const color = stampColor(status);
+function drawStamp(doc: PdfDocument, kind: OrderDocumentKind, x: number, y: number) {
+  const label = orderStampLabel(kind);
+  const color = stampColor(kind);
   const size = 11;
   const tw = helveticaWidth(label, size);
   const padX = 10;
@@ -189,7 +214,10 @@ function drawStamp(doc: PdfDocument, status: string, x: number, y: number) {
 }
 
 export function buildOrderReceiptPdfBytes(order: ReceiptOrder, paymentMethod?: string): Uint8Array {
-  const paid = order.status === "PAID";
+  const kind = documentKind(order);
+  const paid = kind === "paid";
+  const refunded = completedRefundTotal(order.refunds);
+  const leftover = Math.max(0, order.totalPayableRupiah - refunded);
   const printedAt = when(new Date().toISOString());
   const venue = [order.event?.venueName, order.event?.city, order.event?.province].filter(Boolean).join(", ");
   const right = 595 - MARGIN;
@@ -243,8 +271,8 @@ export function buildOrderReceiptPdfBytes(order: ReceiptOrder, paymentMethod?: s
       const nameLines = wrapToWidth(block.name, 9.5, 250);
       return 16 + nameLines.length * 12 + block.holders.length * 11 + 8;
     }
-    if (block.kind === "totals") return 86;
-    return 78;
+    if (block.kind === "totals") return refunded > 0 ? 132 : 86;
+    return kind === "cancelled" || kind === "refunded" ? 90 : 78;
   }
 
   const pages: Block[][] = [[]];
@@ -286,22 +314,20 @@ export function buildOrderReceiptPdfBytes(order: ReceiptOrder, paymentMethod?: s
 
     for (const block of pages[p]) {
       if (block.kind === "banner") {
-        doc.fillRect(MARGIN, y - 24, innerW, 32, paid ? { r: 0.9, g: 0.97, b: 0.93 } : { r: 1, g: 0.95, b: 0.88 });
-        doc.text(
-          paid
-            ? "TRANSAKSI UJI SANDBOX  ·  Dokumen ini sah sebagai bukti pembayaran di MyTicketIn, bukan faktur pajak."
-            : "ORDER BELUM LUNAS  ·  Ringkasan ini bukan bukti pembayaran sampai status menjadi Lunas.",
-          MARGIN + 10,
-          y - 10,
-          { size: 7.5, color: paid ? PDF_PAID : PDF_WARN, maxWidth: innerW - 20 },
-        );
+        const live = kind === "paid";
+        doc.fillRect(MARGIN, y - 24, innerW, 32, live ? { r: 0.9, g: 0.97, b: 0.93 } : { r: 1, g: 0.95, b: 0.88 });
+        doc.text(bannerText(kind), MARGIN + 10, y - 10, {
+          size: 7.5,
+          color: live ? PDF_PAID : PDF_WARN,
+          maxWidth: innerW - 20,
+        });
         y -= 40;
       }
       if (block.kind === "title") {
-        doc.text(documentTitle(order.status), MARGIN, y - 4, { size: 18, bold: true, color: PDF_INK });
-        const stamp = stampLabel(order.status);
+        doc.text(orderDocumentTitle(kind), MARGIN, y - 4, { size: 18, bold: true, color: PDF_INK });
+        const stamp = orderStampLabel(kind);
         const stampW = helveticaWidth(stamp, 11) + 20;
-        drawStamp(doc, order.status, right - stampW, y - 14);
+        drawStamp(doc, kind, right - stampW, y - 14);
         y -= 28;
         doc.text(`No. ${order.orderNumber}`, MARGIN, y, { size: 10, bold: true, color: PDF_BRAND_DARK });
         y -= 30;
@@ -332,7 +358,7 @@ export function buildOrderReceiptPdfBytes(order: ReceiptOrder, paymentMethod?: s
         const dx = MARGIN + half + 22;
         doc.text("DOKUMEN", dx, y - 14, { size: 7, bold: true, color: PDF_MUTED });
         doc.text(`Tanggal  ${when(order.createdAt)}`, dx, y - 30, { size: 8.5, maxWidth: half - 20 });
-        doc.text(`Status   ${STATUS_LABEL[order.status] || order.status}`, dx, y - 44, {
+        doc.text(`Status   ${orderStatusUiLabel(kind)}`, dx, y - 44, {
           size: 8.5,
           maxWidth: half - 20,
         });
@@ -364,6 +390,10 @@ export function buildOrderReceiptPdfBytes(order: ReceiptOrder, paymentMethod?: s
         if (order.loyaltyDiscountRupiah > 0 || order.redeemedPoints > 0) {
           rows.push([`Diskon poin (${order.redeemedPoints})`, `- ${money(order.loyaltyDiscountRupiah)}`, false]);
         }
+        if (refunded > 0) {
+          rows.push(["Refund sandbox", `- ${money(refunded)}`, false]);
+          rows.push([kind === "cancelled" ? "Tidak dikembalikan" : "Sisa setelah refund", money(leftover), false]);
+        }
         const boxH = 20 + rows.length * 16 + 28;
         doc.fillRect(boxX, y - boxH, boxW, boxH, PDF_CANVAS);
         doc.strokeRect(boxX, y - boxH, boxW, boxH, PDF_LINE, 0.6);
@@ -389,9 +419,11 @@ export function buildOrderReceiptPdfBytes(order: ReceiptOrder, paymentMethod?: s
         const notes = [
           "Dokumen ini diterbitkan secara elektronik oleh MyTicketIn dan berlaku sebagai receipt order.",
           "Poin loyalty sandbox tidak bernilai tunai dan tidak dapat diuangkan.",
-          paid
-            ? "Simpan file ini sebagai arsip pembelian. Tiket QR tetap diakses dari menu Tiket."
-            : "Selesaikan pembayaran sebelum waktu hold habis agar tiket diterbitkan.",
+          kind === "cancelled" || kind === "refunded"
+            ? "Tiket QR tidak berlaku untuk masuk. Simpan file ini sebagai arsip transaksi."
+            : paid
+              ? "Simpan file ini sebagai arsip pembelian. Tiket QR tetap diakses dari menu Tiket."
+              : "Selesaikan pembayaran sebelum waktu hold habis agar tiket diterbitkan.",
           "Bantuan: buka halaman Order di aplikasi dengan nomor dokumen di atas.",
         ];
         for (const note of notes) {

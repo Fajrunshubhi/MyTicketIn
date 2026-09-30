@@ -257,9 +257,20 @@ export async function adminOperationsQueue(queue: string) {
            FROM events WHERE status='CANCELLED'
            ORDER BY COALESCE(cancelled_at, updated_at) DESC, id DESC LIMIT 25`;
   } else {
-    sql = `SELECT 'Refund' AS entity_type, id AS entity_id, status::text AS reason_code, status::text AS status,
-                  COALESCE(requested_at, created_at)::text AS occurred_at, 'Refund sandbox menunggu tindak lanjut' AS safe_summary
-           FROM refunds WHERE status IN ('REQUESTED','APPROVED')
+    sql = `SELECT 'Refund' AS entity_type, id AS entity_id,
+                  CASE
+                    WHEN status='REQUESTED' THEN 'REFUND_SLA_REVIEW'
+                    ELSE 'REFUND_SLA_TRANSFER'
+                  END AS reason_code,
+                  status::text AS status,
+                  COALESCE(requested_at, created_at)::text AS occurred_at,
+                  CASE
+                    WHEN status='REQUESTED' THEN 'Refund menunggu penyelenggara melewati SLA 48 jam'
+                    ELSE 'Transfer refund melewati hold 24 jam'
+                  END AS safe_summary
+           FROM refunds
+           WHERE (status='REQUESTED' AND COALESCE(requested_at, created_at) < statement_timestamp() - INTERVAL '48 hours')
+              OR (status IN ('APPROVED','PROCESSING') AND transfer_due_at IS NOT NULL AND transfer_due_at < statement_timestamp())
            ORDER BY COALESCE(requested_at, created_at) DESC, id DESC LIMIT 25`;
   }
   const rows = await query<{

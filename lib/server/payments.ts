@@ -24,6 +24,18 @@ export async function createPayment(user: AuthUser, orderId: string, methodRaw: 
      RETURNING id, order_id, provider, method::text AS method, status::text AS status, amount_rupiah, currency, external_reference, created_at::text`,
     [id, orderId, method, order.totalPayableRupiah, ref, `pay-${id}`],
   );
+  const methodLabel = method === "QRIS" ? "QRIS" : method === "EWALLET" ? "e-wallet" : "virtual account";
+  await notify({
+    recipientUserId: user.id,
+    type: "PAYMENT_INSTRUCTIONS",
+    title: "Kode pembayaran siap",
+    body: `Order ${order.orderNumber}: kode ${ref} (${methodLabel}). Bayar sebelum hold 15 menit berakhir. Sandbox, bukan transfer uang nyata.`,
+    actionPath: `/dashboard/order/${orderId}`,
+    entityType: "Payment",
+    entityId: String(rows[0]?.id || id),
+    deduplicationKey: `pay-code:${orderId}`,
+    domainEventId: `pay-code:${orderId}`,
+  });
   return { payment: payDto(rows[0]), replay: false };
 }
 

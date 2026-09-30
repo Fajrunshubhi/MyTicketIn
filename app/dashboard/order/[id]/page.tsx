@@ -9,6 +9,16 @@ import { Icon } from "@/components/ui/Icon";
 import { formatRupiah } from "@/lib/format";
 import { apiFetch, readApiError } from "@/lib/api";
 import { downloadOrderReceiptPdf } from "@/lib/order-receipt-pdf";
+import { pingNotificationsLive } from "@/lib/notifications-live";
+import {
+  completedRefundTotal,
+  hasOpenRefundRequest,
+  orderDocumentKind,
+  orderStatusUiLabel,
+  refundSourceUiLabel,
+  refundStatusUiLabel,
+  ticketsCancelledByRefund,
+} from "@/lib/order-refund-display";
 
 type Order = {
   id: string;
@@ -38,6 +48,15 @@ type Order = {
     city?: string;
     province?: string;
   };
+  refunds?: {
+    id: string;
+    refundNumber: string;
+    amountRupiah: number;
+    status: string;
+    reason: string;
+    source?: string;
+  }[];
+  ticketsCancelled?: boolean;
 };
 
 type Payment = {
@@ -78,6 +97,7 @@ const STATUS_LABEL: Record<string, string> = {
   EXPIRED: "Kedaluwarsa",
   CANCELLED: "Dibatalkan",
   FAILED: "Gagal",
+  REFUNDED: "Direfund",
 };
 
 function methodLabel(id: string) {
@@ -247,6 +267,7 @@ export default function OrderDetailPage() {
     setError("");
     setPayment((body.data as { payment: Payment }).payment);
     setInfo("Instruksi SANDBOX tampil. Status tepercaya hanya dari konfirmasi webhook, bukan dari halaman ini.");
+    pingNotificationsLive();
   }
 
   async function simulate() {
@@ -259,6 +280,7 @@ export default function OrderDetailPage() {
       return;
     }
     setInfo("Konfirmasi sedang diproses. Bukan bukti berhasil.");
+    pingNotificationsLive();
     await loadPayment();
     await loadOrder();
   }
@@ -276,7 +298,15 @@ export default function OrderDetailPage() {
   const holdExpired = order?.status === "PENDING" && holdLeftMs <= 0;
   const pending = order?.status === "PENDING" && !holdExpired;
   const expired = order?.status === "EXPIRED" || holdExpired;
-  const displayStatus = expired ? "EXPIRED" : order?.status;
+  const docKind = order
+    ? orderDocumentKind(expired ? "EXPIRED" : order.status, order.refunds, Boolean(order.ticketsCancelled))
+    : "pending";
+  const ticketsGone = Boolean(order && ticketsCancelledByRefund(order.status, order.refunds));
+  const refundedAmt = order ? completedRefundTotal(order.refunds) : 0;
+  const leftoverAmt = order ? Math.max(0, order.totalPayableRupiah - refundedAmt) : 0;
+  const awaitingRefund = Boolean(order && hasOpenRefundRequest(order.refunds));
+  const livePaid = docKind === "paid";
+  const displayHeading = expired ? STATUS_LABEL.EXPIRED : order ? orderStatusUiLabel(docKind) : "Memuat pembayaran";
   const urgent = Boolean(order && pending && holdLeftMs < 3 * 60 * 1000);
 
   return (
@@ -297,7 +327,7 @@ export default function OrderDetailPage() {
           <div>
             <p className="text-xs font-semibold uppercase tracking-wide text-ink/45">Order {order?.orderNumber}</p>
             <h1 tabIndex={-1} className="font-display mt-1 text-3xl text-ink">
-              {order ? STATUS_LABEL[displayStatus || ""] || displayStatus : "Memuat pembayaran"}
+              {displayHeading}
             </h1>
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -326,17 +356,40 @@ export default function OrderDetailPage() {
         {order ? (
           <div className="mt-8 grid items-start gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(20rem,24rem)]">
             <div className="space-y-5">
-              {order.status === "PAID" ? (
+              {livePaid ? (
                 <section className="rounded-3xl border border-stone-200 bg-white p-6">
                   <p className="flex items-center gap-2 font-semibold text-ink">
                     <Icon name="success" className="h-5 w-5 text-gold-600" />
                     Pembayaran diterima
                   </p>
                   <p className="mt-2 text-sm text-ink/70">
-                    Tiket QR ada di wallet. Receipt PDF berisi rincian pembayaran untuk disimpan.
+                    {awaitingRefund
+                      ? "Pengajuan refund menunggu keputusan. Tiket masih berlaku sampai disetujui."
+                      : "Tiket QR ada di wallet. Receipt PDF berisi rincian pembayaran untuk disimpan."}
                   </p>
                   <div className="mt-4 flex flex-wrap gap-2">
                     <Button onClick={() => { window.location.href = "/dashboard/ticket"; }}>Buka tiket saya</Button>
+                    <Button variant="secondary" loading={pdfBusy} disabled={pdfBusy} onClick={() => void downloadReceipt()}>
+                      Unduh receipt PDF
+                    </Button>
+                  </div>
+                </section>
+              ) : null}
+
+              {docKind === "cancelled" || docKind === "refunded" ? (
+                <section className="rounded-3xl border border-stone-200 bg-white p-6">
+                  <p className="flex items-center gap-2 font-semibold text-ink">
+                    <Icon name="info" className="h-5 w-5 text-gold-600" />
+                    {docKind === "cancelled" ? "Pembatalan selesai (sandbox)" : "Refund selesai (sandbox)"}
+                  </p>
+                  <p className="mt-2 text-sm text-ink/70">
+                    Tiket tidak berlaku untuk masuk. {formatRupiah(refundedAmt)} dicatat sebagai refund uji
+                    {docKind === "cancelled" ? `; ${formatRupiah(leftoverAmt)} tidak dikembalikan (25%).` : "."} Bukan transfer uang nyata.
+                  </p>
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    <Button variant="secondary" onClick={() => { window.location.href = "/dashboard/ticket?status=CANCELLED"; }}>
+                      Lihat tiket dibatalkan
+                    </Button>
                     <Button variant="secondary" loading={pdfBusy} disabled={pdfBusy} onClick={() => void downloadReceipt()}>
                       Unduh receipt PDF
                     </Button>
@@ -406,7 +459,7 @@ export default function OrderDetailPage() {
                 </form>
               ) : null}
 
-              {payment && !expired ? (
+              {payment && pending ? (
                 <section className="rounded-3xl border border-stone-200 bg-white p-5">
                   <h2 className="text-lg font-semibold text-ink">Instruksi {methodLabel(payment.method)}</h2>
                   <p role="status" aria-live="polite" className="mt-1 text-sm text-ink/65">
@@ -440,6 +493,47 @@ export default function OrderDetailPage() {
                       Perkiraan earn {payment.loyalty.earnOnPaidPoints} poin setelah lunas. Bukan nilai tunai.
                     </p>
                   ) : null}
+                </section>
+              ) : null}
+
+              {order.status === "PAID" || order.status === "REFUNDED" ? (
+                <section className="rounded-3xl border border-stone-200 bg-white p-5">
+                  <h2 className="text-lg font-semibold text-ink">Refund sandbox</h2>
+                  <p className="mt-1 text-sm text-ink/65">
+                    Pengembalian hanya catatan uji. Pembatalan oleh Anda: 75% nominal, 25% tidak dikembalikan. Jika event dibatalkan penyelenggara, sisa dikembalikan 100%. Tiket yang sudah check-in tidak dapat direfund.
+                  </p>
+                  {(order.refunds || []).length > 0 ? (
+                    <ul className="mt-4 space-y-2 text-sm">
+                      {(order.refunds || []).map((rf) => (
+                        <li key={rf.id} className="rounded-xl bg-[#f7f8fd] px-3 py-2" title={rf.reason}>
+                          <span className="font-medium text-ink">{rf.refundNumber}</span>
+                          <span className="text-ink/60">
+                            {" "}
+                            · {refundStatusUiLabel(rf.status)} · {formatRupiah(rf.amountRupiah)}
+                          </span>
+                          {rf.source ? (
+                            <span className="mt-0.5 block text-xs text-ink/50">{refundSourceUiLabel(rf.source)}</span>
+                          ) : null}
+                        </li>
+                      ))}
+                    </ul>
+                  ) : null}
+                  {livePaid && !awaitingRefund && !ticketsGone ? (
+                    <p className="mt-4">
+                      <Link
+                        href={`/dashboard/refunds?order=${order.id}`}
+                        className="inline-flex min-h-11 items-center rounded-full bg-gold-500 px-4 text-sm font-semibold text-white"
+                      >
+                        Ajukan refund + rekening
+                      </Link>
+                    </p>
+                  ) : (
+                    <p className="mt-4">
+                      <Link className="text-sm font-medium text-gold-700 underline-offset-2 hover:underline" href="/dashboard/refunds">
+                        Buka riwayat refund
+                      </Link>
+                    </p>
+                  )}
                 </section>
               ) : null}
             </div>
@@ -490,6 +584,18 @@ export default function OrderDetailPage() {
                 <span>Total</span>
                 <span>{formatRupiah(order.totalPayableRupiah)}</span>
               </p>
+              {refundedAmt > 0 ? (
+                <>
+                  <p className="mt-2 flex justify-between text-sm text-ink/70">
+                    <span>Refund sandbox</span>
+                    <span>− {formatRupiah(refundedAmt)}</span>
+                  </p>
+                  <p className="mt-1 flex justify-between text-sm text-ink/70">
+                    <span>{docKind === "cancelled" ? "Tidak dikembalikan" : "Sisa setelah refund"}</span>
+                    <span>{formatRupiah(leftoverAmt)}</span>
+                  </p>
+                </>
+              ) : null}
               {pending && !payment ? (
                 <Button
                   className="mt-4 w-full"

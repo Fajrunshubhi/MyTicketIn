@@ -287,15 +287,21 @@ Keputusan berikut menjadi baseline implementasi. Perubahan harus dicatat sebagai
 
 ### US-12 — Pembatalan dan Refund Sandbox
 
-**Sebagai admin, saya ingin mencatat pembatalan serta refund sandbox agar status tiket dan transaksi tetap konsisten.**
+**Sebagai admin dan pembeli, saya ingin mencatat pembatalan serta refund sandbox agar status tiket dan transaksi tetap konsisten, tanpa uang nyata.**
 
-**MoSCoW:** Must Have untuk pembatalan; Should Have untuk integrasi refund gateway
+**MoSCoW:** Must Have untuk pembatalan; Should Have untuk integrasi refund gateway produksi
 
 - Event Cancelled tidak menerima checkout baru.
-- Tiket Unused dari order terdampak menjadi Cancelled setelah pembatalan disetujui.
+- Tiket Unused dari order terdampak menjadi Cancelled setelah pembatalan event, atau setelah pembatalan pembeli **disetujui** (refund 75%).
 - Tiket Used tidak dapat diubah menjadi Unused melalui proses refund biasa.
-- Catatan refund menyimpan nominal, alasan, status, admin, dan referensi provider bila ada.
-- Pengembalian uang nyata berada di luar cakupan.
+- Pembeli mengajukan pembatalan sandbox atas order Paid miliknya melalui menu Refund: dikembalikan **75%** nominal sisa (integer); 25% tidak dikembalikan. Pengajuan wajib nama bank, nama rekening, dan nomor rekening.
+- Penyelenggara memeriksa pengajuan lalu menyetujui atau menolak dengan penjelasan. Setelah disetujui, transfer sandbox boleh ditahan maksimal **1×24 jam**; status pembeli menjadi “disetujui, menunggu transfer”.
+- Penyelenggara menyelesaikan dengan mengunggah bukti transfer; status riwayat menjadi Selesai. Bukti terlihat oleh pembeli. Bukan transfer uang nyata.
+- Jika ditolak, pembeli menerima alasan dan boleh mengajukan refund ulang pada order yang sama selama tiket Unused.
+- Event yang dibatalkan penyelenggara/admin memicu refund sandbox **100%** sisa untuk order Paid tanpa tiket Used (tanpa hold 24 jam).
+- Catatan refund menyimpan nominal, alasan, rekening, status, aktor, batas transfer, dan bukti sandbox bila ada.
+- Admin mengawasi SLA (tinjauan penyelenggara 48 jam, hold transfer 24 jam), audit, dan eskalasi; keputusan rutin bukan antrean harian admin.
+- Pengembalian uang nyata / payout produksi berada di luar cakupan.
 
 ### US-13 — Rekomendasi Event Serupa
 

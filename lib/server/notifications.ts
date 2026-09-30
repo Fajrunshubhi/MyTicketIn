@@ -1,6 +1,6 @@
 import { execute, newId, query } from "@/lib/server/http";
 import type { AuthUser } from "@/lib/server/access";
-import { isNotificationType, type NotificationType } from "@/lib/server/notification-types";
+import { isNotificationType, resolveNotificationActionPath, type NotificationType } from "@/lib/server/notification-types";
 
 export type { NotificationType } from "@/lib/server/notification-types";
 export { NOTIFICATION_TYPE_LABEL, isNotificationType } from "@/lib/server/notification-types";
@@ -104,6 +104,39 @@ export async function notifyAdmins(
   }
 }
 
+export async function listCatalogBuyerUserIds(excludeUserId?: string | null): Promise<string[]> {
+  const exclude = String(excludeUserId || "").trim() || null;
+  const rows = await query<{ id: string }>(
+    `SELECT u.id
+     FROM users u
+     WHERE u.role = 'USER' AND u.status = 'ACTIVE'::user_status
+       AND ($1::text IS NULL OR u.id <> $1)
+       AND NOT EXISTS (
+         SELECT 1 FROM organizer_staff_accounts s
+         WHERE s.user_id = u.id AND s.status = 'ACTIVE'
+       )
+       AND NOT EXISTS (
+         SELECT 1 FROM organizer_profiles p
+         WHERE p.owner_user_id = u.id
+           AND p.status IN ('APPROVED'::organizer_status, 'SUSPENDED'::organizer_status)
+       )
+     ORDER BY u.id`,
+    [exclude],
+  );
+  return rows.map((r) => r.id);
+}
+
+export async function notifyCatalogBuyers(input: Omit<NotifyInput, "recipientUserId">): Promise<void> {
+  const ids = await listCatalogBuyerUserIds();
+  for (const id of ids) {
+    await notify({
+      ...input,
+      recipientUserId: id,
+      deduplicationKey: `${input.deduplicationKey}:${id}`,
+    });
+  }
+}
+
 export async function eventOwnerUserId(eventId: string): Promise<string | null> {
   const rows = await query<{ owner_user_id: string }>(
     `SELECT p.owner_user_id FROM events e JOIN organizer_profiles p ON p.id = e.organizer_profile_id WHERE e.id=$1 LIMIT 1`,
@@ -138,10 +171,11 @@ export async function listNotifications(user: AuthUser, opts: { filter?: string;
     title: string;
     body: string;
     action_path: string | null;
+    entity_id: string | null;
     read_at: string | null;
     created_at: string;
   }>(
-    `SELECT id, type::text AS type, title, body, action_path, read_at::text, created_at::text
+    `SELECT id, type::text AS type, title, body, action_path, entity_id, read_at::text, created_at::text
      FROM notifications
      WHERE recipient_user_id=$1 AND ($2::boolean = false OR read_at IS NULL)
      ORDER BY created_at DESC, id DESC
@@ -158,7 +192,7 @@ export async function listNotifications(user: AuthUser, opts: { filter?: string;
       type: row.type,
       title: row.title,
       body: row.body,
-      actionPath: row.action_path,
+      actionPath: resolveNotificationActionPath(row.type, row.action_path, row.entity_id),
       createdAt: iso(row.created_at) || new Date().toISOString(),
       readAt: iso(row.read_at),
     })),

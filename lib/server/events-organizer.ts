@@ -1,7 +1,7 @@
 import { dummyCover } from "@/lib/event-cover";
 import { publicImageSrc } from "@/lib/server/gallery";
 import { AppError, execute, newId, query } from "@/lib/server/http";
-import { eventOwnerUserId, notify, notifyAdmins, paidTicketBuyerIds } from "@/lib/server/notifications";
+import { eventOwnerUserId, notify, notifyAdmins, notifyCatalogBuyers, paidTicketBuyerIds } from "@/lib/server/notifications";
 
 const EVENT_COLS = `id, organizer_profile_id, slug, title, description, category, venue_name, address_line, city, province,
   latitude, longitude, tags, timezone, starts_at::text, ends_at::text, terms, contact_email, contact_phone,
@@ -525,6 +525,19 @@ export async function decideEvent(adminId: string, id: string, decision: string,
       domainEventId: `event-decision:${id}:${next[0].version}`,
     });
   }
+  if (status === "PUBLISHED") {
+    const slug = String(next[0].slug || "").trim();
+    await notifyCatalogBuyers({
+      type: "EVENT_PUBLISHED",
+      title: "Event baru di katalog",
+      body: `“${next[0].title}” sudah dapat dipesan. Cek jadwal, kuota, dan harga di halaman event.`,
+      actionPath: slug ? `/events/${slug}` : "/events",
+      entityType: "Event",
+      entityId: id,
+      deduplicationKey: `event-catalog:${id}`,
+      domainEventId: `event-catalog:${id}`,
+    });
+  }
   return next[0];
 }
 
@@ -577,4 +590,6 @@ export async function markEventCancelled(eventId: string, actorId: string, reaso
       domainEventId: `event-cancelled:${eventId}`,
     });
   }
+  const { enqueueEventCancelledRefunds } = await import("@/lib/server/refunds");
+  await enqueueEventCancelledRefunds(eventId, actorId, why);
 }

@@ -523,12 +523,15 @@ F65 (kursi bernomor dan denah venue statis) adalah Must Have inventori; spesifik
 - **Tipe/persona:** Peningkatan — admin, pembeli
 - **Prioritas:** Should Have
 - **Kompleksitas:** Tinggi
-- **Deskripsi:** Admin mencatat Requested, Approved, Rejected, Processing, Completed, atau Failed untuk refund sandbox.
+- **Deskripsi:** Admin, pembeli, dan penyelenggara menjalankan siklus refund sandbox ala marketplace: pengajuan + rekening, keputusan, hold transfer 1×24 jam, bukti transfer, atau tolak lalu ajukan ulang; pembatalan pembeli 75%; pembatalan event 100%; tanpa uang nyata.
 - **Kriteria penerimaan:**
-  - Catatan memuat nominal, alasan, admin, waktu, dan referensi provider bila ada.
-  - Tiket Unused yang direfund menjadi Cancelled.
-  - Tidak ada uang nyata yang dipindahkan pada MVP.
-- **Teknis/kasus khusus:** Refund tiket Used ditolak dari alur biasa.
+  - Pembeli punya menu Refund berisi riwayat, timeline status, dan form pengajuan (alasan + nama bank + nama/nomor rekening).
+  - Transisi pembeli: Requested → (dicek) Approved (menunggu transfer, due 24 jam) → Completed setelah bukti transfer; atau Requested → Rejected dengan alasan, lalu boleh Requested ulang.
+  - Tiket Unused dibatalkan saat pengajuan pembeli **disetujui**, bukan menunggu bukti transfer; Used menolak refund biasa.
+  - Event Cancelled membatalkan tiket Unused dan mencatat refund 100% sisa lalu Completed tanpa hold 24 jam.
+  - Admin mengawasi SLA (48 jam tinjauan, 24 jam transfer), bukti, dan eskalasi; bukan memutus setiap pengajuan pembeli.
+  - Tidak ada uang nyata yang dipindahkan; bukti transfer adalah arsip sandbox.
+- **Teknis/kasus khusus:** Refund tiket Used ditolak dari alur biasa. Rekening dan bukti transfer hanya untuk pemilik order, penyelenggara event, dan admin.
 - **Dependensi/keahlian:** Gateway refund sandbox, F12, F31, F45.
 
 ## 6. E-ticket dan Check-in
@@ -735,10 +738,12 @@ F65 (kursi bernomor dan denah venue statis) adalah Must Have inventori; spesifik
 - **Tipe/persona:** Inti — pembeli, organizer
 - **Prioritas:** Must Have
 - **Kompleksitas:** Sedang
-- **Deskripsi:** Sistem memberi notifikasi perubahan penting di dalam aplikasi.
+- **Deskripsi:** Sistem memberi notifikasi perubahan penting di dalam aplikasi; lonceng menampilkan pratinjau saat di-hover atau diketuk.
 - **Kriteria penerimaan:**
-  - Minimal mencakup hasil moderasi, pembayaran/tiket, pembatalan, dan refund.
+  - Mencakup hasil moderasi, event terbit ke pembeli katalog, kode pembayaran, pembayaran/tiket, pembatalan, refund, pengingat H-1, dan antrean admin.
   - Pengguna hanya menerima notifikasi miliknya dan dapat menandai sebagai dibaca.
+  - Angka belum dibaca pada lonceng diperbarui tanpa memuat ulang halaman (poll singkat + peristiwa lokal).
+  - Setiap baris notifikasi dapat di-hover (pratinjau/tooltip) dan dibuka ke tautan terkait.
 - **Teknis/kasus khusus:** Pembuatan notifikasi tidak boleh menggagalkan transaksi utama; gunakan retry/outbox jika perlu.
 - **Dependensi/keahlian:** F11/F12, F31/F33/F34.
 

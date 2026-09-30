@@ -4,6 +4,8 @@ import type { AuthUser } from "@/lib/server/access";
 import { organizerSalesBlocked } from "@/lib/organizer-sales";
 import { issueTicketsForPaidOrder } from "@/lib/server/tickets";
 import { notify } from "@/lib/server/notifications";
+import { listOrderRefunds } from "@/lib/server/refunds";
+import { ticketsCancelledByRefund } from "@/lib/order-refund-display";
 
 type CheckoutLine = {
   ticketTypeId: string;
@@ -18,7 +20,13 @@ export async function listOrders(user: AuthUser, limit: number) {
     `SELECT o.id, o.order_number, o.event_id, o.status::text AS status, o.currency, o.subtotal_rupiah, o.loyalty_discount_rupiah,
             o.total_payable_rupiah, o.expires_at::text, o.created_at::text, o.version,
             e.title AS event_title, e.slug AS event_slug, e.starts_at::text AS event_starts_at,
-            e.timezone AS event_timezone, e.venue_name AS event_venue, e.city AS event_city
+            e.timezone AS event_timezone, e.venue_name AS event_venue, e.city AS event_city,
+            EXISTS (
+              SELECT 1 FROM refunds rf
+              WHERE rf.order_id = o.id AND rf.status = 'COMPLETED'::refund_status
+                AND COALESCE(rf.source, 'ADMIN') IN ('BUYER', 'EVENT_CANCELLED')
+                AND rf.status IN ('APPROVED'::refund_status, 'PROCESSING'::refund_status, 'COMPLETED'::refund_status)
+            ) AS tickets_cancelled
      FROM orders o
      JOIN events e ON e.id = o.event_id
      WHERE o.buyer_user_id = $1
@@ -28,6 +36,7 @@ export async function listOrders(user: AuthUser, limit: number) {
   );
   return rows.map((o) => ({
     ...orderDto(o),
+    ticketsCancelled: Boolean(o.tickets_cancelled),
     event: {
       id: String(o.event_id || ""),
       title: String(o.event_title || ""),
@@ -114,9 +123,12 @@ export async function getOrder(user: AuthUser, id: string) {
         province: ev[0].province,
       }
     : undefined;
+  const refunds = await listOrderRefunds(id);
   return {
     ...orderDto(o),
     event,
+    refunds,
+    ticketsCancelled: ticketsCancelledByRefund(String(o.status), refunds),
     items: items.map((it) => ({
       ...itemDto(it),
       attendees: byItem.get(String(it.id)) || [],

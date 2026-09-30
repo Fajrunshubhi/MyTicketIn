@@ -8,6 +8,8 @@ import { type CatalogCard } from "@/components/events/catalog-types";
 import { type AccountProfile, roleLabel } from "@/lib/account";
 import { formatRupiah } from "@/lib/format";
 import { Icon } from "@/components/ui/Icon";
+import { subscribeNotificationsLive } from "@/lib/notifications-live";
+import { NotificationHoverItem } from "@/components/notifications/NotificationHoverItem";
 
 type OrderRow = {
   id: string;
@@ -70,8 +72,27 @@ export function BuyerWorkspace() {
       }
     }
     void load();
+    const stop = subscribeNotificationsLive(() => {
+      fetch("/api/me/notifications?filter=all&limit=8", { credentials: "include", cache: "no-store" })
+        .then(async (res) => {
+          const body = await res.json().catch(() => ({}));
+          if (!cancelled && res.ok) setNotices((body.data?.items || []) as Notice[]);
+        })
+        .catch(() => undefined);
+    });
+    const timer = window.setInterval(() => {
+      if (document.visibilityState !== "visible") return;
+      fetch("/api/me/notifications?filter=all&limit=8", { credentials: "include", cache: "no-store" })
+        .then(async (res) => {
+          const body = await res.json().catch(() => ({}));
+          if (!cancelled && res.ok) setNotices((body.data?.items || []) as Notice[]);
+        })
+        .catch(() => undefined);
+    }, 4000);
     return () => {
       cancelled = true;
+      stop();
+      window.clearInterval(timer);
     };
   }, [router]);
 
@@ -140,16 +161,10 @@ export function BuyerWorkspace() {
           {notices.length === 0 ? (
             <p className="mt-6 text-sm text-ink/55">Belum ada notifikasi.</p>
           ) : (
-            <ul className="mt-4 space-y-4">
+            <ul className="mt-4 space-y-2">
               {notices.slice(0, 5).map((n) => (
                 <li key={n.id}>
-                  <p className="text-sm font-semibold text-ink">{n.title}</p>
-                  <p className="text-sm text-ink/65">{n.body}</p>
-                  {n.actionPath ? (
-                    <Link href={n.actionPath} className="mt-1 inline-block text-xs font-medium text-gold-700">
-                      Buka
-                    </Link>
-                  ) : null}
+                  <NotificationHoverItem item={n} fallbackHref="/dashboard/notifications" compact />
                 </li>
               ))}
             </ul>

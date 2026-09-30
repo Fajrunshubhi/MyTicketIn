@@ -9,6 +9,7 @@ import { Icon, type IconName } from "@/components/ui/Icon";
 import { type AccountProfile } from "@/lib/account";
 import { formatDateTime, formatRelativeId, formatRupiah, eventHasEnded } from "@/lib/format";
 import { SalesBreakdownCharts, type SalesBar } from "@/components/dashboard/SalesBreakdownCharts";
+import { NotificationHoverItem } from "@/components/notifications/NotificationHoverItem";
 
 type DashEvent = {
   id: string;
@@ -563,24 +564,13 @@ export function OrganizerWorkspace({ me }: { me: AccountProfile }) {
             {notices.length === 0 ? (
               <p className="mt-6 text-sm text-ink/55">Belum ada notifikasi.</p>
             ) : (
-              <ul className="mt-4 space-y-4">
+              <ul className="mt-4 space-y-2">
                 {notices.slice(0, 5).map((n) => (
-                  <li key={n.id} className="flex gap-3">
-                    <span className={`mt-1 h-2.5 w-2.5 shrink-0 rounded-full ${n.readAt ? "bg-stone-300" : "bg-gold-500"}`} aria-hidden="true" />
-                    <div className="min-w-0">
-                      <p className="text-sm text-ink">
-                        <span className="font-semibold">{n.title}</span>
-                        <span className="text-ink/70"> — {n.body}</span>
-                      </p>
-                      <p className="mt-1 text-xs text-ink/40">
-                        {n.readAt ? "Sudah dibaca" : "Belum dibaca"} · {formatRelativeId(n.createdAt)}
-                      </p>
-                      {n.actionPath ? (
-                        <Link href={n.actionPath} className="mt-1 inline-block text-xs font-medium text-gold-700">
-                          Buka
-                        </Link>
-                      ) : null}
-                    </div>
+                  <li key={n.id}>
+                    <NotificationHoverItem item={n} fallbackHref="/dashboard/notifications" compact />
+                    <p className="px-3 pb-1 text-xs text-ink/40">
+                      {n.readAt ? "Sudah dibaca" : "Belum dibaca"} · {formatRelativeId(n.createdAt)}
+                    </p>
                   </li>
                 ))}
               </ul>

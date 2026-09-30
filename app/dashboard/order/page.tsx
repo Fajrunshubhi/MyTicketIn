@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Icon } from "@/components/ui/Icon";
 import { formatDateTime, formatRupiah } from "@/lib/format";
 import { downloadOrderReceiptPdf } from "@/lib/order-receipt-pdf";
+import { orderDocumentKind, orderStatusUiLabel } from "@/lib/order-refund-display";
 
 type Row = {
   id: string;
@@ -22,6 +23,8 @@ type Row = {
     venueName?: string;
     city?: string;
   };
+  ticketsCancelled?: boolean;
+  refunds?: { amountRupiah: number; status: string; source?: string }[];
 };
 
 const STATUS_LABEL: Record<string, string> = {
@@ -30,6 +33,7 @@ const STATUS_LABEL: Record<string, string> = {
   EXPIRED: "Kedaluwarsa",
   CANCELLED: "Dibatalkan",
   FAILED: "Gagal",
+  REFUNDED: "Direfund",
 };
 
 const FILTERS: { value: string; label: string }[] = [
@@ -39,10 +43,11 @@ const FILTERS: { value: string; label: string }[] = [
   { value: "EXPIRED", label: "Kedaluwarsa" },
 ];
 
-function statusClass(status: string) {
+function statusClass(status: string, kind?: string) {
+  if (kind === "cancelled" || kind === "refunded") return "bg-stone-100 text-ink/70";
   if (status === "PAID") return "bg-emerald-50 text-emerald-800";
   if (status === "PENDING") return "bg-[#eee8ff] text-gold-800";
-  if (status === "EXPIRED" || status === "FAILED" || status === "CANCELLED") return "bg-stone-100 text-ink/60";
+  if (status === "EXPIRED" || status === "FAILED" || status === "CANCELLED" || status === "REFUNDED") return "bg-stone-100 text-ink/60";
   return "bg-stone-100 text-ink/70";
 }
 
@@ -159,6 +164,7 @@ function OrdersRoute() {
           {visible.map((o) => {
             const when = eventWhen(o);
             const place = [o.event?.venueName, o.event?.city].filter(Boolean).join(" · ");
+            const kind = orderDocumentKind(o.status, o.refunds, Boolean(o.ticketsCancelled));
             return (
               <li key={o.id}>
                 <article className="rounded-3xl border border-stone-200 bg-white p-5 shadow-sm">
@@ -179,8 +185,8 @@ function OrdersRoute() {
                         </p>
                       ) : null}
                     </div>
-                    <span className={`rounded-full px-3 py-1 text-xs font-semibold ${statusClass(o.status)}`}>
-                      {STATUS_LABEL[o.status] || o.status}
+                    <span className={`rounded-full px-3 py-1 text-xs font-semibold ${statusClass(o.status, kind)}`}>
+                      {orderStatusUiLabel(kind) || STATUS_LABEL[o.status] || o.status}
                     </span>
                   </div>
                   <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-stone-100 pt-4">

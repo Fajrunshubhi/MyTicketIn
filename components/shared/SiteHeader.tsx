@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Icon } from "@/components/ui/Icon";
 import { loadSessionUser } from "@/lib/session";
+import { NotificationBell } from "@/components/NotificationBell";
 import { ProfileMenu } from "@/components/shared/ProfileMenu";
 import { SiteNav, type SiteNavItem } from "@/components/shared/SiteNav";
 
@@ -30,7 +31,14 @@ export async function SiteHeader() {
         </Link>
       }
       items={items}
-      trailing={user ? <ProfileMenu /> : undefined}
+      trailing={
+        user ? (
+          <>
+            {user.access?.kind === "staff" ? null : <NotificationBell compact href="/dashboard/notifications" />}
+            <ProfileMenu />
+          </>
+        ) : undefined
+      }
       showLogout={Boolean(user)}
     />
   );

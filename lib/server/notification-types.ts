@@ -7,6 +7,7 @@ export const NOTIFICATION_TYPES = [
   "EVENT_CANCELLED",
   "PAYMENT_SUCCEEDED",
   "PAYMENT_FAILED",
+  "PAYMENT_INSTRUCTIONS",
   "TICKET_ISSUED",
   "REFUND_UPDATED",
   "EVENT_REMINDER",
@@ -25,6 +26,7 @@ export const NOTIFICATION_TYPE_LABEL: Record<NotificationType, string> = {
   EVENT_CANCELLED: "Event dibatalkan",
   PAYMENT_SUCCEEDED: "Pembayaran",
   PAYMENT_FAILED: "Pembayaran",
+  PAYMENT_INSTRUCTIONS: "Kode pembayaran",
   TICKET_ISSUED: "Tiket",
   REFUND_UPDATED: "Refund",
   EVENT_REMINDER: "Pengingat event",
@@ -34,4 +36,18 @@ export const NOTIFICATION_TYPE_LABEL: Record<NotificationType, string> = {
 
 export function isNotificationType(value: string): value is NotificationType {
   return (NOTIFICATION_TYPES as readonly string[]).includes(value);
+}
+
+/** Tautan lama ke inbox sendiri tidak bisa dibuka; refund penyelenggara ke antrean keputusan. */
+export function resolveNotificationActionPath(
+  type: string,
+  actionPath: string | null | undefined,
+  entityId?: string | null,
+): string | null {
+  const path = actionPath || null;
+  if (type === "REFUND_UPDATED" && (!path || path === "/dashboard/notifications")) {
+    const id = (entityId || "").trim();
+    return id ? `/dashboard/refunds?refund=${encodeURIComponent(id)}` : "/dashboard/refunds";
+  }
+  return path;
 }

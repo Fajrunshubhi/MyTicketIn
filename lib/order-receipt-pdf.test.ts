@@ -58,7 +58,24 @@ describe("buildOrderReceiptLines", () => {
   it("labels unpaid orders as summary, not payment proof", () => {
     const lines = buildOrderReceiptLines({ ...base, status: "PENDING" }).join("\n");
     expect(lines).toContain("RINGKASAN ORDER");
-    expect(lines).toContain("Order belum lunas");
+    expect(lines).toContain("BELUM LUNAS");
     expect(lines).not.toContain("BUKTI PEMBAYARAN");
+  });
+
+  it("stamps cancelled buyer refund as DIBATALKAN, not LUNAS", () => {
+    const refunded: ReceiptOrder = {
+      ...base,
+      refunds: [{ amountRupiah: 150000, status: "COMPLETED", source: "BUYER", refundNumber: "RFND-TEST" }],
+    };
+    const lines = buildOrderReceiptLines(refunded).join("\n");
+    expect(lines).toContain("DOKUMEN PEMBATALAN");
+    expect(lines).toContain("DIBATALKAN");
+    expect(lines).toContain("REFUND SANDBOX");
+    expect(lines).toContain("TIDAK DIKEMBALIKAN");
+    expect(lines).toContain("Tiket QR tidak berlaku");
+    const raw = new TextDecoder("latin1").decode(buildOrderReceiptPdfBytes(refunded));
+    expect(raw).toContain("DIBATALKAN");
+    expect(raw).not.toContain("LUNAS");
+    expect(raw).toContain("DOKUMEN PEMBATALAN");
   });
 });
