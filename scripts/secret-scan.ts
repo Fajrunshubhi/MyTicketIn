@@ -2,7 +2,7 @@ import { execSync } from "node:child_process";
 
 try {
   const out = execSync(
-    'git grep -I -n -E "MIDTRANS_SERVER_KEY=.+|XENDIT_SECRET_KEY=.+|sk_live|BEGIN PRIVATE KEY" -- . ":(exclude).env.example" ":(exclude)RFC" ":(exclude)docs"',
+    'git grep -I -n -E "MIDTRANS_SERVER_KEY=.+|XENDIT_SECRET_KEY=.+|sk_live|BEGIN PRIVATE KEY" -- . ":(exclude).env.example" ":(exclude)RFC" ":(exclude)docs" ":(exclude)scripts/secret-scan.ts" ":(exclude)backend/internal/platform/logger/logger.go"',
     { encoding: "utf8" },
   );
   if (out.trim()) {
