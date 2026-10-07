@@ -359,3 +359,38 @@ describe("loyalty points", () => {
     expect(await ledger(c.orderId)).toEqual([]);
   });
 });
+
+describe("crash between the PAID gate and the follow-up steps", () => {
+  it("is completed by a webhook replay: counters convert once and tickets are issued once", async () => {
+    const c = await checkout({ qty: 2 });
+    // Simulate a crash right after the status gate: PAID, but nothing else happened.
+    await execute(
+      `UPDATE orders SET status='PAID'::order_status, paid_at=CURRENT_TIMESTAMP, version=version+1 WHERE id=$1`,
+      [c.orderId],
+    );
+    expect(await counters(c.tt)).toMatchObject({ reserved: 2, paid: 0 });
+    expect(await ticketCount(c.orderId)).toBe(0);
+
+    const first = await send(c, "payment.succeeded").call();
+    expect(first.body.outcome).toBe("ALREADY_PAID");
+    expect(await counters(c.tt)).toMatchObject({ reserved: 0, paid: 2 });
+    expect(await ticketCount(c.orderId)).toBe(2);
+
+    // A second replay must not convert or issue again.
+    await send(c, "payment.succeeded").call();
+    expect(await counters(c.tt)).toMatchObject({ reserved: 0, paid: 2 });
+    expect(await ticketCount(c.orderId)).toBe(2);
+  });
+
+  it("is completed by the recovery job once the order is older than a minute", async () => {
+    const c = await checkout({ qty: 1 });
+    await execute(
+      `UPDATE orders SET status='PAID'::order_status, paid_at=CURRENT_TIMESTAMP - INTERVAL '5 minutes', version=version+1 WHERE id=$1`,
+      [c.orderId],
+    );
+    const { recoverPaidOrders } = await import("@/lib/server/payments");
+    await recoverPaidOrders(100);
+    expect(await counters(c.tt)).toMatchObject({ reserved: 0, paid: 1 });
+    expect(await ticketCount(c.orderId)).toBe(1);
+  });
+});

@@ -31,6 +31,16 @@ type Profile = {
   decidedAt?: string | null;
   appealReason?: string | null;
   appealedAt?: string | null;
+  organizerType?: "INDIVIDUAL" | "ORGANIZATION" | null;
+  picName?: string | null;
+  city?: string | null;
+  referenceUrl?: string | null;
+  dataConsentAt?: string | null;
+  bankName?: string | null;
+  bankAccountName?: string | null;
+  bankAccountNumber?: string | null;
+  hasKtp?: boolean;
+  hasSelfie?: boolean;
   version: number;
   ownerUserId?: string;
   history?: OrganizerHistoryEntry[];
@@ -91,6 +101,8 @@ export default function AdminOrganizerDetailPage() {
   const [reason, setReason] = useState("");
   const [decision, setDecision] = useState("APPROVE");
   const [saving, setSaving] = useState(false);
+  // Documents load only on explicit click so each view is an intentional, audited action.
+  const [showDocs, setShowDocs] = useState(false);
 
   function load() {
     fetch(`/api/admin/organizer-applications/${params.id}`, { credentials: "include", cache: "no-store" })
@@ -221,6 +233,99 @@ export default function AdminOrganizerDetailPage() {
                   "Tidak diisi"
                 )}
               </ReviewField>
+            </FormSection>
+
+            <FormSection title="Verifikasi identitas" description="Cocokkan nama penanggung jawab dengan KTP dan wajah pada selfie.">
+              <ReviewField label="Jenis">
+                {profile.organizerType === "INDIVIDUAL"
+                  ? "Individu"
+                  : profile.organizerType === "ORGANIZATION"
+                    ? "Komunitas / badan hukum"
+                    : "—"}
+              </ReviewField>
+              <ReviewField label="Penanggung jawab">{profile.picName || "—"}</ReviewField>
+              <ReviewField label="Kota / kabupaten">{profile.city || "—"}</ReviewField>
+              <ReviewField label="Tautan bukti">
+                {profile.referenceUrl ? (
+                  <a
+                    className="break-all text-gold-800 underline-offset-2 hover:underline"
+                    href={profile.referenceUrl}
+                    target="_blank"
+                    rel="noopener noreferrer nofollow"
+                  >
+                    {profile.referenceUrl}
+                  </a>
+                ) : (
+                  "—"
+                )}
+              </ReviewField>
+              <ReviewField label="Rekening">
+                {profile.bankAccountNumber ? (
+                  <>
+                    {profile.bankName} · <span className="font-mono">{profile.bankAccountNumber}</span>
+                    <br />
+                    a.n. {profile.bankAccountName}
+                    {profile.picName && profile.bankAccountName &&
+                    profile.picName.trim().toLowerCase() !== profile.bankAccountName.trim().toLowerCase() ? (
+                      <span className="mt-1 block text-xs font-medium text-amber-700">
+                        Nama pemilik rekening berbeda dengan penanggung jawab. Pastikan relevan.
+                      </span>
+                    ) : null}
+                  </>
+                ) : (
+                  "Belum diisi"
+                )}
+              </ReviewField>
+              <ReviewField label="Persetujuan data">
+                {profile.dataConsentAt ? (
+                  <time dateTime={profile.dataConsentAt}>{formatDateTime(profile.dataConsentAt)}</time>
+                ) : (
+                  "—"
+                )}
+              </ReviewField>
+              <FormFieldWide>
+                {profile.hasKtp || profile.hasSelfie ? (
+                  showDocs ? (
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      {profile.hasKtp ? (
+                        <figure>
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img
+                            src={`/api/admin/organizer-applications/${profile.id}/documents/ktp`}
+                            alt={`Foto KTP ${profile.picName || "penanggung jawab"}`}
+                            className="max-h-80 w-full rounded-xl border border-stone-200 object-contain"
+                          />
+                          <figcaption className="mt-1 text-xs text-ink/55">Foto KTP</figcaption>
+                        </figure>
+                      ) : null}
+                      {profile.hasSelfie ? (
+                        <figure>
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img
+                            src={`/api/admin/organizer-applications/${profile.id}/documents/selfie`}
+                            alt={`Foto selfie ${profile.picName || "penanggung jawab"}`}
+                            className="max-h-80 w-full rounded-xl border border-stone-200 object-contain"
+                          />
+                          <figcaption className="mt-1 text-xs text-ink/55">Foto selfie</figcaption>
+                        </figure>
+                      ) : null}
+                    </div>
+                  ) : (
+                    <div>
+                      <button
+                        type="button"
+                        onClick={() => setShowDocs(true)}
+                        className="min-h-11 rounded-xl border border-stone-300 px-4 text-sm font-medium text-ink hover:bg-stone-50"
+                      >
+                        Tampilkan dokumen
+                      </button>
+                      <p className="mt-1 text-xs text-ink/55">Setiap akses dokumen dicatat di audit log.</p>
+                    </div>
+                  )
+                ) : (
+                  <p className="text-sm text-ink/65">Tidak ada dokumen tersimpan (pengajuan lama atau sudah dihapus).</p>
+                )}
+              </FormFieldWide>
             </FormSection>
 
             <FormSection title="Deskripsi" description="Cakupan kegiatan yang diajukan pelamar.">

@@ -178,7 +178,7 @@ MVP ditujukan untuk validasi akademik selama 12 minggu. Transaksi uang nyata, se
   - Pengajuan valid berstatus Pending dan terlihat oleh admin.
   - Pengguna dapat melihat status serta alasan penolakan.
   - Pengajuan Pending tidak langsung memberi hak publikasi atau akses portal penyelenggara.
-- **Teknis/kasus khusus:** MVP tidak menerima KYC/dokumen identitas nyata. Pengajuan dari dalam aplikasi setelah login pembeli, bukan dari formulir daftar.
+- **Teknis/kasus khusus:** Pengajuan wajib memuat jenis (individu/komunitas), nama penanggung jawab sesuai KTP, kota, tautan bukti kredibilitas, telepon, rekening penyelenggara (bank/e-wallet, nomor, nama pemilik; hanya dicatat untuk pencairan tahap berikutnya, tanpa transfer nyata pada MVP), persetujuan data (UU PDP), foto KTP, dan foto selfie (JPG/PNG/WebP, maks 5 MB). Berkas dienkripsi AES-256-GCM, hanya dapat dilihat admin (setiap akses diaudit), tidak pernah dilayani lewat URL publik, disimpan selama akun organizer aktif, dan dihapus 30 hari setelah penolakan final. Verifikasi KTP bersifat manual oleh admin (tanpa OCR/e-KYC); demo memakai KTP contoh. Pengajuan dari dalam aplikasi setelah login pembeli, bukan dari formulir daftar.
 - **Dependensi/keahlian:** F1/F2/F3, F5.
 
 ### F8 — Moderasi Organizer

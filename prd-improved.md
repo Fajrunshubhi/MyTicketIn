@@ -90,7 +90,7 @@ Keputusan berikut menjadi baseline implementasi. Perubahan harus dicatat sebagai
 | Area | Keputusan MVP |
 |---|---|
 | **Akun** | Satu akun biasa dapat membeli tiket dan mengajukan profil organizer; ADMIN adalah peran terpisah |
-| **Verifikasi organizer** | Admin menyetujui nama organizer, kontak, dan deskripsi; verifikasi legal/KYC bukan bagian demo akademik |
+| **Verifikasi organizer** | Admin menyetujui nama organizer, kontak, deskripsi, serta foto KTP dan selfie penanggung jawab (tinjauan manual, terenkripsi, akses diaudit); e-KYC/legalitas badan usaha bukan bagian demo akademik |
 | **Moderasi event** | Event harus disetujui admin sebelum Published |
 | **Tipe event** | Tatap muka; setiap event memilih tepat satu mode: `GENERAL_ADMISSION`, `ZONED`, atau `RESERVED_SEATING` |
 | **Denah kursi MVP** | Organizer mengunggah gambar denah statis dan legenda/teks alternatif; pembeli memilih melalui list/grid aksesibel terpisah. Clickable map, editor drag-and-drop, orphan-seat optimization, dan collaborative map editing bukan bagian MVP |
@@ -102,7 +102,7 @@ Keputusan berikut menjadi baseline implementasi. Perubahan harus dicatat sebagai
 | **Pembatalan/refund** | Admin mencatat siklus refund sandbox; tidak ada pengembalian uang nyata |
 | **Notifikasi** | In-app dan email transaksional wajib; reminder event wajib |
 | **Bahasa/mata uang** | Bahasa Indonesia dan Rupiah |
-| **Data pengujian** | Gunakan akun dan transaksi uji; hindari dokumen identitas nyata |
+| **Data pengujian** | Gunakan akun dan transaksi uji; gunakan KTP contoh/tidak asli pada demo |
 | **Rekomendasi** | Hanya event Published yang akan datang; gunakan kategori, lokasi, organizer, dan riwayat Paid milik pembeli; fallback kontekstual tersedia tanpa riwayat |
 | **Loyalitas** | Poin terisolasi per pasangan pembeli–organizer; 1 poin per Rp1.000 net paid, nilai redeem 1 poin = Rp10, maksimum 20% order, tanpa kedaluwarsa dan tanpa nilai tunai |
 | **AI poster** | Hanya menghasilkan saran terstruktur; organizer wajib meninjau, menerapkan, dan menyimpan; AI tidak boleh auto-submit atau auto-publish |

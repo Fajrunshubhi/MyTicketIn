@@ -110,19 +110,38 @@ export async function settlePaidOrder(
      WHERE id=$1 AND status IN ('CREATED','PENDING')`,
     [paymentId],
   );
-  const res = await query<{ ticket_type_id: string; quantity: number }>(
-    `UPDATE inventory_reservations SET released_at=CURRENT_TIMESTAMP, release_reason='CONVERTED_TO_PAID'
-     WHERE order_id=$1 AND released_at IS NULL RETURNING ticket_type_id, quantity`,
+  await finalizePaidOrder(order);
+  return true;
+}
+
+type PaidOrderRow = {
+  id: string;
+  buyer_user_id: string;
+  event_id: string;
+  order_number: string;
+  total_payable_rupiah: number;
+};
+
+/**
+ * Everything that must follow PENDING -> PAID. Each step is idempotent, so it is safe to call again
+ * after a crash between the status gate and the later steps (webhook retry or recovery job).
+ */
+export async function finalizePaidOrder(order: PaidOrderRow): Promise<void> {
+  const orderId = order.id;
+  // One statement: releasing the reservation and moving counters cannot be split by a crash.
+  await query(
+    `WITH rel AS (
+       UPDATE inventory_reservations SET released_at=CURRENT_TIMESTAMP, release_reason='CONVERTED_TO_PAID'
+       WHERE order_id=$1 AND released_at IS NULL RETURNING ticket_type_id, quantity
+     ), agg AS (
+       SELECT ticket_type_id, SUM(quantity)::int AS qty FROM rel GROUP BY ticket_type_id
+     )
+     UPDATE event_ticket_types t
+     SET reserved_quantity = t.reserved_quantity - agg.qty, paid_quantity = t.paid_quantity + agg.qty,
+         updated_at=CURRENT_TIMESTAMP, version=t.version+1
+     FROM agg WHERE t.id = agg.ticket_type_id`,
     [orderId],
   );
-  for (const r of res) {
-    await query(
-      `UPDATE event_ticket_types SET reserved_quantity = reserved_quantity - $2, paid_quantity = paid_quantity + $2,
-              updated_at=CURRENT_TIMESTAMP, version=version+1
-       WHERE id=$1 AND reserved_quantity >= $2`,
-      [r.ticket_type_id, r.quantity],
-    );
-  }
   await applyLoyaltyOnPaid(
     order.id,
     order.buyer_user_id,
@@ -155,7 +174,33 @@ export async function settlePaidOrder(
       domainEventId: `pay-ok:${orderId}`,
     });
   }
-  return true;
+}
+
+/**
+ * Re-runs the idempotent post-payment steps for PAID orders that a crash left half-finished
+ * (reservation still open). Orders paid within the last minute are skipped to avoid racing a live request.
+ */
+export async function recoverPaidOrders(limit = 20): Promise<{ recovered: number }> {
+  const rows = await query<PaidOrderRow>(
+    `SELECT o.id, o.buyer_user_id, o.event_id, o.order_number, o.total_payable_rupiah
+     FROM orders o
+     WHERE o.status='PAID'::order_status AND o.paid_at < CURRENT_TIMESTAMP - INTERVAL '1 minute'
+       AND EXISTS (SELECT 1 FROM inventory_reservations r WHERE r.order_id=o.id AND r.released_at IS NULL)
+     ORDER BY o.paid_at LIMIT $1`,
+    [Math.min(Math.max(limit, 1), 100)],
+  );
+  for (const row of rows) await finalizePaidOrder(row);
+  return { recovered: rows.length };
+}
+
+/** Finalizes a single PAID order (used when a webhook retry finds the order already marked PAID). */
+export async function recoverPaidOrderById(orderId: string): Promise<void> {
+  const rows = await query<PaidOrderRow>(
+    `SELECT id, buyer_user_id, event_id, order_number, total_payable_rupiah
+     FROM orders WHERE id=$1 AND status='PAID'::order_status`,
+    [orderId],
+  );
+  if (rows[0]) await finalizePaidOrder(rows[0]);
 }
 
 /**

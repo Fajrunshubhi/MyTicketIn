@@ -29,3 +29,4 @@ process.env.EMAIL_SMTP_HOST = "";
 process.env.SESSION_SECRET ||= "integration-test-session-secret-0123456789";
 process.env.QR_ENCRYPTION_KEYS ||= "integration-test-qr-key-0123456789abcdef";
 process.env.PAYMENT_WEBHOOK_SECRET = "integration-test-webhook-secret";
+process.env.DOCUMENT_ENCRYPTION_KEY = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";

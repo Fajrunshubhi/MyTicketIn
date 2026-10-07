@@ -7,6 +7,7 @@ import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { Icon, type IconName } from "@/components/ui/Icon";
 import { formatDateTime } from "@/lib/format";
+import { maskAccountNumber } from "@/lib/server/refund-policy";
 import { ApplicationForm } from "@/components/organizer/ApplicationForm";
 import { OrganizerHistory, type OrganizerHistoryEntry } from "@/components/organizer/OrganizerHistory";
 
@@ -22,6 +23,15 @@ export type OrganizerProfile = {
   decidedAt?: string | null;
   appealReason?: string | null;
   appealedAt?: string | null;
+  organizerType?: "INDIVIDUAL" | "ORGANIZATION" | null;
+  picName?: string | null;
+  city?: string | null;
+  referenceUrl?: string | null;
+  bankName?: string | null;
+  bankAccountName?: string | null;
+  bankAccountNumber?: string | null;
+  hasKtp?: boolean;
+  hasSelfie?: boolean;
   version: number;
   history?: OrganizerHistoryEntry[];
 };
@@ -212,6 +222,42 @@ export function OrganizerStatus({ profile, onRefresh }: { profile: OrganizerProf
               <dt className="text-xs font-semibold uppercase tracking-wide text-ink/40">Telepon</dt>
               <dd className="mt-1 text-ink">{profile.contactPhone || "Tidak diisi"}</dd>
             </div>
+            {profile.organizerType ? (
+              <>
+                <div>
+                  <dt className="text-xs font-semibold uppercase tracking-wide text-ink/40">Jenis penyelenggara</dt>
+                  <dd className="mt-1 text-ink">{profile.organizerType === "INDIVIDUAL" ? "Individu" : "Komunitas / badan hukum"}</dd>
+                </div>
+                <div>
+                  <dt className="text-xs font-semibold uppercase tracking-wide text-ink/40">Penanggung jawab</dt>
+                  <dd className="mt-1 text-ink">{profile.picName}</dd>
+                </div>
+                <div>
+                  <dt className="text-xs font-semibold uppercase tracking-wide text-ink/40">Kota / kabupaten</dt>
+                  <dd className="mt-1 text-ink">{profile.city}</dd>
+                </div>
+                <div>
+                  <dt className="text-xs font-semibold uppercase tracking-wide text-ink/40">Tautan bukti</dt>
+                  <dd className="mt-1 break-all text-ink">{profile.referenceUrl}</dd>
+                </div>
+                {profile.bankAccountNumber ? (
+                  <div className="sm:col-span-2">
+                    <dt className="text-xs font-semibold uppercase tracking-wide text-ink/40">Rekening</dt>
+                    <dd className="mt-1 text-ink">
+                      {profile.bankName} · <span className="font-mono">{maskAccountNumber(profile.bankAccountNumber)}</span> · a.n.{" "}
+                      {profile.bankAccountName}
+                    </dd>
+                  </div>
+                ) : null}
+                <div className="sm:col-span-2">
+                  <dt className="text-xs font-semibold uppercase tracking-wide text-ink/40">Dokumen verifikasi</dt>
+                  <dd className="mt-1 text-sm text-ink">
+                    Foto KTP {profile.hasKtp ? "terunggah" : "belum ada"} · Foto selfie {profile.hasSelfie ? "terunggah" : "belum ada"}
+                    . Hanya admin yang dapat melihatnya.
+                  </dd>
+                </div>
+              </>
+            ) : null}
             <div className="sm:col-span-2">
               <dt className="text-xs font-semibold uppercase tracking-wide text-ink/40">Deskripsi</dt>
               <dd className="mt-1 whitespace-pre-wrap text-sm leading-relaxed text-ink/80">{profile.description}</dd>
@@ -228,6 +274,15 @@ export function OrganizerStatus({ profile, onRefresh }: { profile: OrganizerProf
               contactEmail: profile.contactEmail,
               contactPhone: profile.contactPhone,
               description: profile.description,
+              organizerType: profile.organizerType ?? undefined,
+              picName: profile.picName ?? undefined,
+              city: profile.city ?? undefined,
+              referenceUrl: profile.referenceUrl ?? undefined,
+              bankName: profile.bankName ?? undefined,
+              bankAccountName: profile.bankAccountName ?? undefined,
+              bankAccountNumber: profile.bankAccountNumber ?? undefined,
+              hasKtp: profile.hasKtp,
+              hasSelfie: profile.hasSelfie,
               version: profile.version,
             }}
             onDone={onRefresh}

@@ -1,10 +1,13 @@
 import { AppError, execute, newId, query } from "@/lib/server/http";
 import { notify, notifyAdmins } from "@/lib/server/notifications";
 import type { AuthUser } from "@/lib/server/access";
+import { isParsedRefundBank, parseRefundBank, type ParsedRefundBank } from "@/lib/server/refund-policy";
+import { deleteDocuments, documentFlags, saveDocument, validateDocument } from "@/lib/server/organizer-documents";
 
 const PROFILE_SELECT = `id, owner_user_id, name, contact_email, contact_phone, description, status::text AS status,
   decision_reason, submitted_at::text, decided_at::text, decided_by_user_id, created_at::text, updated_at::text, version,
-  appeal_reason, appealed_at::text`;
+  appeal_reason, appealed_at::text, organizer_type, pic_name, city, reference_url, data_consent_at::text,
+  bank_name, bank_account_name, bank_account_number`;
 
 export type OrganizerProfile = {
   id: string;
@@ -21,6 +24,14 @@ export type OrganizerProfile = {
   version: number;
   appeal_reason: string | null;
   appealed_at: string | null;
+  organizer_type: string | null;
+  pic_name: string | null;
+  city: string | null;
+  reference_url: string | null;
+  data_consent_at: string | null;
+  bank_name: string | null;
+  bank_account_name: string | null;
+  bank_account_number: string | null;
 };
 
 function iso(v: string | null | undefined): string | null {
@@ -42,6 +53,14 @@ export function ownerDto(p: OrganizerProfile) {
     decidedAt: iso(p.decided_at),
     appealReason: p.appeal_reason,
     appealedAt: iso(p.appealed_at),
+    organizerType: p.organizer_type,
+    picName: p.pic_name,
+    city: p.city,
+    referenceUrl: p.reference_url,
+    bankName: p.bank_name,
+    bankAccountName: p.bank_account_name,
+    bankAccountNumber: p.bank_account_number,
+    dataConsentAt: iso(p.data_consent_at),
     version: p.version,
   };
 }
@@ -163,36 +182,91 @@ export async function getById(id: string): Promise<OrganizerProfile | null> {
   return rows[0] || null;
 }
 
-function normalizeInput(name: string, email: string, phone: string, description: string) {
+export type ApplicationBody = {
+  name: string;
+  contactEmail: string;
+  contactPhone?: string | null;
+  description: string;
+  organizerType: string;
+  picName: string;
+  city: string;
+  referenceUrl: string;
+  bankName: string;
+  bankAccountName: string;
+  bankAccountNumber: string;
+  consent: boolean;
+};
+
+export type ApplicationFiles = { ktp?: Buffer | null; selfie?: Buffer | null };
+
+function normalizeInput(body: ApplicationBody) {
   const fields: Record<string, string> = {};
-  const n = name.trim();
+  const n = (body.name || "").trim();
   if ([...n].length < 2 || [...n].length > 120) fields.name = "Nama organizer wajib 2–120 karakter.";
-  const em = email.trim().toLowerCase();
+  const em = (body.contactEmail || "").trim().toLowerCase();
   if (em.length > 254 || !em.includes("@")) fields.contactEmail = "Email kontak tidak valid.";
-  const ph = phone.trim();
-  let phoneOut: string | null = null;
-  if (ph) {
-    if (!/^\+?[0-9]{8,15}$/.test(ph)) fields.contactPhone = "Nomor telepon 8–15 digit, boleh diawali +.";
-    else phoneOut = ph;
-  }
-  const d = description.trim();
+  const ph = (body.contactPhone || "").trim();
+  if (!/^\+?[0-9]{8,15}$/.test(ph)) fields.contactPhone = "Nomor telepon wajib, 8–15 digit, boleh diawali +.";
+  const d = (body.description || "").trim();
   if ([...d].length < 20 || [...d].length > 2000) fields.description = "Deskripsi wajib 20–2000 karakter.";
+  const type = (body.organizerType || "").trim().toUpperCase();
+  if (type !== "INDIVIDUAL" && type !== "ORGANIZATION") fields.organizerType = "Pilih jenis penyelenggara.";
+  const pic = (body.picName || "").trim().replace(/\s+/g, " ");
+  if (pic.length < 3 || pic.length > 120 || !/^[A-Za-z .,'-]+$/.test(pic)) {
+    fields.picName = "Nama penanggung jawab 3–120 huruf, sesuai KTP.";
+  }
+  const city = (body.city || "").trim();
+  if ([...city].length < 2 || [...city].length > 80) fields.city = "Kota/kabupaten wajib 2–80 karakter.";
+  const ref = (body.referenceUrl || "").trim();
+  let refOut = "";
+  try {
+    const u = new URL(ref);
+    if ((u.protocol === "https:" || u.protocol === "http:") && ref.length <= 300) refOut = u.toString();
+  } catch {
+    /* handled below */
+  }
+  if (!refOut) fields.referenceUrl = "Tautan bukti harus URL http(s) yang valid, maksimal 300 karakter.";
+  const bank = parseRefundBank({
+    bankName: body.bankName,
+    accountName: body.bankAccountName,
+    accountNumber: body.bankAccountNumber,
+  });
+  if (!isParsedRefundBank(bank)) {
+    const map: Record<string, string> = { bankName: "bankName", accountName: "bankAccountName", accountNumber: "bankAccountNumber" };
+    fields[map[bank.field] || "bankName"] = bank.error;
+  }
+  if (body.consent !== true) fields.consent = "Persetujuan pemrosesan data wajib dicentang.";
   if (Object.keys(fields).length) throw new AppError("VALIDATION_ERROR", "Periksa kembali isian formulir.", fields);
-  return { name: n, email: em, phone: phoneOut, description: d };
+  return { name: n, email: em, phone: ph, description: d, type, pic, city, referenceUrl: refOut, bank: bank as ParsedRefundBank };
 }
 
-export async function submitApplication(actor: AuthUser, body: { name: string; contactEmail: string; contactPhone?: string | null; description: string }) {
+export async function submitApplication(actor: AuthUser, body: ApplicationBody, files: ApplicationFiles) {
   if (actor.role !== "USER") throw new AppError("ORGANIZER_ACCESS_DENIED", "Anda tidak memiliki akses.", {}, 403);
   if (await getByOwner(actor.id)) throw new AppError("ORGANIZER_APPLICATION_EXISTS", "Pengajuan organizer sudah ada.", {}, 409);
-  const in_ = normalizeInput(body.name || "", body.contactEmail || "", body.contactPhone || "", body.description || "");
+  const in_ = normalizeInput(body);
+  // Validate both images before anything is written so a bad file never leaves a half-created application.
+  validateDocument("KTP", files.ktp ?? Buffer.alloc(0));
+  validateDocument("SELFIE", files.selfie ?? Buffer.alloc(0));
   const id = newId();
   const rows = await query<OrganizerProfile>(
-    `INSERT INTO organizer_profiles (id, owner_user_id, name, contact_email, contact_phone, description, status, submitted_at, created_at, updated_at, version)
-     VALUES ($1,$2,$3,$4,$5,$6,'PENDING'::organizer_status, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 1)
+    `INSERT INTO organizer_profiles (id, owner_user_id, name, contact_email, contact_phone, description, status, submitted_at, created_at, updated_at, version,
+                                     organizer_type, pic_name, city, reference_url, data_consent_at,
+                                     bank_name, bank_account_name, bank_account_number)
+     VALUES ($1,$2,$3,$4,$5,$6,'PENDING'::organizer_status, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 1,
+             $7,$8,$9,$10,CURRENT_TIMESTAMP,$11,$12,$13)
      RETURNING ${PROFILE_SELECT}`,
-    [id, actor.id, in_.name, in_.email, in_.phone, in_.description],
+    [id, actor.id, in_.name, in_.email, in_.phone, in_.description, in_.type, in_.pic, in_.city, in_.referenceUrl, in_.bank.bankName, in_.bank.accountName, in_.bank.accountNumber],
   );
   if (!rows[0]) throw new AppError("INTERNAL_ERROR", "Terjadi kesalahan internal.", {}, 500);
+  try {
+    await saveDocument(rows[0].id, "KTP", files.ktp as Buffer);
+    await saveDocument(rows[0].id, "SELFIE", files.selfie as Buffer);
+  } catch (err) {
+    // No transaction on the HTTP driver: undo the application so the user can retry cleanly.
+    await deleteDocuments(rows[0].id).catch(() => 0);
+    await execute(`DELETE FROM organizer_profiles WHERE id=$1 AND status='PENDING'::organizer_status`, [rows[0].id]).catch(() => 0);
+    throw err;
+  }
   await appendHistory({
     profileId: rows[0].id,
     actor: "OWNER",
@@ -212,19 +286,26 @@ export async function submitApplication(actor: AuthUser, body: { name: string; c
   return rows[0];
 }
 
-export async function editApplication(actor: AuthUser, body: { name: string; contactEmail: string; contactPhone?: string | null; description: string; expectedVersion: number }) {
+export async function editApplication(actor: AuthUser, body: ApplicationBody & { expectedVersion: number }, files: ApplicationFiles = {}) {
   const p = await getByOwner(actor.id);
   if (!p) throw new AppError("ORGANIZER_APPLICATION_NOT_FOUND", "Pengajuan tidak ditemukan.", {}, 404);
   if (p.status === "PENDING") throw new AppError("ORGANIZER_APPLICATION_PENDING", "Pengajuan masih ditinjau.", {}, 409);
   if (p.status === "APPROVED") throw new AppError("ORGANIZER_ALREADY_APPROVED", "Organizer sudah disetujui.", {}, 409);
   if (p.status !== "REJECTED") throw new AppError("ORGANIZER_TRANSITION_INVALID", "Transisi status tidak valid.", {}, 409);
-  const in_ = normalizeInput(body.name || "", body.contactEmail || "", body.contactPhone || "", body.description || "");
+  const in_ = normalizeInput(body);
+  if (files.ktp?.length) validateDocument("KTP", files.ktp);
+  if (files.selfie?.length) validateDocument("SELFIE", files.selfie);
   const n = await execute(
-    `UPDATE organizer_profiles SET name=$1, contact_email=$2, contact_phone=$3, description=$4, updated_at=CURRENT_TIMESTAMP, version=version+1
+    `UPDATE organizer_profiles SET name=$1, contact_email=$2, contact_phone=$3, description=$4,
+            organizer_type=$7, pic_name=$8, city=$9, reference_url=$10, data_consent_at=CURRENT_TIMESTAMP,
+            bank_name=$11, bank_account_name=$12, bank_account_number=$13,
+            updated_at=CURRENT_TIMESTAMP, version=version+1
      WHERE id=$5 AND version=$6`,
-    [in_.name, in_.email, in_.phone, in_.description, p.id, body.expectedVersion],
+    [in_.name, in_.email, in_.phone, in_.description, p.id, body.expectedVersion, in_.type, in_.pic, in_.city, in_.referenceUrl, in_.bank.bankName, in_.bank.accountName, in_.bank.accountNumber],
   );
   if (!n) throw new AppError("ORGANIZER_VERSION_CONFLICT", "Data berubah.", {}, 409);
+  if (files.ktp?.length) await saveDocument(p.id, "KTP", files.ktp);
+  if (files.selfie?.length) await saveDocument(p.id, "SELFIE", files.selfie);
   const next = await getById(p.id);
   if (!next) throw new AppError("ORGANIZER_APPLICATION_NOT_FOUND", "Pengajuan tidak ditemukan.", {}, 404);
   await appendHistory({
@@ -242,6 +323,18 @@ export async function resubmitApplication(actor: AuthUser, expectedVersion: numb
   if (!p) throw new AppError("ORGANIZER_APPLICATION_NOT_FOUND", "Pengajuan tidak ditemukan.", {}, 404);
   if (p.status === "PENDING") throw new AppError("ORGANIZER_APPLICATION_PENDING", "Pengajuan masih ditinjau.", {}, 409);
   if (p.status !== "REJECTED") throw new AppError("ORGANIZER_TRANSITION_INVALID", "Transisi status tidak valid.", {}, 409);
+  if (!p.bank_account_number) {
+    throw new AppError("VALIDATION_ERROR", "Lengkapi data rekening sebelum mengajukan ulang.", { bankAccountNumber: "Nomor rekening wajib diisi." }, 400);
+  }
+  const flags = await documentFlags(p.id);
+  if (!flags.hasKtp || !flags.hasSelfie) {
+    throw new AppError(
+      "VALIDATION_ERROR",
+      "Unggah ulang foto KTP dan foto selfie sebelum mengajukan ulang.",
+      { ktp: flags.hasKtp ? "" : "Foto KTP wajib.", selfie: flags.hasSelfie ? "" : "Foto selfie wajib." },
+      400,
+    );
+  }
   const n = await execute(
     `UPDATE organizer_profiles SET status='PENDING'::organizer_status, decision_reason=NULL, decided_at=NULL, decided_by_user_id=NULL,
             submitted_at=CURRENT_TIMESTAMP, updated_at=CURRENT_TIMESTAMP, version=version+1

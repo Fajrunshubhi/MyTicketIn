@@ -32,7 +32,7 @@ jobs:
         if: steps.cfg.outputs.skip != 'true'
         run: |
           status=0
-          for job in expire-orders dispatch-notifications send-event-reminders reconcile-ticket-issuance; do
+          for job in expire-orders dispatch-notifications send-event-reminders reconcile-ticket-issuance purge-organizer-documents; do
             code=$(curl -sS -o /dev/null -w "%{http_code}" --max-time 60 -X POST \
               -H "x-scheduler-secret: $SCHEDULER_SECRET" -H "content-type: application/json" -d '{}' \
               "$APP_URL/api/internal/jobs/$job") || code=000

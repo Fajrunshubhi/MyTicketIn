@@ -1,7 +1,7 @@
 import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 import { AppError, newId, query } from "@/lib/server/http";
 import { expireOrderById, failPendingOrder } from "@/lib/server/orders";
-import { settlePaidOrder } from "@/lib/server/payments";
+import { recoverPaidOrderById, settlePaidOrder } from "@/lib/server/payments";
 import { hitRateLimit } from "@/lib/server/rate-limit";
 
 const MAX_BODY_BYTES = 256 * 1024;
@@ -153,6 +153,8 @@ async function applyEvent(
     );
     const orderStatus = o[0]?.status;
     if (orderStatus === "PAID" || orderStatus === "REFUNDED") {
+      // A retry may find the order PAID because an earlier attempt crashed after the status gate.
+      if (orderStatus === "PAID") await recoverPaidOrderById(payment.order_id);
       return { status: "PROCESSED", reason: "ALREADY_PAID", http: 200 };
     }
     // Money arrived but the order can no longer be fulfilled: record it for manual reconciliation, issue nothing.
