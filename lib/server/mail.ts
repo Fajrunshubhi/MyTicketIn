@@ -83,6 +83,68 @@ function fromHeader(): string {
   return from;
 }
 
+export type MailAttachment = { filename: string; content: Buffer; contentType: string };
+export type MailMessage = { to: string; subject: string; text: string; html: string; attachments?: MailAttachment[] };
+
+/** Email for an in-app notification. Contains only title/body and an app link; never QR tokens or payment secrets. */
+export function notificationEmail(input: { name: string; title: string; body: string; actionPath?: string | null }) {
+  const name = input.name.trim() || "Pengguna";
+  const path = input.actionPath && input.actionPath.startsWith("/") && !input.actionPath.startsWith("//") ? input.actionPath : "/dashboard/notifications";
+  const url = `${publicAppOrigin()}${path}`;
+  const subject = input.title.slice(0, 160);
+  const text = [`Halo ${name},`, "", input.title, input.body, "", `Buka di MyTicketIn: ${url}`, "", "MyTicketIn (sandbox akademik)"].join("\n");
+  const html = `<!DOCTYPE html>
+<html lang="id"><body style="margin:0;padding:24px 12px;background:#f4f1fb;font-family:Arial,Helvetica,sans-serif;color:#1c1636;">
+<table role="presentation" width="100%" cellspacing="0" cellpadding="0"><tr><td align="center">
+<table role="presentation" width="560" cellspacing="0" cellpadding="0" style="max-width:560px;width:100%;background:#fff;border-radius:24px;overflow:hidden;border:1px solid #ece8f5;">
+<tr><td style="background:#6d4aff;padding:20px 28px;color:#fff;font-size:18px;font-weight:700;letter-spacing:.04em;">MYTICKETIN</td></tr>
+<tr><td style="padding:28px;">
+<p style="margin:0 0 8px;font-size:15px;">Halo ${escapeHtml(name)},</p>
+<h1 style="margin:0 0 12px;font-size:22px;line-height:1.3;">${escapeHtml(input.title)}</h1>
+<p style="margin:0 0 24px;font-size:15px;line-height:1.6;">${escapeHtml(input.body)}</p>
+<p style="margin:0 0 20px;"><a href="${escapeHtml(url)}" style="display:inline-block;background:#6d4aff;color:#fff;text-decoration:none;border-radius:999px;padding:14px 22px;font-size:15px;font-weight:700;">Buka di MyTicketIn</a></p>
+<p style="margin:0;font-size:12px;color:#7a748c;">Email ini dikirim dari lingkungan sandbox akademik. Tidak ada transaksi uang nyata.</p>
+</td></tr></table></td></tr></table></body></html>`;
+  return { subject, text, html };
+}
+
+/** Sends one email. Returns "skipped" when no provider is configured; throws on provider failure so callers can retry. */
+export async function sendMail(message: MailMessage): Promise<"sent" | "skipped"> {
+  const from = fromHeader();
+  const resendKey = String(process.env.RESEND_API_KEY || "").trim();
+  const smtpHost = String(process.env.EMAIL_SMTP_HOST || "").trim();
+  const provider = String(process.env.EMAIL_PROVIDER || "sandbox").trim().toLowerCase();
+  if (provider === "resend" || resendKey) {
+    if (!resendKey) return "skipped";
+    const res = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${resendKey}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        from,
+        to: [message.to],
+        subject: message.subject,
+        html: message.html,
+        text: message.text,
+        attachments: message.attachments?.map((a) => ({ filename: a.filename, content: a.content.toString("base64") })),
+      }),
+    });
+    if (!res.ok) throw new Error("RESEND_FAILED");
+    return "sent";
+  }
+  if (smtpHost) {
+    await sendSmtpMail({
+      from,
+      to: message.to,
+      subject: message.subject,
+      html: message.html,
+      text: message.text,
+      attachments: message.attachments,
+    });
+    return "sent";
+  }
+  return "skipped";
+}
+
 export async function sendPasswordResetMail(input: { to: string; name: string; resetUrl: string }): Promise<"sent" | "skipped"> {
   const message = passwordResetEmail({ name: input.name, resetUrl: input.resetUrl });
   const from = fromHeader();

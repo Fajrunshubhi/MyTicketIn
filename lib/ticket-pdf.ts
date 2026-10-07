@@ -75,7 +75,9 @@ function checkInLine(iso?: string | null, tz?: string) {
   }
 }
 
-export function buildEventTicketPdfBytes(ticket: EventTicketPdf, qrJpeg?: Uint8Array | null): Uint8Array {
+export type QrMatrix = { size: number; dark: (row: number, col: number) => boolean };
+
+export function buildEventTicketPdfBytes(ticket: EventTicketPdf, qrJpeg?: Uint8Array | null, qrMatrix?: QrMatrix | null): Uint8Array {
   const doc = new PdfDocument();
   const w = doc.width;
   const h = doc.height;
@@ -174,13 +176,25 @@ export function buildEventTicketPdfBytes(ticket: EventTicketPdf, qrJpeg?: Uint8A
     color: PDF_MUTED,
     align: "center",
   });
-  if (!cancelled && qrJpeg && qrJpeg.byteLength > 0) {
-    const img = doc.embedJpeg(qrJpeg, 320, 320);
+  const hasJpeg = Boolean(qrJpeg && qrJpeg.byteLength > 0);
+  if (!cancelled && (hasJpeg || qrMatrix)) {
     const qSize = 150;
     const qx0 = qx + (qrColW - qSize) / 2;
     const qy0 = boxTop - 28 - qSize;
     doc.fillRect(qx0 - 8, qy0 - 8, qSize + 16, qSize + 16, PDF_PAPER);
-    doc.drawJpeg(img, qx0, qy0, qSize, qSize);
+    if (hasJpeg && qrJpeg) {
+      doc.drawJpeg(doc.embedJpeg(qrJpeg, 320, 320), qx0, qy0, qSize, qSize);
+    } else if (qrMatrix) {
+      // Vector QR (server-side email attachment): 4-module quiet zone, drawn as filled squares.
+      const quiet = 4;
+      const cell = qSize / (qrMatrix.size + quiet * 2);
+      for (let r = 0; r < qrMatrix.size; r += 1) {
+        for (let c = 0; c < qrMatrix.size; c += 1) {
+          if (!qrMatrix.dark(r, c)) continue;
+          doc.fillRect(qx0 + (c + quiet) * cell, qy0 + qSize - (r + quiet + 1) * cell, cell + 0.3, cell + 0.3, PDF_INK);
+        }
+      }
+    }
     doc.text(ended ? "Event telah selesai" : "Tunjukkan kepada petugas", qx + qrColW / 2, qy0 - 18, {
       size: 8,
       color: PDF_MUTED,

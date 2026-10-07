@@ -97,3 +97,9 @@ export async function renderTicketQrPng(token: string): Promise<Buffer> {
     throw new AppError("TICKET_CRYPTO_FAILED", "Kode QR tidak dapat ditampilkan.", {}, 500);
   }
 }
+
+/** Vector QR for PDF embedding (no raster conversion needed). */
+export function ticketQrMatrix(token: string): { size: number; dark: (row: number, col: number) => boolean } {
+  const modules = createModules(token);
+  return { size: modules.size, dark: (row, col) => Boolean(modules.get(row, col)) };
+}

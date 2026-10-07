@@ -18,3 +18,19 @@ describe("notification types", () => {
     expect(resolveNotificationActionPath("REFUND_UPDATED", "/dashboard/order/o1", "rf1")).toBe("/dashboard/order/o1");
   });
 });
+
+describe("F50 email policy", () => {
+  it("emails only user-facing types", async () => {
+    const m = await import("./notification-types");
+    expect(m.isEmailNotificationType("PAYMENT_SUCCEEDED")).toBe(true);
+    expect(m.isEmailNotificationType("TICKET_ISSUED")).toBe(true);
+    expect(m.isEmailNotificationType("MODERATION_NEEDED")).toBe(false);
+    expect(m.isEmailNotificationType("PAYMENT_INSTRUCTIONS")).toBe(false);
+  });
+  it("retries a bounded number of times", async () => {
+    const m = await import("./notification-types");
+    expect(m.emailRetryDelayMinutes(1)).toBe(5);
+    expect(m.emailRetryDelayMinutes(2)).toBe(15);
+    expect(m.emailRetryDelayMinutes(3)).toBeNull();
+  });
+});

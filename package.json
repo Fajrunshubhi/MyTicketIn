@@ -14,6 +14,7 @@
     "db:up": "docker compose up -d",
     "db:down": "docker compose down",
     "test": "vitest run",
+    "test:integration": "vitest run --config vitest.integration.config.ts",
     "test:e2e": "playwright test",
     "verify:migrations": "tsx scripts/verify-migrations.ts",
     "verify:env": "tsx scripts/verify-env.ts",

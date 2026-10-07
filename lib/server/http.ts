@@ -84,6 +84,9 @@ function mapDbError(err: unknown): never {
   if (blob.includes("event_ticket_types_event_name") || blob.includes("ticket_types_event_name")) {
     throw new AppError("TICKET_TYPE_NAME_EXISTS", "Nama jenis tiket sudah dipakai di event ini.", {}, 409);
   }
+  if (blob.includes("inventory_reservations_active_seat_key") || blob.includes("tickets_event_seat_paid_key")) {
+    throw new AppError("INVENTORY_UNAVAILABLE", "Kursi sudah dipesan atau terjual.", {}, 409);
+  }
   if (blob.includes("23503") || blob.includes("foreign key")) {
     throw new AppError("VALIDATION_ERROR", "Referensi data tidak valid.", {}, 400);
   }

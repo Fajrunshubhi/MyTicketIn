@@ -7,6 +7,7 @@ type SmtpMail = {
   subject: string;
   text: string;
   html: string;
+  attachments?: { filename: string; content: Buffer; contentType: string }[];
 };
 
 function env(name: string, fallback = ""): string {
@@ -106,28 +107,54 @@ export async function sendSmtpMail(mail: SmtpMail): Promise<void> {
   await writeCmd(socket, `MAIL FROM:<${fromAddress(mail.from)}>`, [250]);
   await writeCmd(socket, `RCPT TO:<${mail.to}>`, [250, 251]);
   await writeCmd(socket, "DATA", [354]);
-  const boundary = `mti${Date.now().toString(16)}`;
-  const payload = [
-    `From: ${mail.from}`,
-    `To: ${mail.to}`,
-    `Subject: ${encodeSubject(mail.subject)}`,
-    "MIME-Version: 1.0",
-    "Content-Type: multipart/alternative; boundary=\"" + boundary + "\"",
-    "Auto-Submitted: auto-generated",
-    "",
-    `--${boundary}`,
+  const stamp = Date.now().toString(16);
+  const alt = `mtialt${stamp}`;
+  const mixed = `mtimix${stamp}`;
+  const files = mail.attachments || [];
+  const altBody = [
+    `--${alt}`,
     "Content-Type: text/plain; charset=UTF-8",
     "Content-Transfer-Encoding: 8bit",
     "",
     mail.text,
-    `--${boundary}`,
+    `--${alt}`,
     "Content-Type: text/html; charset=UTF-8",
     "Content-Transfer-Encoding: 8bit",
     "",
     mail.html,
-    `--${boundary}--`,
-    ".",
-  ].join("\r\n");
+    `--${alt}--`,
+  ];
+  const headers = [
+    `From: ${mail.from}`,
+    `To: ${mail.to}`,
+    `Subject: ${encodeSubject(mail.subject)}`,
+    "MIME-Version: 1.0",
+    "Auto-Submitted: auto-generated",
+  ];
+  let body: string[];
+  if (!files.length) {
+    body = [`Content-Type: multipart/alternative; boundary="${alt}"`, "", ...altBody];
+  } else {
+    const parts = files.flatMap((f) => [
+      `--${mixed}`,
+      `Content-Type: ${f.contentType}; name="${encodeSubject(f.filename)}"`,
+      "Content-Transfer-Encoding: base64",
+      `Content-Disposition: attachment; filename="${encodeSubject(f.filename)}"`,
+      "",
+      (f.content.toString("base64").match(/.{1,76}/g) || []).join("\r\n"),
+    ]);
+    body = [
+      `Content-Type: multipart/mixed; boundary="${mixed}"`,
+      "",
+      `--${mixed}`,
+      `Content-Type: multipart/alternative; boundary="${alt}"`,
+      "",
+      ...altBody,
+      ...parts,
+      `--${mixed}--`,
+    ];
+  }
+  const payload = [...headers, ...body, "."].join("\r\n");
   socket.write(`${payload}\r\n`);
   const done = await readReply(socket);
   if (done.code !== 250) throw new Error(`SMTP ${done.code}`);

@@ -8,6 +8,7 @@ import { type IconName } from "@/components/ui/Icon";
 const NAV: WorkspaceNavItem[] = [
   { href: "/dashboard", label: "Dashboard", icon: "dashboard" as IconName, exact: true },
   { href: "/admin/operations", label: "Operasi", icon: "clock" },
+  { href: "/admin/search", label: "Pencarian", icon: "catalog" },
   { href: "/admin/organizers", label: "Organizer", icon: "building" },
   { href: "/admin/events", label: "Event", icon: "catalog" },
   { href: "/admin/audit", label: "Audit", icon: "file" },
@@ -21,6 +22,7 @@ const NAV: WorkspaceNavItem[] = [
 function pageTitle(pathname: string): string {
   if (pathname === "/dashboard") return "Dashboard";
   if (pathname.startsWith("/admin/operations")) return "Antrean operasional";
+  if (pathname.startsWith("/admin/search")) return "Pencarian lintas entitas";
   if (pathname.startsWith("/admin/organizers")) return "Moderasi organizer";
   if (pathname.startsWith("/admin/events")) return "Moderasi event";
   if (pathname.startsWith("/admin/audit")) return "Jejak audit";

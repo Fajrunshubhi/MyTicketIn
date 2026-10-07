@@ -51,3 +51,30 @@ export function resolveNotificationActionPath(
   }
   return path;
 }
+
+/** F50: types that also go out by email. Moderation queue, payment instructions, and security notices stay in-app only. */
+const EMAIL_TYPES: readonly NotificationType[] = [
+  "ORGANIZER_APPROVED",
+  "ORGANIZER_REJECTED",
+  "ORGANIZER_SUSPENDED",
+  "EVENT_PUBLISHED",
+  "EVENT_REJECTED",
+  "EVENT_CANCELLED",
+  "PAYMENT_SUCCEEDED",
+  "PAYMENT_FAILED",
+  "TICKET_ISSUED",
+  "REFUND_UPDATED",
+  "EVENT_REMINDER",
+];
+
+export function isEmailNotificationType(type: string): boolean {
+  return (EMAIL_TYPES as readonly string[]).includes(type);
+}
+
+export const MAX_EMAIL_ATTEMPTS = 3;
+
+/** Limited retry: 5 then 15 minutes; null means give up. */
+export function emailRetryDelayMinutes(attemptsMade: number): number | null {
+  if (attemptsMade >= MAX_EMAIL_ATTEMPTS) return null;
+  return attemptsMade <= 1 ? 5 : 15;
+}

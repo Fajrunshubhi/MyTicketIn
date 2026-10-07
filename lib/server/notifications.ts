@@ -1,6 +1,14 @@
 import { execute, newId, query } from "@/lib/server/http";
 import type { AuthUser } from "@/lib/server/access";
-import { isNotificationType, resolveNotificationActionPath, type NotificationType } from "@/lib/server/notification-types";
+import {
+  emailRetryDelayMinutes,
+  isEmailNotificationType,
+  isNotificationType,
+  MAX_EMAIL_ATTEMPTS,
+  resolveNotificationActionPath,
+  type NotificationType,
+} from "@/lib/server/notification-types";
+import { notificationEmail, sendMail, type MailAttachment } from "@/lib/server/mail";
 
 export type { NotificationType } from "@/lib/server/notification-types";
 export { NOTIFICATION_TYPE_LABEL, isNotificationType } from "@/lib/server/notification-types";
@@ -49,6 +57,28 @@ async function writeInbox(input: NotifyInput): Promise<void> {
   );
 }
 
+/** Sends the email right after the in-app write so delivery does not depend on a scheduler; failures are retried by the job. */
+async function sendEmailNow(recipient: string, dedup: string, type: string): Promise<void> {
+  if (!isEmailNotificationType(type)) return;
+  try {
+    const note = await query<{ id: string }>(`SELECT id FROM notifications WHERE recipient_user_id=$1 AND deduplication_key=$2 LIMIT 1`, [
+      recipient,
+      dedup,
+    ]);
+    const id = note[0]?.id;
+    if (!id) return;
+    await execute(
+      `INSERT INTO notification_deliveries (id, notification_id, channel, status, template_key, provider)
+       VALUES ($1,$2,'EMAIL'::notification_channel,'PENDING'::notification_delivery_status,$3,'smtp')
+       ON CONFLICT (notification_id, channel) DO NOTHING`,
+      [newId(), id, type.slice(0, 80)],
+    );
+    await deliverEmail(id);
+  } catch {
+    // Email is best effort and must never fail the primary transaction.
+  }
+}
+
 export async function notify(input: NotifyInput): Promise<void> {
   try {
     const recipient = String(input.recipientUserId || "").trim();
@@ -60,6 +90,7 @@ export async function notify(input: NotifyInput): Promise<void> {
     const domainEventId = clip(input.domainEventId, 160);
     const actionPath = safePath(input.actionPath);
     await writeInbox(input);
+    await sendEmailNow(recipient, dedup, input.type);
     await execute(
       `INSERT INTO notification_outbox (
          id, domain_event_id, recipient_user_id, notification_type, payload, status
@@ -215,6 +246,98 @@ export async function markRead(user: AuthUser, id: string) {
   ]);
 }
 
+/** Sends the EMAIL delivery for one notification, recording status and bounded retry. Never logs body or addresses. */
+export async function deliverEmail(notificationId: string): Promise<"sent" | "skipped" | "failed" | "gone"> {
+  const claimed = await query<{ attempt_count: number }>(
+    `UPDATE notification_deliveries SET status='PROCESSING'::notification_delivery_status, attempt_count=attempt_count+1, updated_at=CURRENT_TIMESTAMP
+     WHERE notification_id=$1 AND channel='EMAIL'::notification_channel
+       AND status IN ('PENDING'::notification_delivery_status,'FAILED'::notification_delivery_status)
+       AND attempt_count < $2
+     RETURNING attempt_count`,
+    [notificationId, MAX_EMAIL_ATTEMPTS],
+  );
+  if (!claimed[0]) return "gone";
+  const attempts = Number(claimed[0].attempt_count);
+  const rows = await query<{
+    title: string;
+    body: string;
+    action_path: string | null;
+    type: string;
+    entity_id: string | null;
+    entity_type: string | null;
+    recipient_user_id: string;
+    name: string;
+    email: string;
+  }>(
+    `SELECT n.title, n.body, n.action_path, n.type::text AS type, n.entity_id, n.entity_type, n.recipient_user_id, u.name, u.email
+     FROM notifications n JOIN users u ON u.id=n.recipient_user_id WHERE n.id=$1 LIMIT 1`,
+    [notificationId],
+  );
+  const n = rows[0];
+  try {
+    if (!n) throw new Error("NOTIFICATION_MISSING");
+    const msg = notificationEmail({
+      name: n.name,
+      title: n.title,
+      body: n.body,
+      actionPath: resolveNotificationActionPath(n.type, n.action_path, n.entity_id),
+    });
+    // PDF attachments (receipt / e-ticket) for the buyer only. If building them fails, the notice is still sent without them.
+    let attachments: MailAttachment[] = [];
+    if (n.entity_type === "Order" && n.entity_id && (n.type === "PAYMENT_SUCCEEDED" || n.type === "TICKET_ISSUED")) {
+      try {
+        // Lazy import: orders/tickets import this module, so a static import would be circular.
+        const { receiptAttachments, ticketAttachments } = await import("@/lib/server/email-attachments");
+        attachments =
+          n.type === "PAYMENT_SUCCEEDED"
+            ? await receiptAttachments(n.entity_id, n.recipient_user_id)
+            : await ticketAttachments(n.entity_id, n.recipient_user_id);
+      } catch {
+        attachments = [];
+      }
+    }
+    const result = await sendMail({ to: n.email, ...msg, attachments });
+    if (result === "skipped") {
+      await execute(
+        `UPDATE notification_deliveries SET status='SKIPPED'::notification_delivery_status, next_attempt_at=NULL, last_error_code='NO_PROVIDER', updated_at=CURRENT_TIMESTAMP
+         WHERE notification_id=$1 AND channel='EMAIL'::notification_channel`,
+        [notificationId],
+      );
+      return "skipped";
+    }
+    await execute(
+      `UPDATE notification_deliveries SET status='SENT'::notification_delivery_status, sent_at=CURRENT_TIMESTAMP, next_attempt_at=NULL, last_error_code=NULL, updated_at=CURRENT_TIMESTAMP
+       WHERE notification_id=$1 AND channel='EMAIL'::notification_channel`,
+      [notificationId],
+    );
+    return "sent";
+  } catch {
+    const delay = emailRetryDelayMinutes(attempts);
+    await execute(
+      `UPDATE notification_deliveries SET status='FAILED'::notification_delivery_status, last_error_code='EMAIL_SEND_FAILED',
+              next_attempt_at = CASE WHEN $2::int IS NULL THEN NULL ELSE CURRENT_TIMESTAMP + make_interval(mins => $2::int) END, updated_at=CURRENT_TIMESTAMP
+       WHERE notification_id=$1 AND channel='EMAIL'::notification_channel`,
+      [notificationId, delay],
+    );
+    return "failed";
+  }
+}
+
+/** Retries FAILED/PENDING emails that are due (bounded by MAX_EMAIL_ATTEMPTS). */
+export async function retryEmailDeliveries(batch = 50): Promise<{ scanned: number; sent: number }> {
+  const n = Math.min(Math.max(batch || 50, 1), 100);
+  const rows = await query<{ notification_id: string }>(
+    `SELECT notification_id FROM notification_deliveries
+     WHERE channel='EMAIL'::notification_channel AND status IN ('PENDING'::notification_delivery_status,'FAILED'::notification_delivery_status)
+       AND attempt_count < $2 AND (next_attempt_at IS NULL OR next_attempt_at <= CURRENT_TIMESTAMP)
+     ORDER BY updated_at ASC LIMIT $1`,
+    [n, MAX_EMAIL_ATTEMPTS],
+  );
+  let sent = 0;
+  for (const r of rows) if ((await deliverEmail(r.notification_id).catch(() => "failed")) === "sent") sent += 1;
+  return { scanned: rows.length, sent };
+}
+
 export async function dispatchNotificationOutbox(batch = 50): Promise<{ scanned: number; completed: number }> {
   const n = Math.min(Math.max(batch || 50, 1), 100);
   const rows = await query<{ id: string; recipient_user_id: string; notification_type: string; domain_event_id: string; payload: unknown }>(
@@ -265,12 +388,15 @@ export async function dispatchNotificationOutbox(batch = 50): Promise<{ scanned:
            ON CONFLICT (notification_id, channel) DO NOTHING`,
           [newId(), notificationId, String(payload.templateKey || row.notification_type).slice(0, 80)],
         );
+        const emailEligible = isEmailNotificationType(row.notification_type);
         await execute(
           `INSERT INTO notification_deliveries (id, notification_id, channel, status, template_key, provider)
-           VALUES ($1,$2,'EMAIL'::notification_channel,'SKIPPED'::notification_delivery_status,$3,'sandbox')
+           VALUES ($1,$2,'EMAIL'::notification_channel,$4::notification_delivery_status,$3,'sandbox')
            ON CONFLICT (notification_id, channel) DO NOTHING`,
-          [newId(), notificationId, String(payload.templateKey || row.notification_type).slice(0, 80)],
+          [newId(), notificationId, String(payload.templateKey || row.notification_type).slice(0, 80), emailEligible ? "PENDING" : "SKIPPED"],
         );
+        // Email is best effort: its failure must never fail the in-app notification or the original transaction.
+        if (emailEligible) await deliverEmail(notificationId).catch(() => undefined);
       }
       await execute(
         `UPDATE notification_outbox SET status='COMPLETED'::outbox_status, completed_at=CURRENT_TIMESTAMP, locked_at=NULL, locked_by=NULL,
