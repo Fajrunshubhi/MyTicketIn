@@ -15,6 +15,7 @@ import {
   ReviewField,
   ReviewStatusBadge,
 } from "@/components/admin/AdminReview";
+import { OrganizerChangeReview, type PendingChange } from "@/components/admin/OrganizerChangeReview";
 import { OrganizerHistory, type OrganizerHistoryEntry } from "@/components/organizer/OrganizerHistory";
 import { apiFetch, readApiError } from "@/lib/api";
 import { formatDateTime } from "@/lib/format";
@@ -41,6 +42,7 @@ type Profile = {
   bankAccountNumber?: string | null;
   hasKtp?: boolean;
   hasSelfie?: boolean;
+  pendingChange?: PendingChange | null;
   version: number;
   ownerUserId?: string;
   history?: OrganizerHistoryEntry[];
@@ -103,6 +105,10 @@ export default function AdminOrganizerDetailPage() {
   const [saving, setSaving] = useState(false);
   // Documents load only on explicit click so each view is an intentional, audited action.
   const [showDocs, setShowDocs] = useState(false);
+  const [showNewDocs, setShowNewDocs] = useState(false);
+  const [changeDecision, setChangeDecision] = useState("APPROVE");
+  const [changeReason, setChangeReason] = useState("");
+  const [changeSaving, setChangeSaving] = useState(false);
 
   function load() {
     fetch(`/api/admin/organizer-applications/${params.id}`, { credentials: "include", cache: "no-store" })
@@ -153,6 +159,30 @@ export default function AdminOrganizerDetailPage() {
     }
     setReason("");
     setOk("Keputusan tersimpan. Pelamar dapat melihat status terbaru.");
+    load();
+  }
+
+  async function onDecideChange(e: FormEvent) {
+    e.preventDefault();
+    if (!profile?.pendingChange) return;
+    setError("");
+    setOk("");
+    setChangeSaving(true);
+    const res = await apiFetch(`/api/admin/organizer-change-requests/${profile.pendingChange.id}/decisions`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ decision: changeDecision, reason: changeReason }),
+    });
+    const body = await res.json().catch(() => ({}));
+    setChangeSaving(false);
+    if (!res.ok) {
+      setError(readApiError(body, "Keputusan perubahan gagal."));
+      return;
+    }
+    setChangeReason("");
+    setShowNewDocs(false);
+    setShowDocs(false);
+    setOk(changeDecision === "APPROVE" ? "Perubahan disetujui dan diterapkan ke profil." : "Perubahan ditolak. Profil tidak berubah.");
     load();
   }
 
@@ -212,6 +242,21 @@ export default function AdminOrganizerDetailPage() {
                 label={ORGANIZER_STATUS_LABEL[profile.status] || profile.status}
               />
             </header>
+
+            {profile.pendingChange ? (
+              <OrganizerChangeReview
+                change={profile.pendingChange}
+                current={profile}
+                showDocs={showNewDocs}
+                onShowDocs={() => setShowNewDocs(true)}
+                decision={changeDecision}
+                onDecision={setChangeDecision}
+                reason={changeReason}
+                onReason={setChangeReason}
+                saving={changeSaving}
+                onSubmit={onDecideChange}
+              />
+            ) : null}
 
             <FormSection title="Identitas" description="Nama publik yang akan tampil di katalog setelah disetujui.">
               <ReviewField label="Nama organisasi">{profile.name}</ReviewField>

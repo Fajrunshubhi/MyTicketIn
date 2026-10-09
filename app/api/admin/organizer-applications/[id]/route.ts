@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { jsonData, jsonError } from "@/lib/server/http";
 import { requireAdmin } from "@/lib/server/guard";
 import { getById, listHistory, ownerDto } from "@/lib/server/organizers";
+import { adminChangeView } from "@/lib/server/organizer-changes";
 import { documentFlags } from "@/lib/server/organizer-documents";
 import { AppError } from "@/lib/server/http";
 
@@ -10,7 +11,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
     await requireAdmin(req);
     const p = await getById(params.id);
     if (!p) throw new AppError("ORGANIZER_APPLICATION_NOT_FOUND", "Pengajuan tidak ditemukan.", {}, 404);
-    return jsonData({ ...ownerDto(p), ...(await documentFlags(p.id)), ownerUserId: `${p.owner_user_id.slice(0, 4)}••••`, history: await listHistory(p.id) }, 200, req);
+    return jsonData({ ...ownerDto(p), ...(await documentFlags(p.id)), ownerUserId: `${p.owner_user_id.slice(0, 4)}••••`, pendingChange: await adminChangeView(p.id), history: await listHistory(p.id) }, 200, req);
   } catch (err) {
     return jsonError(err, req);
   }

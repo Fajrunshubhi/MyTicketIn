@@ -145,7 +145,7 @@ export async function sendMail(message: MailMessage): Promise<"sent" | "skipped"
   return "skipped";
 }
 
-export async function sendPasswordResetMail(input: { to: string; name: string; resetUrl: string }): Promise<"sent" | "skipped"> {
+export async function sendPasswordResetMail(input: { to: string; name: string; resetUrl: string }): Promise<"sent" | "skipped" | "failed"> {
   const message = passwordResetEmail({ name: input.name, resetUrl: input.resetUrl });
   const from = fromHeader();
   const provider = String(process.env.EMAIL_PROVIDER || "sandbox").trim().toLowerCase();
@@ -185,6 +185,6 @@ export async function sendPasswordResetMail(input: { to: string; name: string; r
   } catch (err) {
     const detail = err instanceof Error ? err.message : "email_failed";
     console.error("password_reset_email_failed", detail.slice(0, 80));
-    return "skipped";
+    return "failed";
   }
 }

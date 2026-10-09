@@ -34,7 +34,7 @@ export type OrganizerProfile = {
   bank_account_number: string | null;
 };
 
-function iso(v: string | null | undefined): string | null {
+export function iso(v: string | null | undefined): string | null {
   if (!v) return null;
   const d = new Date(v);
   return Number.isNaN(d.getTime()) ? v : d.toISOString();
@@ -76,7 +76,11 @@ export type OrganizerHistoryType =
   | "RESTORED"
   | "APPEALED"
   | "APPEAL_DISMISSED"
-  | "REVOKED";
+  | "REVOKED"
+  | "CHANGE_REQUESTED"
+  | "CHANGE_APPROVED"
+  | "CHANGE_REJECTED"
+  | "CHANGE_CANCELLED";
 
 export type OrganizerHistoryEntry = {
   id: string;
@@ -118,7 +122,7 @@ export function decisionHistoryType(decision: string): OrganizerHistoryType {
   throw new AppError("ORGANIZER_TRANSITION_INVALID", "Transisi status tidak valid.", {}, 409);
 }
 
-async function appendHistory(input: {
+export async function appendHistory(input: {
   profileId: string;
   actor: OrganizerHistoryActor;
   type: OrganizerHistoryType;
@@ -153,7 +157,7 @@ export async function listHistory(profileId: string): Promise<OrganizerHistoryEn
   return rows.map(historyDto);
 }
 
-export function listDto(p: OrganizerProfile) {
+export function listDto(p: OrganizerProfile & { has_pending_change?: boolean }) {
   const parts = p.contact_email.split("@");
   const contact =
     parts.length !== 2 || !parts[0]
@@ -168,6 +172,7 @@ export function listDto(p: OrganizerProfile) {
     submittedAt: iso(p.submitted_at),
     contact,
     hasAppeal: Boolean(p.appeal_reason),
+    hasPendingChange: Boolean(p.has_pending_change),
     version: p.version,
   };
 }
@@ -199,7 +204,7 @@ export type ApplicationBody = {
 
 export type ApplicationFiles = { ktp?: Buffer | null; selfie?: Buffer | null };
 
-function normalizeInput(body: ApplicationBody) {
+export function normalizeInput(body: ApplicationBody) {
   const fields: Record<string, string> = {};
   const n = (body.name || "").trim();
   if ([...n].length < 2 || [...n].length > 120) fields.name = "Nama organizer wajib 2–120 karakter.";
@@ -367,8 +372,10 @@ export async function resubmitApplication(actor: AuthUser, expectedVersion: numb
 export async function listAdmin(status: string, q: string, limit: number) {
   const st = status.trim().toUpperCase();
   const queryText = q.trim();
-  return query<OrganizerProfile>(
-    `SELECT ${PROFILE_SELECT} FROM organizer_profiles
+  return query<OrganizerProfile & { has_pending_change?: boolean }>(
+    `SELECT ${PROFILE_SELECT},
+            EXISTS (SELECT 1 FROM organizer_change_requests c WHERE c.organizer_profile_id = organizer_profiles.id AND c.status = 'PENDING') AS has_pending_change
+     FROM organizer_profiles
      WHERE ($1 = '' OR status::text = $1)
        AND ($2 = '' OR name ILIKE '%' || $2 || '%')
      ORDER BY submitted_at ASC, id ASC

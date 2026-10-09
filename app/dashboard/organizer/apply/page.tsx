@@ -31,7 +31,7 @@ export default function OrganizerApplyPage() {
   return (
     <div className="mx-auto max-w-5xl">
       <p className="text-sm text-ink/65">
-        Lengkapi profil penyelenggara agar admin dapat meninjau akses ke workspace event. Data rekening dan dokumen KYC tidak diminta pada MVP.
+        Lengkapi data penyelenggara, foto KTP, selfie, dan rekening agar admin dapat meninjau akses ke workspace event. Formulir yang sama juga tersedia di Edit profil.
       </p>
       {loading ? (
         <div className="mt-6">

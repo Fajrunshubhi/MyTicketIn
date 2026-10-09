@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
+import { OrganizerApplicationSection } from "@/components/organizer/OrganizerApplicationSection";
 import { apiFetch, readApiError, type ApiError } from "@/lib/api";
 import { roleLabel, type AccountProfile } from "@/lib/account";
 
@@ -72,8 +73,13 @@ export function ProfileForm() {
     );
   }
 
+  // Only accounts that already have an organizer application see it here; buyers apply from the dashboard menu.
+  const showOrganizerSection =
+    !(me.access?.isAdmin || me.role === "ADMIN") && Boolean(me.access?.organizerStatus || me.access?.kind === "organizer");
+
   return (
-    <section className="mx-auto w-full max-w-2xl px-6 pb-16">
+    <>
+    <section className="mx-auto w-full max-w-2xl px-6 pb-4">
       <div className="overflow-hidden rounded-3xl border border-stone-200 bg-paper p-8 shadow-card md:p-10">
         <p className="text-sm font-medium uppercase tracking-[0.24em] text-gold-700">Profil</p>
         <h1 className="font-display mt-4 text-4xl text-ink">Edit profil</h1>
@@ -128,5 +134,7 @@ export function ProfileForm() {
         </form>
       </div>
     </section>
+    {showOrganizerSection ? <OrganizerApplicationSection /> : null}
+    </>
   );
 }

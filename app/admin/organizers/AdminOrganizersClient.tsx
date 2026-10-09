@@ -17,6 +17,7 @@ type Row = {
   submittedAt: string;
   contact: string;
   hasAppeal?: boolean;
+  hasPendingChange?: boolean;
 };
 
 const FILTERS = [
@@ -189,6 +190,11 @@ export default function AdminOrganizersClient() {
                     <td className="px-4 py-3">
                       <div className="flex flex-wrap items-center gap-2">
                         <ReviewStatusBadge status={row.status} label={ORGANIZER_STATUS_LABEL[row.status] || row.status} />
+                        {row.hasPendingChange ? (
+                          <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-900 ring-1 ring-inset ring-amber-200">
+                            Perubahan data
+                          </span>
+                        ) : null}
                         {row.hasAppeal ? (
                           <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-900 ring-1 ring-inset ring-amber-200">
                             Sanggahan

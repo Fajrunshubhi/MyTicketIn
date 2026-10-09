@@ -28,7 +28,8 @@ type Props = {
     hasSelfie?: boolean;
     version: number;
   };
-  mode: "create" | "edit";
+  mode: "create" | "edit" | "change";
+  onCancel?: () => void;
   onDone: () => void;
 };
 
@@ -85,7 +86,7 @@ function FileField({
   );
 }
 
-export function ApplicationForm({ initial, mode, onDone }: Props) {
+export function ApplicationForm({ initial, mode, onDone, onCancel }: Props) {
   const [name, setName] = useState(initial?.name ?? "");
   const [contactEmail, setContactEmail] = useState(initial?.contactEmail ?? "");
   const [contactPhone, setContactPhone] = useState(initial?.contactPhone ?? "");
@@ -151,8 +152,13 @@ export function ApplicationForm({ initial, mode, onDone }: Props) {
       return;
     }
     setLoading(true);
-    const path = mode === "create" ? "/api/organizer/applications" : "/api/organizer/application";
-    const method = mode === "create" ? "POST" : "PATCH";
+    const path =
+      mode === "create"
+        ? "/api/organizer/applications"
+        : mode === "change"
+          ? "/api/organizer/application/change-request"
+          : "/api/organizer/application";
+    const method = mode === "edit" ? "PATCH" : "POST";
     const form = new FormData();
     form.set("name", name);
     form.set("contactEmail", contactEmail);
@@ -166,7 +172,7 @@ export function ApplicationForm({ initial, mode, onDone }: Props) {
     form.set("bankAccountName", bankAccountName);
     form.set("bankAccountNumber", bankAccountNumber);
     form.set("consent", consent ? "true" : "false");
-    if (mode === "edit" && initial) form.set("expectedVersion", String(initial.version));
+    if (mode !== "create" && initial) form.set("expectedVersion", String(initial.version));
     if (ktp) form.set("ktp", ktp);
     if (selfie) form.set("selfie", selfie);
     // No Content-Type header: the browser sets the multipart boundary.
@@ -375,7 +381,7 @@ export function ApplicationForm({ initial, mode, onDone }: Props) {
             file={ktp}
             onChange={setKtp}
             error={fieldErrors.ktp}
-            existing={mode === "edit" && Boolean(initial?.hasKtp)}
+            existing={mode !== "create" && Boolean(initial?.hasKtp)}
             hint="Pastikan seluruh KTP terlihat jelas dan tidak buram."
           />
           <FileField
@@ -384,7 +390,7 @@ export function ApplicationForm({ initial, mode, onDone }: Props) {
             file={selfie}
             onChange={setSelfie}
             error={fieldErrors.selfie}
-            existing={mode === "edit" && Boolean(initial?.hasSelfie)}
+            existing={mode !== "create" && Boolean(initial?.hasSelfie)}
             hint="Wajah terlihat jelas, tanpa kacamata hitam atau masker."
           />
           <FormFieldWide>
@@ -456,11 +462,21 @@ export function ApplicationForm({ initial, mode, onDone }: Props) {
         </div>
 
         <div className="flex flex-col-reverse gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <Link href="/dashboard" className="inline-flex min-h-11 items-center justify-center px-2 text-sm font-medium text-ink/65 hover:text-ink">
-            Batalkan
-          </Link>
+          {onCancel ? (
+            <button
+              type="button"
+              onClick={onCancel}
+              className="inline-flex min-h-11 items-center justify-center px-2 text-sm font-medium text-ink/65 hover:text-ink"
+            >
+              Batalkan
+            </button>
+          ) : (
+            <Link href="/dashboard" className="inline-flex min-h-11 items-center justify-center px-2 text-sm font-medium text-ink/65 hover:text-ink">
+              Batalkan
+            </Link>
+          )}
           <Button type="submit" loading={loading} disabled={loading} className="sm:min-w-[12rem]">
-            {mode === "create" ? "Kirim pengajuan" : "Simpan perubahan"}
+            {mode === "create" ? "Kirim pengajuan" : mode === "change" ? "Kirim perubahan untuk ditinjau" : "Simpan perubahan"}
           </Button>
         </div>
       </div>

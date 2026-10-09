@@ -395,7 +395,18 @@ export async function confirmPasswordReset(token: string, password: string, conf
   );
 }
 
-export async function assistPasswordReset(admin: AuthUser, userId: string, reason: string): Promise<string> {
+export type AssistedReset = { delivery: "sent" | "skipped"; maskedEmail: string; token?: string };
+
+function maskEmail(email: string): string {
+  const [local = "", domain = ""] = email.split("@");
+  return `${local.slice(0, 1)}***@${domain}`;
+}
+
+/**
+ * Admin-assisted reset. The reset link goes to the account email, so the admin never handles a usable token.
+ * Only when no email provider is configured (sandbox) the token is returned for a controlled demo hand-off.
+ */
+export async function assistPasswordReset(admin: AuthUser, userId: string, reason: string): Promise<AssistedReset> {
   if (admin.role !== "ADMIN") throw new AppError("FORBIDDEN", "Anda tidak memiliki akses.", {}, 403);
   if ([...reason.trim()].length < 10 || [...reason.trim()].length > 1000) {
     throw new AppError("VALIDATION_ERROR", "Periksa kembali isian formulir.", {}, 400);
@@ -415,20 +426,30 @@ export async function assistPasswordReset(admin: AuthUser, userId: string, reaso
      VALUES ($1, $2, $3, $4, $5, $6)`,
     [newId(), target.id, tokenHash(raw), new Date(now.getTime() + 30 * 60 * 1000).toISOString(), tokenHash("admin"), admin.id],
   );
-  await sendPasswordResetMail({ to: target.email, name: target.name, resetUrl: passwordResetUrl(raw) });
+  const delivery = await sendPasswordResetMail({ to: target.email, name: target.name, resetUrl: passwordResetUrl(raw) });
+  if (delivery === "failed") {
+    // Nothing was delivered, so the stored token must not stay usable.
+    await query(`UPDATE password_reset_tokens SET revoked_at = CURRENT_TIMESTAMP WHERE token_hash = $1`, [tokenHash(raw)]);
+    throw new AppError("EMAIL_DELIVERY_FAILED", "Email pemulihan gagal dikirim. Coba lagi atau periksa konfigurasi email.", {}, 502);
+  }
   const { notify } = await import("@/lib/server/notifications");
   await notify({
     recipientUserId: target.id,
     type: "PASSWORD_RESET_ASSISTED",
     title: "Pemulihan kata sandi disiapkan",
-    body: "Admin menyiapkan tautan pemulihan. Periksa email sandbox atau ikuti instruksi yang diserahkan melalui kanal terkontrol. Tautan sekali pakai, 30 menit.",
+    body:
+      delivery === "sent"
+        ? "Admin mengirim tautan pemulihan kata sandi ke email akun Anda. Tautan sekali pakai dan berlaku 30 menit."
+        : "Admin menyiapkan pemulihan kata sandi. Ikuti instruksi yang diserahkan admin. Berlaku 30 menit.",
     actionPath: "/login",
     entityType: "User",
     entityId: target.id,
     deduplicationKey: `pwd-assist:${target.id}:${now.toISOString()}`,
     domainEventId: `pwd-assist:${target.id}:${now.getTime()}`,
   });
-  return raw;
+  return delivery === "sent"
+    ? { delivery, maskedEmail: maskEmail(target.email) }
+    : { delivery: "skipped", maskedEmail: maskEmail(target.email), token: raw };
 }
 
 export { accessFor, type AuthUser };

@@ -14,7 +14,11 @@ export type OrganizerHistoryEntry = {
     | "RESTORED"
     | "APPEALED"
     | "APPEAL_DISMISSED"
-    | "REVOKED";
+    | "REVOKED"
+    | "CHANGE_REQUESTED"
+    | "CHANGE_APPROVED"
+    | "CHANGE_REJECTED"
+    | "CHANGE_CANCELLED";
   fromStatus: string | null;
   toStatus: string | null;
   note: string | null;
@@ -31,6 +35,10 @@ const TYPE_LABEL: Record<OrganizerHistoryEntry["type"], string> = {
   APPEALED: "Sanggahan dikirim",
   APPEAL_DISMISSED: "Sanggahan tidak diterima",
   REVOKED: "Akses penyelenggara dicabut",
+  CHANGE_REQUESTED: "Perubahan data diajukan",
+  CHANGE_APPROVED: "Perubahan data disetujui",
+  CHANGE_REJECTED: "Perubahan data ditolak",
+  CHANGE_CANCELLED: "Perubahan data dibatalkan",
 };
 
 const STATUS_LABEL: Record<string, string> = {
@@ -41,9 +49,9 @@ const STATUS_LABEL: Record<string, string> = {
 };
 
 function tone(type: OrganizerHistoryEntry["type"]): string {
-  if (type === "APPROVED" || type === "RESTORED") return "bg-emerald-50 text-emerald-800";
-  if (type === "REJECTED" || type === "SUSPENDED" || type === "APPEAL_DISMISSED" || type === "REVOKED") return "bg-red-50 text-red-800";
-  if (type === "APPEALED" || type === "RESUBMITTED") return "bg-amber-50 text-amber-900";
+  if (type === "APPROVED" || type === "RESTORED" || type === "CHANGE_APPROVED") return "bg-emerald-50 text-emerald-800";
+  if (type === "REJECTED" || type === "SUSPENDED" || type === "APPEAL_DISMISSED" || type === "REVOKED" || type === "CHANGE_REJECTED") return "bg-red-50 text-red-800";
+  if (type === "APPEALED" || type === "RESUBMITTED" || type === "CHANGE_REQUESTED") return "bg-amber-50 text-amber-900";
   return "bg-[#eee8ff] text-gold-800";
 }
 
