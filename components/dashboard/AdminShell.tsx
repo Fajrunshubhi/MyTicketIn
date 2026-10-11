@@ -14,6 +14,7 @@ const NAV: WorkspaceNavItem[] = [
   { href: "/admin/audit", label: "Audit", icon: "file" },
   { href: "/admin/payment-reconciliations", label: "Pembayaran", icon: "orders" },
   { href: "/admin/refunds", label: "Pengawasan refund", icon: "ticket" },
+  { href: "/admin/payouts", label: "Pencairan", icon: "chart" },
   { href: "/dashboard/notifications", label: "Notifikasi", icon: "bell" },
   { href: "/admin/password-reset", label: "Reset sandi", icon: "shield" },
   { href: "/dashboard/profile", label: "Profil", icon: "user" },
@@ -28,6 +29,7 @@ function pageTitle(pathname: string): string {
   if (pathname.startsWith("/admin/audit")) return "Jejak audit";
   if (pathname.startsWith("/admin/payment-reconciliations")) return "Rekonsiliasi";
   if (pathname.startsWith("/admin/refunds")) return "Pengawasan refund";
+  if (pathname.startsWith("/admin/payouts")) return "Pencairan organizer";
   if (pathname.startsWith("/dashboard/notifications")) return "Notifikasi";
   if (pathname.startsWith("/admin/password-reset")) return "Bantuan reset kata sandi";
   if (pathname.startsWith("/dashboard/profile")) return "Profil";

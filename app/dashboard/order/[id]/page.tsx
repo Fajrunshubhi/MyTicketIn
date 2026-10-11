@@ -68,6 +68,8 @@ type Payment = {
   expiresAt?: string;
   providerExpiresAt?: string;
   sandbox?: boolean;
+  provider?: string;
+  redirectUrl?: string | null;
   orderStatus?: string;
   loyalty?: { redeemedPoints?: number; earnOnPaidPoints?: number; cashValue?: boolean };
 };
@@ -285,6 +287,22 @@ export default function OrderDetailPage() {
     await loadOrder();
   }
 
+  async function refreshStatus() {
+    setBusy(true);
+    setInfo("");
+    const res = await apiFetch(`/api/orders/${params.id}/payment/refresh`, { method: "POST" });
+    const body = await res.json().catch(() => ({}));
+    setBusy(false);
+    if (!res.ok) {
+      setError(readApiError(body, "Status pembayaran belum dapat dicek."));
+      return;
+    }
+    setError("");
+    setPayment((body.data as { payment: Payment }).payment);
+    await loadOrder();
+    pingNotificationsLive();
+  }
+
   async function copyInstr() {
     if (!payment) return;
     const text = instructionText(payment);
@@ -465,24 +483,47 @@ export default function OrderDetailPage() {
                   <p role="status" aria-live="polite" className="mt-1 text-sm text-ink/65">
                     Status {payment.status === "SUCCEEDED" ? "berhasil" : payment.status.toLowerCase()} · sandbox
                   </p>
-                  <p className="mt-4 break-all rounded-xl bg-[#f7f8fd] p-4 font-mono text-sm text-ink">
-                    {instructionText(payment) || "Instruksi tersedia setelah pembayaran dibuat."}
-                  </p>
+                  {payment.provider === "midtrans" ? (
+                    <p className="mt-4 text-sm text-ink/70">
+                      Pembayaran diproses di halaman Midtrans Sandbox. Setelah selesai, kembali ke sini; status
+                      diperbarui otomatis dari konfirmasi Midtrans.
+                    </p>
+                  ) : (
+                    <p className="mt-4 break-all rounded-xl bg-[#f7f8fd] p-4 font-mono text-sm text-ink">
+                      {instructionText(payment) || "Instruksi tersedia setelah pembayaran dibuat."}
+                    </p>
+                  )}
                   <div className="mt-4 flex flex-wrap gap-2">
-                    <Button variant="secondary" type="button" onClick={() => void copyInstr()}>
-                      Salin
-                    </Button>
+                    {payment.provider === "midtrans" && payment.redirectUrl ? (
+                      <a
+                        href={payment.redirectUrl}
+                        className="inline-flex min-h-11 items-center rounded-full bg-gold-500 px-5 text-sm font-semibold text-white"
+                      >
+                        Bayar di Midtrans
+                      </a>
+                    ) : null}
+                    {payment.provider !== "midtrans" ? (
+                      <Button variant="secondary" type="button" onClick={() => void copyInstr()}>
+                        Salin
+                      </Button>
+                    ) : null}
                     <Button
                       variant="secondary"
                       type="button"
+                      loading={busy}
+                      disabled={busy}
                       onClick={() => {
+                        if (payment.provider === "midtrans") {
+                          void refreshStatus();
+                          return;
+                        }
                         void loadPayment();
                         void loadOrder();
                       }}
                     >
                       Cek status
                     </Button>
-                    {pending && (payment.status === "PENDING" || payment.status === "CREATED") ? (
+                    {pending && payment.provider !== "midtrans" && (payment.status === "PENDING" || payment.status === "CREATED") ? (
                       <Button variant="secondary" type="button" loading={busy} disabled={busy} onClick={() => void simulate()}>
                         Simulasikan lunas
                       </Button>

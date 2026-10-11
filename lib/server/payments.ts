@@ -3,6 +3,9 @@ import type { AuthUser } from "@/lib/server/access";
 import { getOrder } from "@/lib/server/orders";
 import { issueTicketsForPaidOrder } from "@/lib/server/tickets";
 import { eventOwnerUserId, notify } from "@/lib/server/notifications";
+import { activePaymentProvider, createSnapTransaction } from "@/lib/server/midtrans";
+import { publicAppOrigin } from "@/lib/server/mail";
+import { refreshMidtransPayment } from "@/lib/server/payment-webhook";
 
 export async function createPayment(
   user: AuthUser,
@@ -18,24 +21,57 @@ export async function createPayment(
       409,
     );
   const existing = await query<Record<string, unknown>>(
-    `SELECT id, order_id, provider, method, status::text AS status, amount_rupiah, currency, external_reference, created_at::text
-     FROM payments WHERE order_id=$1 LIMIT 1`,
+    `SELECT ${PAYMENT_COLUMNS} FROM payments WHERE order_id=$1 LIMIT 1`,
     [orderId],
   );
-  if (existing[0]) return { payment: payDto(existing[0]), replay: true };
+  if (existing[0]) {
+    const row = existing[0];
+    // A previous attempt may have stored the row but failed to reach Midtrans: finish it instead of duplicating.
+    if (row.provider === "midtrans" && row.status === "CREATED" && !snapRedirectUrl(row)) {
+      const fresh = await attachSnapTransaction(user, order, row);
+      return { payment: payDto(fresh), replay: true };
+    }
+    return { payment: payDto(row), replay: true };
+  }
+  const provider = activePaymentProvider();
   const method = ["QRIS", "VIRTUAL_ACCOUNT", "EWALLET"].includes(
     String(methodRaw || "").toUpperCase(),
   )
     ? String(methodRaw).toUpperCase()
     : "VIRTUAL_ACCOUNT";
   const id = newId();
-  const ref = `sandbox-${id.slice(0, 16)}`;
-  const rows = await query<Record<string, unknown>>(
+  // Midtrans order_id is capped at 50 characters.
+  const ref = provider === "midtrans" ? `mti-${id.slice(0, 24)}` : `sandbox-${id.slice(0, 16)}`;
+  let rows = await query<Record<string, unknown>>(
     `INSERT INTO payments (id, order_id, provider, environment, method, status, amount_rupiah, currency, external_reference, provider_idempotency_key)
-     VALUES ($1,$2,'sandbox','SANDBOX',$3::payment_method,'CREATED'::payment_status,$4,'IDR',$5,$6)
-     RETURNING id, order_id, provider, method::text AS method, status::text AS status, amount_rupiah, currency, external_reference, created_at::text`,
-    [id, orderId, method, order.totalPayableRupiah, ref, `pay-${id}`],
+     VALUES ($1,$2,$7,'SANDBOX',$3::payment_method,'CREATED'::payment_status,$4,'IDR',$5,$6)
+     ON CONFLICT (order_id) DO NOTHING
+     RETURNING ${PAYMENT_COLUMNS}`,
+    [id, orderId, method, order.totalPayableRupiah, ref, `pay-${id}`, provider],
   );
+  if (!rows[0]) {
+    // A concurrent request created the payment first.
+    const again = await query<Record<string, unknown>>(
+      `SELECT ${PAYMENT_COLUMNS} FROM payments WHERE order_id=$1 LIMIT 1`,
+      [orderId],
+    );
+    return { payment: payDto(again[0]), replay: true };
+  }
+  if (provider === "midtrans") {
+    rows = [await attachSnapTransaction(user, order, rows[0])];
+    await notify({
+      recipientUserId: user.id,
+      type: "PAYMENT_INSTRUCTIONS",
+      title: "Selesaikan pembayaran",
+      body: `Order ${order.orderNumber}: lanjutkan pembayaran lewat Midtrans Sandbox sebelum hold 15 menit berakhir. Bukan transfer uang nyata.`,
+      actionPath: `/dashboard/order/${orderId}`,
+      entityType: "Payment",
+      entityId: String(rows[0]?.id || id),
+      deduplicationKey: `pay-code:${orderId}`,
+      domainEventId: `pay-code:${orderId}`,
+    });
+    return { payment: payDto(rows[0]), replay: false };
+  }
   const methodLabel =
     method === "QRIS"
       ? "QRIS"
@@ -59,8 +95,7 @@ export async function createPayment(
 export async function getPayment(user: AuthUser, orderId: string) {
   await getOrder(user, orderId);
   const rows = await query<Record<string, unknown>>(
-    `SELECT id, order_id, provider, method, status::text AS status, amount_rupiah, currency, external_reference, created_at::text
-     FROM payments WHERE order_id=$1 LIMIT 1`,
+    `SELECT ${PAYMENT_COLUMNS} FROM payments WHERE order_id=$1 LIMIT 1`,
     [orderId],
   );
   if (!rows[0])
@@ -68,8 +103,62 @@ export async function getPayment(user: AuthUser, orderId: string) {
   return payDto(rows[0]);
 }
 
+/**
+ * Pulls the authoritative Midtrans status and applies it through the same idempotent pipeline as the webhook,
+ * so a lost notification never leaves a paid order pending. Non-Midtrans payments are returned unchanged.
+ */
+export async function refreshPayment(user: AuthUser, orderId: string) {
+  const current = await getPayment(user, orderId);
+  if (current.provider !== "midtrans" || !["CREATED", "PENDING"].includes(String(current.status))) {
+    return current;
+  }
+  try {
+    await refreshMidtransPayment(String(current.externalReference));
+  } catch (err) {
+    // The webhook may have recorded the same event with a differently shaped body; the state is already applied.
+    if (!(err instanceof AppError && err.code === "WEBHOOK_PAYLOAD_MISMATCH")) throw err;
+  }
+  return getPayment(user, orderId);
+}
+
+const PAYMENT_COLUMNS = `id, order_id, provider, method::text AS method, status::text AS status, amount_rupiah, currency,
+  external_reference, created_at::text, instruction_data`;
+
+function snapRedirectUrl(p: Record<string, unknown>): string {
+  const data = p.instruction_data;
+  const url = data && typeof data === "object" ? (data as Record<string, unknown>).redirectUrl : "";
+  return typeof url === "string" ? url : "";
+}
+
+/** Creates the Snap transaction for an already stored payment row; retry-safe because the Midtrans order_id is the row's reference. */
+async function attachSnapTransaction(
+  user: AuthUser,
+  order: { expiresAt: string | null },
+  row: Record<string, unknown>,
+): Promise<Record<string, unknown>> {
+  const expiresAt = order.expiresAt || "";
+  const minutes = Math.ceil((new Date(expiresAt).getTime() - Date.now()) / 60000);
+  if (!(minutes >= 1)) throw new AppError("PAYMENT_ORDER_INVALID", "Order tidak dapat dibayar.", {}, 409);
+  const snap = await createSnapTransaction({
+    orderId: String(row.external_reference),
+    amountRupiah: Number(row.amount_rupiah),
+    expiresInMinutes: minutes,
+    customerName: user.name || user.username || "Pembeli",
+    customerEmail: user.email || "",
+    finishUrl: `${publicAppOrigin()}/dashboard/order/${String(row.order_id)}`,
+  });
+  const updated = await query<Record<string, unknown>>(
+    `UPDATE payments SET instruction_data=$2::jsonb, provider_expires_at=$3::timestamptz, updated_at=CURRENT_TIMESTAMP
+     WHERE id=$1 RETURNING ${PAYMENT_COLUMNS}`,
+    [row.id, JSON.stringify({ redirectUrl: snap.redirectUrl, snapToken: snap.token }), expiresAt],
+  );
+  return updated[0];
+}
+
 function payDto(p: Record<string, unknown>) {
+  const redirectUrl = snapRedirectUrl(p);
   return {
+    redirectUrl: redirectUrl && ["CREATED", "PENDING"].includes(String(p.status)) ? redirectUrl : null,
     id: p.id,
     orderId: p.order_id,
     provider: p.provider,
@@ -285,6 +374,9 @@ export async function applyLoyaltyOnPaid(
 
 export async function sandboxSettle(user: AuthUser, orderId: string) {
   const pay = await getPayment(user, orderId);
+  // The simulator only exists for sandbox-provider payments; a Midtrans payment must really be paid.
+  if (pay.provider !== "sandbox" || activePaymentProvider() !== "sandbox")
+    throw new AppError("FORBIDDEN", "Simulasi pembayaran tidak tersedia.", {}, 403);
   const ok = await settlePaidOrder(orderId, String(pay.id));
   if (!ok)
     throw new AppError(

@@ -10,6 +10,7 @@ const NAV: WorkspaceNavItem[] = [
   { href: "/dashboard/order", label: "Order", icon: "orders" },
   { href: "/dashboard/refunds", label: "Refund", icon: "file" },
   { href: "/dashboard/ticket", label: "Tiket", icon: "ticket" },
+  { href: "/dashboard/poin", label: "Poin", icon: "file" },
   { href: "/dashboard/notifications", label: "Notifikasi", icon: "bell" },
   { href: "/dashboard/profile", label: "Profil", icon: "user" },
   { href: "/dashboard/organizer/apply", label: "Ajukan Penyelenggara", icon: "userPlus" },
@@ -20,6 +21,7 @@ function pageTitle(pathname: string) {
   if (pathname.startsWith("/dashboard/order")) return "Order saya";
   if (pathname.startsWith("/dashboard/refunds")) return "Refund saya";
   if (pathname.startsWith("/dashboard/ticket")) return "Tiket saya";
+  if (pathname.startsWith("/dashboard/poin")) return "Poin saya";
   if (pathname.startsWith("/dashboard/notifications")) return "Notifikasi";
   if (pathname.startsWith("/dashboard/profile")) return "Profil";
   if (pathname.startsWith("/dashboard/organizer/status") || pathname.startsWith("/organizer/status")) return "Status pengajuan";

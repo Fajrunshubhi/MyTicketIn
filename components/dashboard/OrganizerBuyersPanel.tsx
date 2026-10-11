@@ -48,6 +48,8 @@ export function OrganizerBuyersPanel({
   const [items, setItems] = useState<ParticipantRow[]>([]);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [statusFilter, setStatusFilter] = useState("");
+  const statusQuery = statusFilter ? `?status=${statusFilter}` : "";
 
   useEffect(() => {
     if (!selectedEventId) {
@@ -59,7 +61,7 @@ export function OrganizerBuyersPanel({
     let cancelled = false;
     setLoading(true);
     setError("");
-    fetch(`/api/organizer/events/${encodeURIComponent(selectedEventId)}/participants`, {
+    fetch(`/api/organizer/events/${encodeURIComponent(selectedEventId)}/participants${statusQuery}`, {
       credentials: "include",
       cache: "no-store",
     })
@@ -85,7 +87,7 @@ export function OrganizerBuyersPanel({
     return () => {
       cancelled = true;
     };
-  }, [selectedEventId]);
+  }, [selectedEventId, statusQuery]);
 
   return (
     <section className="rounded-2xl border border-stone-200 bg-white p-5" aria-labelledby="pembeli-tiket">
@@ -106,6 +108,31 @@ export function OrganizerBuyersPanel({
           ))}
         </select>
       </label>
+      {selectedEventId ? (
+        <div className="mt-3 flex flex-wrap items-end gap-3">
+          <label className="block text-sm text-ink/80">
+            Status tiket
+            <select
+              className="mt-1 block min-h-11 rounded-md border border-stone-300 bg-white p-2"
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+            >
+              <option value="">Semua</option>
+              {Object.entries(STATUS_LABEL).map(([k, v]) => (
+                <option key={k} value={k}>
+                  {v}
+                </option>
+              ))}
+            </select>
+          </label>
+          <a
+            className="inline-flex min-h-11 items-center text-sm text-gold-700 underline"
+            href={`/api/organizer/events/${encodeURIComponent(selectedEventId)}/participants.csv${statusQuery}`}
+          >
+            Unduh CSV (sesuai filter)
+          </a>
+        </div>
+      ) : null}
       {!selectedEventId ? (
         <p className="mt-4 text-sm text-ink/60">Biodata tidak ditampilkan sampai event dipilih.</p>
       ) : null}

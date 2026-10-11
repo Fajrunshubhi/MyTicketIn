@@ -6,6 +6,7 @@ import { CatalogFilters } from "@/components/events/CatalogFilters";
 import { EventCard } from "@/components/events/EventCard";
 import { Alert } from "@/components/ui/Alert";
 import { LoadingState } from "@/components/ui/LoadingState";
+import { trackEvent } from "@/lib/analytics";
 import type { CatalogCard } from "@/components/events/catalog-types";
 
 export function CatalogClient({ basePath = "/events" }: { basePath?: string }) {
@@ -54,6 +55,17 @@ export function CatalogClient({ basePath = "/events" }: { basePath?: string }) {
       })
       .catch(() => setError("Tidak dapat terhubung ke layanan."))
       .finally(() => setLoading(false));
+  }, [qs]);
+
+  useEffect(() => {
+    const searched = Boolean(params.get("q"));
+    trackEvent({
+      eventName: searched ? "search_submitted" : "catalog_viewed",
+      entityType: "catalog",
+      properties: { filtered: hasFilter, past: pastMode },
+    });
+    // Only the query string identifies a new catalog view.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [qs]);
 
   async function loadMore() {

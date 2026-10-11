@@ -3,6 +3,7 @@ import { eventOwnerUserId, notify } from "@/lib/server/notifications";
 import { refundOversightFlag } from "@/lib/order-refund-display";
 import { buyerCancelRefundAmount, earnReversalDelta, isFullRefund, isParsedRefundBank, parseRefundBank, remainingRefundable, TRANSFER_HOLD_HOURS, type RefundBankInput } from "@/lib/server/refund-policy";
 import { readGalleryFile, saveGalleryFile } from "@/lib/server/gallery";
+import { assertNoLivePayoutForOrder } from "@/lib/server/payouts";
 
 const OPEN_STATUSES = "('REQUESTED','APPROVED','PROCESSING','COMPLETED')";
 
@@ -376,6 +377,7 @@ async function insertRefund(
     accountName = parsed.accountName;
     accountNumber = parsed.accountNumber;
   }
+  if (source !== "EVENT_CANCELLED") await assertNoLivePayoutForOrder(orderId);
   await assertUnusedOnly(orderId);
   const p = await paidPayment(orderId);
   const outstanding = await outstandingRupiah(orderId);

@@ -13,6 +13,7 @@ export const NOTIFICATION_TYPES = [
   "EVENT_REMINDER",
   "PASSWORD_RESET_ASSISTED",
   "MODERATION_NEEDED",
+  "PAYOUT_UPDATED",
 ] as const;
 
 export type NotificationType = (typeof NOTIFICATION_TYPES)[number];
@@ -32,6 +33,7 @@ export const NOTIFICATION_TYPE_LABEL: Record<NotificationType, string> = {
   EVENT_REMINDER: "Pengingat event",
   PASSWORD_RESET_ASSISTED: "Keamanan akun",
   MODERATION_NEEDED: "Antrean moderasi",
+  PAYOUT_UPDATED: "Pencairan dana",
 };
 
 export function isNotificationType(value: string): value is NotificationType {
@@ -64,6 +66,7 @@ const EMAIL_TYPES: readonly NotificationType[] = [
   "PAYMENT_FAILED",
   "TICKET_ISSUED",
   "REFUND_UPDATED",
+  "PAYOUT_UPDATED",
   "EVENT_REMINDER",
 ];
 

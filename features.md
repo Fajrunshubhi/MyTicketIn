@@ -476,7 +476,7 @@ F65 (kursi bernomor dan denah venue statis) adalah Must Have inventori; spesifik
   - Nominal provider sama dengan total order.
   - QRIS, virtual account, dan e-wallet tersedia jika didukung akun sandbox terpilih.
   - Kredensial provider tidak terekspos ke client/log.
-- **Teknis/kasus khusus:** Provider harus dipilih pada decision gate; gunakan adapter untuk mengisolasi domain.
+- **Teknis/kasus khusus:** Provider dipilih lewat `PAYMENT_PROVIDER`: `sandbox` (simulator internal, dipakai tes/CI) atau `midtrans` (Midtrans Sandbox, Snap redirect; hanya Server Key berawalan `SB-Mid-server-` yang diterima). Gunakan adapter untuk mengisolasi domain.
 - **Dependensi/keahlian:** Payment gateway pihak ketiga, API integration, secrets.
 
 ### F30 — Instruksi dan Status Pembayaran
@@ -502,7 +502,7 @@ F65 (kursi bernomor dan denah venue statis) adalah Must Have inventori; spesifik
   - Signature invalid ditolak tanpa mengubah Order/Payment.
   - Event provider yang sama dapat direplay tanpa tiket/status ganda.
   - Sukses tepercaya mengubah Order pertama kali menjadi Paid dan memicu penerbitan tiket.
-- **Teknis/kasus khusus:** Simpan external event ID unik dan payload hash; redaksi PII/rahasia.
+- **Teknis/kasus khusus:** Simpan external event ID unik dan payload hash; redaksi PII/rahasia. Untuk Midtrans, signature SHA-512 (`order_id+status_code+gross_amount+ServerKey`) diverifikasi, lalu status dan nominal dibaca ulang dari status API Midtrans sebelum mengubah Order. `settlement`/`capture` (fraud accept) menjadi Paid; `pending` menjadi Payment PENDING; `deny`/`cancel`/`failure`/`expire` hanya menutup Order yang masih Pending. Pembalikan setelah Paid tidak membatalkan Order, tetapi membuka rekonsiliasi untuk admin. Pembeli dapat menarik status lewat "Cek status" bila notifikasi hilang.
 - **Dependensi/keahlian:** F25, F29, webhook security.
 
 ### F32 — Rekonsiliasi Pembayaran Terlambat
@@ -533,6 +533,15 @@ F65 (kursi bernomor dan denah venue statis) adalah Must Have inventori; spesifik
   - Tidak ada uang nyata yang dipindahkan; bukti transfer adalah arsip sandbox.
 - **Teknis/kasus khusus:** Refund tiket Used ditolak dari alur biasa. Rekening dan bukti transfer hanya untuk pemilik order, penyelenggara event, dan admin.
 - **Dependensi/keahlian:** Gateway refund sandbox, F12, F31, F45.
+
+### Pencairan Dana ke Penyelenggara (sandbox, ekstensi F33/F44)
+
+- **Model dana:** Semua pembayaran pembeli diterima satu akun platform (Midtrans). Setelah event selesai dan masa tahan `PAYOUT_HOLD_HOURS` (default 24 jam) lewat, penyelenggara mengajukan pencairan; admin mentransfer ke rekening terdaftar dan mengunggah bukti.
+- **Nominal:** total order Paid event dikurangi refund Completed (integer Rupiah), dihitung ulang dari database; belum ada biaya layanan.
+- **Aturan:** satu pencairan aktif per event (diajukan atau dibayar); ditolak jika masih ada refund terbuka, rekening belum diisi, atau event belum selesai. Setelah pencairan diajukan, refund baru untuk event itu tidak dapat dibuat. Penolakan admin wajib beralasan dan membebaskan event untuk diajukan ulang.
+- **Idempotensi:** pengajuan menerima header `Idempotency-Key` (16–128 karakter, berlaku 24 jam, per organizer). Kunci dan isi yang sama mengembalikan pencairan yang sama (HTTP 200, bukan error "sudah diajukan"); kunci sama dengan isi berbeda ditolak `IDEMPOTENCY_KEY_REUSED`; permintaan yang masih berjalan ditolak `IDEMPOTENCY_IN_PROGRESS`. Operasi yang gagal melepas kunci agar dapat diulang.
+- **Keamanan:** rekening di-snapshot saat pengajuan; organizer hanya melihat nomor tersamar; transfer dan penolakan dicatat di audit; bukti hanya untuk pemilik dan admin.
+- **Di luar MVP:** transfer otomatis lewat Midtrans Payouts (Iris) memerlukan aktivasi akun Payouts dan persetujuan Creator/Approver; saat ini admin mentransfer manual dan mengarsipkan bukti.
 
 ## 6. E-ticket dan Check-in
 
@@ -859,6 +868,7 @@ F65 (kursi bernomor dan denah venue statis) adalah Must Have inventori; spesifik
   - Health check memberi status aplikasi/database tanpa membocorkan rahasia.
   - Log memiliki correlation ID dan menyensor PII/token.
   - Kegagalan webhook/job dapat ditemukan dari log/metrik.
+  - Halaman Operasi admin menampilkan agregat nyata (webhook gagal 24 jam, order lewat hold yang belum kedaluwarsa, notifikasi tertunda/gagal, rekonsiliasi terbuka, versi skema) beserta alert; backup dilaporkan sebagai dikelola Neon dan tidak diukur aplikasi. Belum ada metrik error rate request atau latensi (membutuhkan provider observability).
 - **Teknis/kasus khusus:** Tentukan retention dan akses log.
 - **Dependensi/keahlian:** Observability provider, structured logging.
 
@@ -1049,6 +1059,8 @@ Keempat fitur berikut adalah Must Have aktif MVP akademik. Implementasinya tetap
   - Tanpa riwayat Paid atau tanpa sesi, sistem memberi fallback kontekstual berdasarkan kategori, lokasi, organizer, dan event yang sedang dilihat.
   - Event saat ini, Cancelled, Completed, draft, atau event yang waktunya telah lewat tidak ditampilkan.
   - Ranking memiliki tie-breaker stabil, dapat diuji secara deterministik, dan empty state tidak menghalangi detail/katalog.
+  - Skor memakai bobot kategori 3, kota 2, provinsi 1, organizer 1 (mode histori memakai jumlah order Paid, maksimum 5 per dimensi). Alasan yang tampil satu label dari kontribusi terbesar: "Kategori serupa", "Lokasi serupa", atau "Penyelenggara sama".
+  - Setelah skor dihitung, satu daftar memuat maksimum 2 event per organizer agar tidak didominasi satu penyelenggara; sisa slot diisi dari event tertunda bila kandidat sedikit.
 - **Teknis/kasus khusus:** PostgreSQL adalah sumber kandidat dan status; minimalkan data profil, hindari kebocoran riwayat lintas akun, gunakan pagination/limit, dan jangan menganggap output AI sebagai kebutuhan fitur ini.
 - **Dependensi/keahlian:** F5, F11, F18–F21, F25/F31; query/index PostgreSQL, authorization, privacy testing.
 

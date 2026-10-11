@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
+import { TrackView } from "@/components/analytics/TrackView";
 import { EventDetail } from "@/components/events/EventDetail";
 import { SiteFooter } from "@/components/shared/SiteFooter";
 import { SiteHeader } from "@/components/shared/SiteHeader";
@@ -38,6 +39,7 @@ export default async function EventDetailPage({ params }: { params: { slug: stri
     <div className="auth-shell min-h-screen">
       <SiteHeader />
       <main>
+        <TrackView eventName="event_viewed" entityType="event" entityId={event.id} />
         <Container>
           <EventDetail event={event} />
         </Container>

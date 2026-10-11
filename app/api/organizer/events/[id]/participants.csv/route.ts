@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { jsonError } from "@/lib/server/http";
 import { requireOrganizerProfile } from "@/lib/server/guard";
 import { getOwnedEvent } from "@/lib/server/events-organizer";
-import { listParticipants } from "@/lib/server/reporting";
+import { listParticipants, PARTICIPANT_STATUSES } from "@/lib/server/reporting";
 
 function csvEscape(v: unknown): string {
   const s = v == null ? "" : String(v);
@@ -14,7 +14,9 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
   try {
     const { organizerProfileId } = await requireOrganizerProfile(req);
     await getOwnedEvent(organizerProfileId, params.id);
-    const rows = await listParticipants(organizerProfileId, params.id);
+    const raw = (new URL(req.url).searchParams.get("status") || "").toUpperCase();
+    const status = (PARTICIPANT_STATUSES as readonly string[]).includes(raw) ? raw : undefined;
+    const rows = await listParticipants(organizerProfileId, params.id, status);
     const header = "nomor_order,nomor_tiket,nama_pemegang,email,telepon,nik,jenis_tiket,kategori_area,label_kursi,status_tiket,waktu_terbit,waktu_check_in";
     const lines = rows.map((r) =>
       [

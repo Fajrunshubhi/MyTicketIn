@@ -13,6 +13,7 @@ const NAV: WorkspaceNavItem[] = [
   { href: "/dashboard/pembeli", label: "Pembeli", icon: "ticket" },
   { href: "/dashboard/laporan", label: "Laporan", icon: "chart" },
   { href: "/dashboard/refunds", label: "Refund", icon: "orders" },
+  { href: "/dashboard/payouts", label: "Pencairan", icon: "chart" },
   { href: "/dashboard/notifications", label: "Notifikasi", icon: "bell" },
   { href: "/dashboard/profile", label: "Profil", icon: "user" },
 ];
@@ -21,6 +22,7 @@ function pageTitle(pathname: string): string {
   if (pathname === "/dashboard") return "Dashboard";
   if (pathname === "/dashboard/laporan") return "Laporan";
   if (pathname.startsWith("/dashboard/refunds")) return "Refund";
+  if (pathname.startsWith("/dashboard/payouts")) return "Pencairan dana";
   if (pathname === "/dashboard/pembeli") return "Pembeli";
   if (pathname === "/dashboard/petugas") return "Akun petugas";
   if (pathname === "/dashboard/event") return "Event";

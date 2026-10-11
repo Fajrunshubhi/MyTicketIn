@@ -179,7 +179,10 @@ export async function salesTrend(orgId: string, eventId: string, from: string, t
   };
 }
 
-export async function listParticipants(orgId: string, eventId: string) {
+export const PARTICIPANT_STATUSES = ["UNUSED", "USED", "CANCELLED"] as const;
+
+/** `status` optionally narrows to one ticket status (F46 filtered export); unknown values are ignored by the callers. */
+export async function listParticipants(orgId: string, eventId: string, status?: string) {
   const rows = await query<{
     id: string;
     ticket_number: string;
@@ -208,9 +211,10 @@ export async function listParticipants(orgId: string, eventId: string) {
      JOIN users u ON u.id=t.owner_user_id
      LEFT JOIN order_attendees a ON a.order_item_id = t.order_item_id AND a.unit_sequence = t.unit_sequence
      WHERE e.organizer_profile_id=$1 AND t.event_id=$2 AND o.status IN ('PAID','REFUNDED')
+       AND ($3::text IS NULL OR t.status::text = $3)
      ORDER BY t.issued_at ASC, t.id ASC
      LIMIT 5000`,
-    [orgId, eventId],
+    [orgId, eventId, status || null],
   );
   return rows.map((r) => ({
     id: r.id,
@@ -296,26 +300,169 @@ export async function adminOperationsQueue(queue: string) {
   };
 }
 
+export type HealthCounts = {
+  webhookFailures: number;
+  expiryLagOrders: number;
+  notificationLag: number;
+  notificationFailures: number;
+  openReconciliations: number;
+};
+
+/** Ambang peringatan sederhana; semua angka berupa agregat tanpa PII. */
+export function healthAlerts(c: HealthCounts): string[] {
+  const alerts: string[] = [];
+  if (c.webhookFailures > 0) alerts.push(`${c.webhookFailures} webhook pembayaran gagal diproses (24 jam)`);
+  if (c.expiryLagOrders > 0) alerts.push(`${c.expiryLagOrders} order lewat batas hold tetapi belum kedaluwarsa`);
+  if (c.notificationLag > 0) alerts.push(`${c.notificationLag} notifikasi tertunda lebih dari 10 menit`);
+  if (c.notificationFailures > 0) alerts.push(`${c.notificationFailures} notifikasi gagal terkirim (24 jam)`);
+  if (c.openReconciliations > 0) alerts.push(`${c.openReconciliations} rekonsiliasi pembayaran terbuka`);
+  return alerts;
+}
+
 export async function adminOperationsHealth() {
-  const ok = true;
+  const rows = await query<Record<string, string>>(
+    `SELECT
+       (SELECT COUNT(*) FROM payment_webhook_events WHERE processing_status = 'FAILED'::webhook_processing_status
+          AND received_at > NOW() - INTERVAL '24 hours')::text AS webhook_failures,
+       (SELECT COUNT(*) FROM orders WHERE status = 'PENDING'::order_status AND expires_at < NOW() - INTERVAL '5 minutes')::text AS expiry_lag,
+       (SELECT COUNT(*) FROM notification_outbox WHERE status = 'PENDING'::outbox_status
+          AND next_attempt_at < NOW() - INTERVAL '10 minutes')::text AS notification_lag,
+       (SELECT COUNT(*) FROM notification_outbox WHERE status = 'FAILED'::outbox_status
+          AND updated_at > NOW() - INTERVAL '24 hours')::text AS notification_failures,
+       (SELECT COUNT(*) FROM payment_reconciliations WHERE status = 'OPEN'::reconciliation_status)::text AS open_reconciliations,
+       (SELECT COALESCE(MAX(version_id), 0) FROM goose_db_version WHERE is_applied)::text AS schema_version`,
+  );
+  const r = rows[0] || {};
+  const counts: HealthCounts = {
+    webhookFailures: Number(r.webhook_failures || 0),
+    expiryLagOrders: Number(r.expiry_lag || 0),
+    notificationLag: Number(r.notification_lag || 0),
+    notificationFailures: Number(r.notification_failures || 0),
+    openReconciliations: Number(r.open_reconciliations || 0),
+  };
   return {
-    backupFreshness: "unknown",
-    alerts: [] as string[],
-    requestErrorRate: 0,
-    app: ok ? "ok" : "error",
-    database: "ok",
+    window: "24h",
+    ...counts,
+    schemaVersion: Number(r.schema_version || 0),
+    // Backup dikelola Neon (PITR); aplikasi tidak dapat mengukur kesegarannya, jadi tidak dilaporkan sebagai "ok".
+    backupFreshness: "dikelola Neon (tidak diukur aplikasi)",
+    alerts: healthAlerts(counts),
+    app: "ok",
     runtime: "nextjs",
   };
 }
 
-export async function recommendations(slug: string, limit: number) {
+/** Kekuatan sinyal per dimensi: 0/1 pada mode kontekstual, hitungan order Paid (maks 5) pada mode histori. */
+export type RecommendationSignals = { category: number; city: number; province: number; organizer: number };
+
+const HISTORY_COUNT_CAP = 5;
+
+/** Bobot RFC-012: kategori 3, kota 2, provinsi 1, organizer 1 (deterministik, integer). */
+export function recommendationScore(s: RecommendationSignals): number {
+  return 3 * s.category + 2 * s.city + s.province + s.organizer;
+}
+
+/** Satu label aman dari kontribusi terbesar; seri dipecah CATEGORY > CITY > PROVINCE > ORGANIZER. */
+export function recommendationReason(s: RecommendationSignals): string {
+  const parts: [number, string][] = [
+    [3 * s.category, "Kategori serupa"],
+    [2 * s.city, "Lokasi serupa"],
+    [s.province, "Lokasi serupa"],
+    [s.organizer, "Penyelenggara sama"],
+  ];
+  let best = parts[0];
+  for (const p of parts) if (p[0] > best[0]) best = p;
+  return best[0] > 0 ? best[1] : "Mungkin Anda suka";
+}
+
+/** Urutan: skor menurun, lalu waktu mulai, lalu id sebagai tie-breaker stabil. */
+export function rankRecommendations<T extends { score: number; startsAt: string; id: string }>(rows: T[]): T[] {
+  return [...rows].sort(
+    (a, b) =>
+      b.score - a.score ||
+      new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime() ||
+      (a.id < b.id ? -1 : a.id > b.id ? 1 : 0),
+  );
+}
+
+/**
+ * Pembatas keberagaman pada waktu ranking (setelah skor, bukan saat retrieval): maksimal `capPerOrganizer`
+ * event per penyelenggara. Jika slot belum penuh, sisa diisi dari yang tertunda sesuai urutan skor
+ * agar daftar tidak kosong saat kandidat sedikit.
+ */
+export function diversifyByOrganizer<T extends { organizerKey: string }>(ranked: T[], limit: number, capPerOrganizer = 2): T[] {
+  const picked: T[] = [];
+  const deferred: T[] = [];
+  const counts = new Map<string, number>();
+  for (const row of ranked) {
+    if (picked.length >= limit) break;
+    const n = counts.get(row.organizerKey) ?? 0;
+    if (n >= capPerOrganizer) {
+      deferred.push(row);
+      continue;
+    }
+    counts.set(row.organizerKey, n + 1);
+    picked.push(row);
+  }
+  for (const row of deferred) {
+    if (picked.length >= limit) break;
+    picked.push(row);
+  }
+  return picked;
+}
+
+export async function recommendations(slug: string, limit: number, buyerUserId?: string | null) {
   const cap = Math.min(Math.max(limit || 6, 1), 12);
-  const ev = await query<{ id: string; category: string; city: string }>(
-    `SELECT id, category, city FROM events WHERE slug=$1 AND status='PUBLISHED' LIMIT 1`,
+  const ev = await query<{ id: string; category: string; city: string; province: string; organizer_profile_id: string }>(
+    `SELECT id, category, city, province, organizer_profile_id FROM events WHERE slug=$1 AND status='PUBLISHED' LIMIT 1`,
     [slug],
   );
   if (!ev[0]) return { items: [] as Record<string, unknown>[], mode: "CONTEXTUAL" };
-  const rows = await query<{
+  const current = ev[0];
+  // Riwayat hanya dari order PAID milik pembeli ini; tidak pernah membaca pengguna lain.
+  const paid = buyerUserId
+    ? await query<{ event_id: string; category: string; city: string; province: string; organizer_profile_id: string }>(
+        `SELECT o.event_id, lower(he.category) AS category, lower(he.city) AS city, lower(he.province) AS province, he.organizer_profile_id
+         FROM orders o JOIN events he ON he.id = o.event_id
+         WHERE o.buyer_user_id = $1 AND o.status = 'PAID'`,
+        [buyerUserId],
+      )
+    : [];
+  const historyMode = paid.length > 0;
+  const tally = (pick: (r: (typeof paid)[number]) => string) => {
+    const m = new Map<string, number>();
+    for (const r of paid) m.set(pick(r), (m.get(pick(r)) ?? 0) + 1);
+    return m;
+  };
+  const byCategory = tally((r) => r.category);
+  const byCity = tally((r) => r.city);
+  const byProvince = tally((r) => r.province);
+  const byOrganizer = tally((r) => r.organizer_profile_id);
+  const lc = (v: string) => (v || "").toLowerCase();
+  const signalsFor = (r: { category: string; city: string; province: string; organizer_profile_id: string }): RecommendationSignals =>
+    historyMode
+      ? {
+          category: Math.min(byCategory.get(lc(r.category)) ?? 0, HISTORY_COUNT_CAP),
+          city: Math.min(byCity.get(lc(r.city)) ?? 0, HISTORY_COUNT_CAP),
+          province: Math.min(byProvince.get(lc(r.province)) ?? 0, HISTORY_COUNT_CAP),
+          organizer: Math.min(byOrganizer.get(r.organizer_profile_id) ?? 0, HISTORY_COUNT_CAP),
+        }
+      : {
+          category: lc(r.category) === lc(current.category) ? 1 : 0,
+          city: lc(r.city) === lc(current.city) ? 1 : 0,
+          province: lc(r.province) === lc(current.province) ? 1 : 0,
+          organizer: r.organizer_profile_id === current.organizer_profile_id ? 1 : 0,
+        };
+  const keys = historyMode
+    ? {
+        cats: [...byCategory.keys()],
+        cities: [...byCity.keys()],
+        provs: [...byProvince.keys()],
+        orgs: [...byOrganizer.keys()],
+      }
+    : { cats: [lc(current.category)], cities: [lc(current.city)], provs: [lc(current.province)], orgs: [current.organizer_profile_id] };
+  const bought = [...new Set(paid.map((r) => r.event_id))];
+  const candidates = await query<{
     id: string;
     slug: string;
     title: string;
@@ -325,16 +472,27 @@ export async function recommendations(slug: string, limit: number) {
     starts_at: string;
     timezone: string;
     organizer_name: string;
+    organizer_profile_id: string;
   }>(
     `SELECT e.id, e.slug, e.title, e.category, e.city, e.province, e.starts_at::text, e.timezone,
-            COALESCE(p.name, '') AS organizer_name
+            COALESCE(p.name, '') AS organizer_name, e.organizer_profile_id
      FROM events e
      LEFT JOIN organizer_profiles p ON p.id = e.organizer_profile_id
      WHERE e.status='PUBLISHED' AND e.starts_at > NOW() AND e.slug <> $1
-       AND (lower(e.category)=lower($2) OR lower(e.city)=lower($3))
-     ORDER BY e.starts_at ASC LIMIT $4`,
-    [slug, ev[0].category, ev[0].city, cap],
+       AND NOT (e.id = ANY($6::text[]))
+       AND (lower(e.category) = ANY($2::text[]) OR lower(e.city) = ANY($3::text[])
+            OR lower(e.province) = ANY($4::text[]) OR e.organizer_profile_id = ANY($5::text[]))
+     ORDER BY e.starts_at ASC, e.id ASC
+     LIMIT 300`,
+    [slug, keys.cats, keys.cities, keys.provs, keys.orgs, bought],
   );
+  const scored = candidates
+    .map((r) => {
+      const signals = signalsFor(r);
+      return { ...r, startsAt: r.starts_at, signals, score: recommendationScore(signals), organizerKey: r.organizer_profile_id };
+    })
+    .filter((r) => r.score > 0);
+  const rows = diversifyByOrganizer(rankRecommendations(scored), cap);
   const items = [];
   for (const r of rows) {
     const gallery = await query<{ image_url: string }>(
@@ -342,7 +500,6 @@ export async function recommendations(slug: string, limit: number) {
       [r.id],
     );
     const url = publicImageSrc(gallery[0]?.image_url || "", dummyCover(r.category, r.title));
-    const sameCategory = r.category.toLowerCase() === ev[0].category.toLowerCase();
     items.push({
       slug: r.slug,
       title: r.title,
@@ -353,8 +510,8 @@ export async function recommendations(slug: string, limit: number) {
       timezone: r.timezone || "Asia/Jakarta",
       organizer: { name: r.organizer_name },
       image: { url, altText: r.title },
-      reason: sameCategory ? "Kategori yang sama." : "Kota yang sama.",
+      reason: recommendationReason(r.signals),
     });
   }
-  return { items, mode: "CONTEXTUAL" };
+  return { items, mode: historyMode ? "HISTORY" : "CONTEXTUAL" };
 }

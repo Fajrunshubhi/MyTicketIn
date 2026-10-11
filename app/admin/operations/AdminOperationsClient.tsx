@@ -43,7 +43,7 @@ export default function AdminOperationsClient() {
   const [asOf, setAsOf] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
-  const [health, setHealth] = useState<{ backupFreshness?: string; alerts?: string[]; requestErrorRate?: number } | null>(null);
+  const [health, setHealth] = useState<{ backupFreshness?: string; alerts?: string[]; database?: string; schemaVersion?: number } | null>(null);
   const [offline, setOffline] = useState(false);
 
   useEffect(() => {
@@ -90,8 +90,8 @@ export default function AdminOperationsClient() {
         {offline ? <div className="mt-4"><OfflineState /></div> : null}
         {health ? (
           <p className="mt-4 text-sm text-ink/60" aria-live="polite">
-            Backup: {health.backupFreshness || "unknown"}. Error rate: {health.requestErrorRate ?? 0}.
-            Alert: {(health.alerts && health.alerts.length > 0) ? health.alerts.join(", ") : "tidak ada"}.
+            Database: {health.database || "unknown"}. Skema v{health.schemaVersion ?? "?"}. Backup: {health.backupFreshness || "unknown"}.
+            Alert: {(health.alerts && health.alerts.length > 0) ? health.alerts.join("; ") : "tidak ada"}.
           </p>
         ) : null}
         <nav className="mt-6 flex flex-wrap gap-3" aria-label="Jenis antrean">

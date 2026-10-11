@@ -784,6 +784,70 @@ export async function loyaltyAccount(
   };
 }
 
+/** All loyalty accounts of the buyer plus recent ledger entries (read-only; points stay isolated per organizer). */
+export async function loyaltyOverview(user: AuthUser, ledgerLimit = 50) {
+  const accounts = await query<{
+    organizer_profile_id: string;
+    organizer_name: string;
+    balance_points: number;
+    debt_points: number;
+    reserved_points: number;
+  }>(
+    `SELECT a.organizer_profile_id, p.name AS organizer_name, a.balance_points, a.debt_points, a.reserved_points
+     FROM loyalty_accounts a JOIN organizer_profiles p ON p.id = a.organizer_profile_id
+     WHERE a.buyer_user_id=$1
+     ORDER BY p.name ASC`,
+    [user.id],
+  );
+  const ledger = await query<{
+    id: string;
+    organizer_profile_id: string;
+    organizer_name: string;
+    entry_type: string;
+    points_delta: number;
+    order_number: string | null;
+    occurred_at: string;
+  }>(
+    `SELECT l.id, a.organizer_profile_id, p.name AS organizer_name, l.entry_type::text AS entry_type,
+            l.points_delta, o.order_number, l.occurred_at::text AS occurred_at
+     FROM loyalty_ledger_entries l
+     JOIN loyalty_accounts a ON a.id = l.account_id
+     JOIN organizer_profiles p ON p.id = a.organizer_profile_id
+     LEFT JOIN orders o ON o.id = l.order_id
+     WHERE a.buyer_user_id=$1
+     ORDER BY l.occurred_at DESC, l.id DESC
+     LIMIT $2`,
+    [user.id, Math.min(Math.max(ledgerLimit, 1), 100)],
+  );
+  return {
+    accounts: accounts.map((a) => {
+      const bal = Number(a.balance_points);
+      const debt = Number(a.debt_points);
+      const reserved = Number(a.reserved_points);
+      return {
+        organizerId: a.organizer_profile_id,
+        organizerName: a.organizer_name,
+        balancePoints: bal,
+        debtPoints: debt,
+        reservedPoints: reserved,
+        availablePoints: Math.max(0, bal - reserved - debt),
+      };
+    }),
+    ledger: ledger.map((l) => ({
+      id: l.id,
+      organizerId: l.organizer_profile_id,
+      organizerName: l.organizer_name,
+      entryType: l.entry_type,
+      pointsDelta: Number(l.points_delta),
+      orderNumber: l.order_number,
+      occurredAt: l.occurred_at,
+    })),
+    rate: { rupiahPerPoint: 10, maxCheckoutPercent: 20 },
+    cashValue: false,
+    sandbox: true,
+  };
+}
+
 /** Releases an ACTIVE points reservation exactly once (the conditional update gates the counter change). */
 export async function releaseLoyaltyReservation(
   orderId: string,

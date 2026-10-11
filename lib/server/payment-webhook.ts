@@ -3,15 +3,26 @@ import { AppError, newId, query } from "@/lib/server/http";
 import { expireOrderById, failPendingOrder } from "@/lib/server/orders";
 import { recoverPaidOrderById, settlePaidOrder } from "@/lib/server/payments";
 import { hitRateLimit } from "@/lib/server/rate-limit";
+import {
+  fetchMidtransStatus,
+  mapMidtransStatus,
+  midtransConfigured,
+  parseGrossAmount,
+  parseMidtransNotification,
+  verifyMidtransSignature,
+  type MidtransNotification,
+} from "@/lib/server/midtrans";
 
 const MAX_BODY_BYTES = 256 * 1024;
 const EVENT_TYPES = [
   "payment.succeeded",
+  "payment.pending",
   "payment.failed",
   "payment.expired",
   "refund.completed",
 ] as const;
 type EventType = (typeof EVENT_TYPES)[number];
+type ProviderName = "sandbox" | "midtrans";
 
 type WebhookPayload = {
   eventId: string;
@@ -109,6 +120,7 @@ async function openReconciliation(
 }
 
 async function applyEvent(
+  provider: ProviderName,
   eventRowId: string,
   p: WebhookPayload,
 ): Promise<Outcome> {
@@ -123,8 +135,8 @@ async function applyEvent(
     status: string;
   }>(
     `SELECT id, order_id, amount_rupiah, status::text AS status FROM payments
-     WHERE provider='sandbox' AND external_reference=$1 LIMIT 1`,
-    [p.externalReference],
+     WHERE provider=$2 AND external_reference=$1 LIMIT 1`,
+    [p.externalReference, provider],
   );
   const payment = pay[0];
   // Unknown reference may simply be early: keep FAILED so the provider's retry can succeed later.
@@ -140,6 +152,15 @@ async function applyEvent(
       p.amountRupiah,
     );
     return { status: "PROCESSED", reason: "AMOUNT_MISMATCH", http: 200 };
+  }
+
+  if (p.eventType === "payment.pending") {
+    // The provider acknowledged the attempt (e.g. a VA number was issued); the order stays PENDING until paid.
+    await query(
+      `UPDATE payments SET status='PENDING'::payment_status, updated_at=CURRENT_TIMESTAMP WHERE id=$1 AND status='CREATED'`,
+      [payment.id],
+    );
+    return { status: "PROCESSED", reason: "PAYMENT_PENDING", http: 200 };
   }
 
   if (p.eventType === "payment.succeeded") {
@@ -189,6 +210,18 @@ async function applyEvent(
      WHERE id=$1 AND status IN ('CREATED','PENDING')`,
     [payment.id, expired ? "EXPIRED" : "FAILED"],
   );
+  if (!changed && provider === "midtrans") {
+    // Midtrans can reverse a settled payment (e.g. deny after settlement). A Paid order is never undone
+    // automatically, so surface it for manual reconciliation.
+    const o = await query<{ status: string }>(
+      `SELECT status::text AS status FROM orders WHERE id=$1`,
+      [payment.order_id],
+    );
+    if (o[0]?.status === "PAID") {
+      await openReconciliation(payment.id, payment.order_id, eventRowId, "ORDER_STATE_MISMATCH", p.amountRupiah);
+      return { status: "PROCESSED", reason: "PAID_THEN_REVERSED", http: 200 };
+    }
+  }
   return {
     status: "PROCESSED",
     reason: changed ? "ORDER_CLOSED" : "ORDER_NOT_PENDING",
@@ -196,54 +229,39 @@ async function applyEvent(
   };
 }
 
-export async function handlePaymentWebhook(input: {
-  provider: string;
-  rawBody: string;
-  signature: string;
-  ip: string;
-}): Promise<WebhookResult> {
-  if (input.provider !== "sandbox")
-    throw new AppError("NOT_FOUND", "Provider tidak dikenal.", {}, 404);
-  const secret = process.env.PAYMENT_WEBHOOK_SECRET;
-  if (!secret)
-    throw new AppError(
-      "WEBHOOK_NOT_CONFIGURED",
-      "Webhook pembayaran belum dikonfigurasi.",
-      {},
-      503,
-    );
-  await hitRateLimit("webhook-payments", input.ip, 120, 60);
-  if (Buffer.byteLength(input.rawBody, "utf8") > MAX_BODY_BYTES) {
-    throw new AppError("PAYLOAD_TOO_LARGE", "Payload terlalu besar.", {}, 413);
-  }
-  const payloadHash = createHash("sha256").update(input.rawBody).digest("hex");
+async function rejectInvalidSignature(provider: ProviderName, payloadHash: string): Promise<never> {
+  // Audit the rejection without trusting any payload field.
+  await query(
+    `INSERT INTO payment_webhook_events (id, provider, external_event_id, payload_hash, signature_valid, processing_status, reason_code, processed_at, correlation_id)
+     VALUES ($1,$5,$2,$3,false,'REJECTED','INVALID_SIGNATURE',CURRENT_TIMESTAMP,$4)
+     ON CONFLICT (provider, external_event_id) DO NOTHING`,
+    [
+      newId(),
+      `invalid_${payloadHash.slice(0, 32)}`,
+      payloadHash,
+      `wh:${payloadHash.slice(0, 16)}`,
+      provider,
+    ],
+  );
+  throw new AppError(
+    "WEBHOOK_SIGNATURE_INVALID",
+    "Signature webhook tidak valid.",
+    {},
+    401,
+  );
+}
 
-  if (!signatureMatches(secret, input.rawBody, input.signature)) {
-    // Audit the rejection without trusting any payload field.
-    await query(
-      `INSERT INTO payment_webhook_events (id, provider, external_event_id, payload_hash, signature_valid, processing_status, reason_code, processed_at, correlation_id)
-       VALUES ($1,'sandbox',$2,$3,false,'REJECTED','INVALID_SIGNATURE',CURRENT_TIMESTAMP,$4)
-       ON CONFLICT (provider, external_event_id) DO NOTHING`,
-      [
-        newId(),
-        `invalid_${payloadHash.slice(0, 32)}`,
-        payloadHash,
-        `wh:${payloadHash.slice(0, 16)}`,
-      ],
-    );
-    throw new AppError(
-      "WEBHOOK_SIGNATURE_INVALID",
-      "Signature webhook tidak valid.",
-      {},
-      401,
-    );
-  }
-
-  const payload = parsePayload(input.rawBody);
+/** Records the event once per (provider, event id) and applies it; every mutation inside is idempotent. */
+async function recordAndApply(
+  provider: ProviderName,
+  payload: WebhookPayload,
+  payloadHash: string,
+  extra: Record<string, unknown> = {},
+): Promise<WebhookResult> {
   const inserted = await query<{ id: string }>(
     `INSERT INTO payment_webhook_events (id, provider, external_event_id, external_reference, payload_hash, signature_valid,
                                          processing_status, correlation_id, sanitized_payload)
-     VALUES ($1,'sandbox',$2,$3,$4,true,'RECEIVED',$5,$6::jsonb)
+     VALUES ($1,$7,$2,$3,$4,true,'RECEIVED',$5,$6::jsonb)
      ON CONFLICT (provider, external_event_id) DO NOTHING RETURNING id`,
     [
       newId(),
@@ -255,7 +273,9 @@ export async function handlePaymentWebhook(input: {
         eventType: payload.eventType,
         amountRupiah: payload.amountRupiah,
         currency: payload.currency,
+        ...extra,
       }),
+      provider,
     ],
   );
   let eventRowId = inserted[0]?.id;
@@ -266,8 +286,8 @@ export async function handlePaymentWebhook(input: {
       processing_status: string;
     }>(
       `SELECT id, payload_hash, processing_status::text AS processing_status FROM payment_webhook_events
-       WHERE provider='sandbox' AND external_event_id=$1`,
-      [payload.eventId],
+       WHERE provider=$2 AND external_event_id=$1`,
+      [payload.eventId, provider],
     );
     const row = existing[0];
     if (!row)
@@ -294,7 +314,7 @@ export async function handlePaymentWebhook(input: {
     eventRowId = row.id; // RECEIVED/FAILED: retry processing; every mutation below is idempotent
   }
 
-  const outcome = await applyEvent(eventRowId, payload);
+  const outcome = await applyEvent(provider, eventRowId, payload);
   await query(
     `UPDATE payment_webhook_events
      SET processing_status=$2::webhook_processing_status, reason_code=$3,
@@ -306,4 +326,112 @@ export async function handlePaymentWebhook(input: {
     status: outcome.http,
     body: { received: true, outcome: outcome.reason },
   };
+}
+
+export async function handlePaymentWebhook(input: {
+  provider: string;
+  rawBody: string;
+  signature: string;
+  ip: string;
+}): Promise<WebhookResult> {
+  if (input.provider === "midtrans") return handleMidtransWebhook(input);
+  if (input.provider !== "sandbox")
+    throw new AppError("NOT_FOUND", "Provider tidak dikenal.", {}, 404);
+  const secret = process.env.PAYMENT_WEBHOOK_SECRET;
+  if (!secret)
+    throw new AppError(
+      "WEBHOOK_NOT_CONFIGURED",
+      "Webhook pembayaran belum dikonfigurasi.",
+      {},
+      503,
+    );
+  await hitRateLimit("webhook-payments", input.ip, 120, 60);
+  if (Buffer.byteLength(input.rawBody, "utf8") > MAX_BODY_BYTES) {
+    throw new AppError("PAYLOAD_TOO_LARGE", "Payload terlalu besar.", {}, 413);
+  }
+  const payloadHash = createHash("sha256").update(input.rawBody).digest("hex");
+  if (!signatureMatches(secret, input.rawBody, input.signature)) {
+    return rejectInvalidSignature("sandbox", payloadHash);
+  }
+  return recordAndApply("sandbox", parsePayload(input.rawBody), payloadHash);
+}
+
+/**
+ * Turns a Midtrans notification into a payload. For a known payment the status and amount are re-read from the
+ * Midtrans status API, so a forged or stale notification cannot move money state on its own.
+ */
+async function midtransPayload(
+  n: MidtransNotification,
+  verifyWithApi: boolean,
+): Promise<{ payload: WebhookPayload; hash: string; extra: Record<string, unknown> }> {
+  const known = await query<{ id: string }>(
+    `SELECT id FROM payments WHERE provider='midtrans' AND external_reference=$1 LIMIT 1`,
+    [n.order_id],
+  );
+  let authoritative = n;
+  if (known[0] && verifyWithApi) {
+    const fetched = await fetchMidtransStatus(n.order_id);
+    if (!fetched || fetched.order_id !== n.order_id) {
+      throw new AppError("VALIDATION_ERROR", "Status pembayaran tidak cocok.", {}, 400);
+    }
+    authoritative = fetched;
+  }
+  const amount = parseGrossAmount(authoritative.gross_amount);
+  const mapped = mapMidtransStatus(authoritative.transaction_status, authoritative.fraud_status);
+  // The event id comes from the notification so provider retries dedupe regardless of what the API says now.
+  const eventId = `${n.transaction_id || n.order_id}:${n.transaction_status}:${n.fraud_status || ""}`.slice(0, 191);
+  const hash = createHash("sha256")
+    .update(
+      [n.order_id, n.status_code, n.gross_amount, n.transaction_status, n.fraud_status || "", n.transaction_id || ""].join("|"),
+    )
+    .digest("hex");
+  return {
+    payload: {
+      eventId,
+      // An unparseable amount becomes -1 so it can only produce an AMOUNT_MISMATCH, never a settlement.
+      amountRupiah: amount ?? -1,
+      eventType: mapped === "provider.recorded" ? "refund.completed" : mapped,
+      externalReference: n.order_id,
+      currency: "IDR",
+    },
+    hash,
+    extra: {
+      transactionStatus: authoritative.transaction_status,
+      paymentType: authoritative.payment_type || "",
+    },
+  };
+}
+
+async function handleMidtransWebhook(input: {
+  rawBody: string;
+  ip: string;
+}): Promise<WebhookResult> {
+  if (!midtransConfigured())
+    throw new AppError(
+      "WEBHOOK_NOT_CONFIGURED",
+      "Webhook pembayaran belum dikonfigurasi.",
+      {},
+      503,
+    );
+  await hitRateLimit("webhook-payments", input.ip, 120, 60);
+  if (Buffer.byteLength(input.rawBody, "utf8") > MAX_BODY_BYTES) {
+    throw new AppError("PAYLOAD_TOO_LARGE", "Payload terlalu besar.", {}, 413);
+  }
+  const rawHash = createHash("sha256").update(input.rawBody).digest("hex");
+  const n = parseMidtransNotification(input.rawBody);
+  if (!n)
+    throw new AppError("VALIDATION_ERROR", "Payload webhook tidak valid.", {}, 400);
+  if (!verifyMidtransSignature(n)) return rejectInvalidSignature("midtrans", rawHash);
+  const { payload, hash, extra } = await midtransPayload(n, true);
+  return recordAndApply("midtrans", payload, hash, extra);
+}
+
+/** Pull-based reconciliation for a Midtrans payment (buyer "cek status" or a lost notification). */
+export async function refreshMidtransPayment(
+  externalReference: string,
+): Promise<WebhookResult | null> {
+  const fetched = await fetchMidtransStatus(externalReference);
+  if (!fetched) return null;
+  const { payload, hash, extra } = await midtransPayload(fetched, false);
+  return recordAndApply("midtrans", payload, hash, extra);
 }

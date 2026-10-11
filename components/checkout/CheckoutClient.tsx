@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { apiFetch, readApiError } from "@/lib/api";
 import { type AccountProfile } from "@/lib/account";
+import { trackEvent } from "@/lib/analytics";
 import { formatRupiah } from "@/lib/format";
 
 type Summary = {
@@ -118,6 +119,10 @@ export function CheckoutClient({ slug }: { slug: string }) {
     }
     setReady(true);
   }, [slug]);
+
+  useEffect(() => {
+    if (draft?.eventId) trackEvent({ eventName: "checkout_started", entityType: "event", entityId: draft.eventId });
+  }, [draft?.eventId]);
 
   useEffect(() => {
     fetch("/api/me", { credentials: "include", cache: "no-store" })
