@@ -8,6 +8,7 @@
     "start": "next start",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
+    "ollama-check": "tsx --env-file=.env.local scripts/ollama-check.ts",
     "db-check": "tsx --env-file=.env.local scripts/check-db.ts",
     "migrate": "tsx scripts/migrate.ts",
     "migrate:status": "tsx scripts/migrate.ts --status",

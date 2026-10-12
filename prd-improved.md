@@ -51,7 +51,7 @@ Organizer yang menggunakan formulir, pesan pribadi, dan transfer manual harus me
 ### 3.2 Non-Tujuan MVP
 
 - Mengoperasikan marketplace tiket komersial atau menerima uang nyata.
-- Menyediakan settlement/payout organizer dan rekonsiliasi finansial produksi.
+- Menyediakan settlement/payout organizer dan rekonsiliasi finansial produksi. (Pencairan dana sandbox dengan transfer manual oleh admin tersedia sebagai ekstensi uji, lihat §6.3a; tidak memindahkan uang nyata.)
 - Menangani editor denah interaktif, clickable map, orphan-seat optimization, resale, transfer tiket, voucher, atau dynamic pricing.
 - Mendukung event online/hybrid, multi-negara, multi-mata uang, atau aplikasi mobile native.
 - Menyediakan scanner offline atau integrasi perangkat turnstile.
@@ -150,9 +150,21 @@ Keputusan berikut menjadi baseline implementasi. Perubahan harus dicatat sebagai
 - Pencarian admin lintas entitas.
 - Penghentian penjualan per jenis tiket.
 
+### 6.3a Ekstensi Sandbox yang Telah Diimplementasikan
+
+Ekstensi berikut tidak mengubah daftar 77 fitur, prioritas MoSCoW, atau batas “tanpa uang nyata”; detailnya ada di `features.md` dan RFC terkait.
+
+- **Provider pembayaran dapat dipilih** lewat `PAYMENT_PROVIDER=sandbox|midtrans` (default `sandbox`). Midtrans hanya Sandbox (Snap redirect): signature webhook diverifikasi, status dan nominal dibaca ulang dari status API, status pending/gagal/kedaluwarsa dipetakan, dan reversal setelah Paid hanya membuka rekonsiliasi (order tidak dibatalkan otomatis). Kunci produksi ditolak.
+- **Pencairan dana sandbox**: setelah event selesai dan masa tahan `PAYOUT_HOLD_HOURS` (default 24 jam), organizer mengajukan pencairan sebesar total order Paid dikurangi refund Completed; admin mentransfer manual ke rekening terdaftar dan mengunggah bukti, atau menolak dengan alasan. Satu pencairan aktif per event, refund terbuka dan rekening kosong memblokir pengajuan, dan refund baru diblokir setelah pencairan diajukan. Pengajuan mendukung `Idempotency-Key`.
+- **Petugas check-in**: akun petugas dibuat dan dikelola organizer; petugas masuk melalui portal petugas dan hanya dapat memindai event yang ditugaskan.
+- **Rekomendasi (F74)**: skor kategori 3, kota 2, provinsi 1, organizer 1 (riwayat Paid memakai hitungan maksimum 5 per dimensi), maksimum 2 event per organizer dalam satu daftar, satu alasan aman per item.
+- **Analitik (F52)** disimpan di `analytics_events` dengan allowlist nama event dan rate limit; teks pencarian tidak dikirim.
+- **Operasi (F58)**: halaman Operasi admin menampilkan agregat nyata (webhook gagal, order lewat hold, notifikasi tertunda/gagal, rekonsiliasi terbuka, versi skema).
+
 ### 6.4 Won’t Have pada Rilis Ini
 
 - Transaksi uang nyata, payout, atau refund finansial nyata.
+- Transfer otomatis ke organizer (misalnya Midtrans Payouts/Iris) dan biaya layanan platform.
 - Editor denah interaktif, clickable map, orphan-seat optimization, kode promo, waiting list, resale, dan transfer tiket.
 - Event online/hybrid, aplikasi native, dan scanner offline.
 - Multi-bahasa, multi-mata uang, dan monetisasi.
@@ -301,7 +313,7 @@ Keputusan berikut menjadi baseline implementasi. Perubahan harus dicatat sebagai
 - Event yang dibatalkan penyelenggara/admin memicu refund sandbox **100%** sisa untuk order Paid tanpa tiket Used (tanpa hold 24 jam).
 - Catatan refund menyimpan nominal, alasan, rekening, status, aktor, batas transfer, dan bukti sandbox bila ada.
 - Admin mengawasi SLA (tinjauan penyelenggara 48 jam, hold transfer 24 jam), audit, dan eskalasi; keputusan rutin bukan antrean harian admin.
-- Pengembalian uang nyata / payout produksi berada di luar cakupan.
+- Pengembalian uang nyata / payout produksi berada di luar cakupan. Pengajuan refund oleh pembeli dan pencairan organizer bersifat idempoten terhadap pengulangan (status/constraint database; pencairan juga lewat `Idempotency-Key`).
 
 ### US-13 — Rekomendasi Event Serupa
 

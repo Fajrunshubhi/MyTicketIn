@@ -2,6 +2,8 @@
 
 import { useRouter, useSearchParams } from "next/navigation";
 import { FormEvent, useMemo, useState } from "react";
+import { trackEvent } from "@/lib/analytics";
+import { VoiceSearchButton } from "./VoiceSearchButton";
 
 type Filters = { categories: string[]; locations: { city: string; province: string }[] };
 
@@ -52,13 +54,17 @@ export function CatalogFilters({ filters, basePath = "/events" }: { filters: Fil
     setOpen(false);
   }
 
-  async function onNatural(event: FormEvent) {
+  function onNatural(event: FormEvent) {
     event.preventDefault();
+    void translate(natural);
+  }
+
+  async function translate(text: string) {
     setNotice("");
     const res = await fetch("/api/events/ai-filter", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ naturalLanguage: natural }),
+      body: JSON.stringify({ naturalLanguage: text }),
     });
     const body = await res.json().catch(() => ({}));
     if (!res.ok) {
@@ -66,6 +72,12 @@ export function CatalogFilters({ filters, basePath = "/events" }: { filters: Fil
       return;
     }
     if (body.data?.notice) setNotice(body.data.notice);
+    // Only the mode is sent, never the typed text.
+    trackEvent({
+      eventName: "ai_search_used",
+      entityType: "catalog",
+      properties: { mode: String(body.data?.mode || "unknown") },
+    });
     const q = body.data?.canonicalQuery || "";
     router.push(q ? `${basePath}?${q}` : basePath);
   }
@@ -77,7 +89,9 @@ export function CatalogFilters({ filters, basePath = "/events" }: { filters: Fil
     current.city && { key: "city", label: `Kota: ${current.city}` },
     current.province && { key: "province", label: `Provinsi: ${current.province}` },
     current.tag && { key: "tag", label: `Tag: ${current.tag}` },
-    current.dateFrom && { key: "dateFrom", label: `${current.dateFrom}–${current.dateTo}` },
+    current.dateFrom && { key: "dateFrom", label: `${current.dateFrom}–${current.dateTo || "…"}` },
+    !current.dateFrom && current.dateTo && { key: "dateTo", label: `Sampai ${current.dateTo}` },
+    current.sort === "newest" && { key: "sort", label: "Urutan: terbaru" },
   ].filter(Boolean) as { key: string; label: string }[];
 
   return (
@@ -94,6 +108,12 @@ export function CatalogFilters({ filters, basePath = "/events" }: { filters: Fil
             className="w-full min-h-11 rounded-xl border border-stone-200 bg-white px-4 py-3 text-ink"
           />
         </label>
+        <VoiceSearchButton
+          onTranscript={(text) => {
+            setNatural(text);
+            void translate(text);
+          }}
+        />
         <button type="submit" className="min-h-11 rounded-xl border border-gold-400 px-4 text-gold-800">
           Terjemahkan
         </button>

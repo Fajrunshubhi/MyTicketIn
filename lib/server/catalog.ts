@@ -154,6 +154,10 @@ export async function listCatalog(params: {
   tag: string;
   limit: number;
   when?: "upcoming" | "past";
+  /** YYYY-MM-DD (Asia/Jakarta), inclusive; already validated by validateDateRange. */
+  dateFrom?: string;
+  dateTo?: string;
+  sort?: "soonest" | "newest";
 }): Promise<{ items: CatalogCard[]; nextCursor: string | null; appliedFilters: Record<string, string> }> {
   const limit = Math.min(Math.max(params.limit || 12, 1), 24);
   const q = params.q.trim();
@@ -165,7 +169,14 @@ export async function listCatalog(params: {
   const scope = past
     ? `e.ends_at <= NOW() AND e.status IN ('PUBLISHED', 'COMPLETED')`
     : `e.status = 'PUBLISHED' AND e.starts_at > NOW()`;
-  const order = past ? `e.ends_at DESC, e.id DESC` : `e.starts_at ASC, e.id ASC`;
+  const newest = !past && params.sort === "newest";
+  const order = past
+    ? `e.ends_at DESC, e.id DESC`
+    : newest
+      ? `e.published_at DESC NULLS LAST, e.id DESC`
+      : `e.starts_at ASC, e.id ASC`;
+  const dateFrom = past ? "" : (params.dateFrom || "").trim();
+  const dateTo = past ? "" : (params.dateTo || "").trim();
   const rows = await query<EventRow>(
     `SELECT e.id, e.organizer_profile_id, e.slug, e.title, e.description, e.category, e.venue_name, e.address_line,
             e.city, e.province, e.latitude, e.longitude, e.tags, e.timezone, e.starts_at::text, e.ends_at::text,
@@ -181,13 +192,17 @@ export async function listCatalog(params: {
        AND ($3 = '' OR lower(e.city) = $3)
        AND ($4 = '' OR lower(e.province) = $4)
        AND ($5 = '' OR $5 = ANY (e.tags))
+       AND ($7 = '' OR e.starts_at >= ($7::date)::timestamp AT TIME ZONE 'Asia/Jakarta')
+       AND ($8 = '' OR e.starts_at < (($8::date) + 1)::timestamp AT TIME ZONE 'Asia/Jakarta')
      ORDER BY ${order}
      LIMIT $6`,
-    [q, category, city, province, tag, limit + 1],
+    [q, category, city, province, tag, limit + 1, dateFrom, dateTo],
   );
   const page = rows.slice(0, limit);
   const items = await toCatalogCards(page, past ? "PAST" : undefined);
-  const applied: Record<string, string> = { sort: past ? "newest" : "soonest" };
+  const applied: Record<string, string> = { sort: past || newest ? "newest" : "soonest" };
+  if (dateFrom) applied.dateFrom = dateFrom;
+  if (dateTo) applied.dateTo = dateTo;
   if (past) applied.when = "past";
   if (q) applied.q = q;
   if (category) applied.category = category;
@@ -248,23 +263,6 @@ export async function listPastCatalog(limit = 9): Promise<CatalogCard[]> {
     when: "past",
   });
   return result.items;
-}
-
-export function parseNaturalFilter(raw: string) {
-  const s = raw.trim().replace(/\s+/g, " ");
-  const n = [...s].length;
-  if (n < 2 || n > 300) {
-    throw new AppError("CATALOG_NATURAL_QUERY_INVALID", "Teks pencarian alami tidak valid.", {}, 400);
-  }
-  const q = [...s].slice(0, 100).join("");
-  const filterDto = { q, sort: "soonest" };
-  return {
-    mode: "BASIC_SEARCH_FALLBACK",
-    filterDto,
-    chips: [{ key: "q", label: "Kata kunci", value: q }],
-    canonicalQuery: `q=${encodeURIComponent(q)}`,
-    notice: "Filter AI tidak tersedia; pencarian kata kunci digunakan.",
-  };
 }
 
 export async function listFilters() {

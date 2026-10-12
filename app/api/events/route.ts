@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server";
 import { listCatalog } from "@/lib/server/catalog";
+import { validateDateRange } from "@/lib/server/catalog-filter";
 import { correlationId, jsonPublic, routeHandler } from "@/lib/server/http";
 
 export const GET = routeHandler(async (req: NextRequest) => {
@@ -15,7 +16,11 @@ export const GET = routeHandler(async (req: NextRequest) => {
     limit = n;
   }
   const when = q.get("when") === "past" ? "past" : "upcoming";
+  const { dateFrom, dateTo } = validateDateRange(q.get("dateFrom") || "", q.get("dateTo") || "");
   const result = await listCatalog({
+    dateFrom,
+    dateTo,
+    sort: q.get("sort") === "newest" ? "newest" : "soonest",
     q: q.get("q") || "",
     category: q.get("category") || "",
     city: q.get("city") || "",
