@@ -1,6 +1,0 @@
-bin/
-tmp/
-var/
-*.exe
-coverage.out
-**/*_test.go

@@ -8,9 +8,6 @@ out
 *.log
 data/users.json
 .neon
-backend/bin/
-backend/tmp/
-backend/var/
 *.exe
 coverage.out
 playwright-report/

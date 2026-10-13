@@ -1,6 +1,6 @@
 # MyTicketIn — Next.js UI + API
 
-UI dan HTTP API **Next.js 14** (`app/api` Route Handlers) pada PostgreSQL/Neon. Folder `backend/` Go adalah referensi perilaku sampai checklist RFC-021 §5; **runtime** tidak membutuhkan `cmd/api`.
+UI dan HTTP API **Next.js 14** (`app/api` Route Handlers) pada PostgreSQL/Neon. Backend Go sudah dihapus (keputusan Product Owner); riwayatnya tersedia di tag git `pre-go-removal`.
 
 ## Stack
 

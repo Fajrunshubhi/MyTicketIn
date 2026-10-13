@@ -67,7 +67,7 @@ Versi target di bawah adalah versi stabil yang diverifikasi pada **19 September 
 | Lint/format Go (transisi) | gofmt, go vet | — |
 | Lint/format UI | ESLint | 8.x |
 
-Prisma dan NextAuth **bukan** stack target. `backend/` Go **jangan dihapus** sampai RFC-021 §5 lulus.
+Prisma dan NextAuth **bukan** stack target. `backend/` Go **sudah dihapus** (13 Okt 2026, keputusan Product Owner; tag git `pre-go-removal`). Baris dan bagian "transisi" Go di dokumen ini bersifat historis; runtime sebenarnya adalah Next.js Route Handlers di `lib/server`.
 
 ### 3.2 Aturan Upgrade
 

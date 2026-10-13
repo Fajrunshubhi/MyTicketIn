@@ -12,7 +12,7 @@ Target aktif adalah **MVP akademik**:
 - Tidak menerima uang nyata.
 - Tidak mengaktifkan payout atau refund finansial produksi.
 - Deployment: Vercel untuk UI+API Next.js; migrasi SQL di `/migrations` dijalankan dengan `npm run migrate`.
-- Runtime transaksi target adalah **Next.js Route Handlers + PostgreSQL**. `backend/` Go tetap referensi sampai checklist RFC-021 §5; jangan dihapus lebih awal.
+- Runtime transaksi target adalah **Next.js Route Handlers + PostgreSQL**. `backend/` Go sudah dihapus atas keputusan Product Owner (riwayat: tag git `pre-go-removal`); jangan membuat ulang.
 - Implementasi fitur mengikuti RFC-001–RFC-014; pemindahan kode mengikuti RFC-021.
 - Baseline produk `prd-improved.md` 2.2 memiliki 77 fitur: 57 Must, 5 Should, 4 Could, dan 11 Won’t; cakupan aktif MVP adalah 66 fitur.
 - F20, F46, F49, F50, F51, F65, serta F74–F77 wajib. F42, F63–F64, dan F66–F73 tetap Won’t Have.
@@ -39,7 +39,7 @@ Gunakan `RFC/RFCS.md` untuk menentukan urutan dan dependensi. Jangan menganggap 
 Sampai terdapat bukti RFC-001 selesai, perlakukan repository sebagai prototype pre-RFC:
 
 - Next.js 14, React 18, TypeScript 5, dan Tailwind CSS 3 pada UI prototype.
-- Backend Go target belum menggantikan persistence runtime.
+- Tidak ada backend Go; seluruh API berjalan di Next.js Route Handlers.
 - Auth username/password serta Google tersedia sebagian (NextAuth prototype).
 - Persistence masih menggunakan raw SQL dan fallback JSON.
 - Prisma schema prototype bukan source of truth dan tidak dilanjutkan.
@@ -90,10 +90,10 @@ Presentation → Application Service → Domain → Ports
 Aturan boundary:
 
 - Page dan Client Component tetap tipis; use case dan transaksi pindah ke Route Handler Next.js (`lib/server/...`) mengikuti RFC-021.
-- Selama transisi, rewrite `/api` ke Go tetap default. Jangan daftarkan `app/api` yang menimpa path Go sebelum modul Next paritas.
-- Application service mengorkestrasi use case dan transaction (Go sekarang; Next.js setelah modul dipindah).
+- Semua `/api` dilayani Next.js; tidak ada rewrite ke Go.
+- Application service mengorkestrasi use case dan transaction di `lib/server`.
 - Domain berisi invariant serta transisi status dan tidak mengimpor framework UI.
-- Repository mengenkapsulasi PostgreSQL (pgx/sqlc di Go; driver Neon/`pg` di Next setelah port).
+- Repository mengenkapsulasi PostgreSQL (driver Neon di `lib/server`).
 - Provider adapter mengenkapsulasi payment, storage, email, analytics, scheduler, dan AI.
 - Module lain menggunakan public application contract, bukan infrastructure internal.
 
@@ -103,7 +103,6 @@ Gunakan React Server Components secara default. `"use client"` hanya untuk inter
 
 ```text
 migrations/       # goose SQL 0001–0018; runner npm run migrate
-backend/          # referensi transisi RFC-021; jangan dihapus sebelum §5
   cmd/api/
   internal/...
 app/
@@ -123,7 +122,7 @@ Di dalam module, gunakan `domain/`, `application/`, `infrastructure/`, dan `ui/`
 - Fungsi/variabel: `camelCase`.
 - Type/interface/class: `PascalCase`.
 - Konstanta dan environment variable: `UPPER_SNAKE_CASE`.
-- Database: `snake_case`, dipetakan melalui sqlc (Go) atau query typed di `lib/server` (Next).
+- Database: `snake_case`, dipetakan melalui query typed di `lib/server`.
 - Kode dan error code: Bahasa Inggris.
 - UI, pesan pengguna, dan dokumentasi produk: Bahasa Indonesia.
 - TypeScript `strict`; jangan gunakan `any` atau menonaktifkan pemeriksaan untuk melewati error.
@@ -258,7 +257,7 @@ Merge dilarang jika lint, typecheck, test terkait, migration check, atau build g
 - Deployment belum tersedia.
 - Vercel bukan target.
 - Provider non-Vercel dipilih pada RFC-001.
-- Provider harus mendukung binary Go, UI Next.js, HTTPS, webhook, secret, health check, migration, logging, dan rollback.
+- Provider harus mendukung Next.js (UI + Route Handlers), HTTPS, webhook, secret, health check, migration, logging, dan rollback.
 - Scheduler harus eksternal atau disediakan platform; timer in-process dilarang.
 - Development, Preview/Test, dan Production Demo harus terisolasi.
 - Jangan memilih payment, storage, scheduler, email, analytics, atau AI SDK sebelum gate terkait disetujui.

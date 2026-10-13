@@ -20,9 +20,7 @@
     "verify:migrations": "tsx scripts/verify-migrations.ts",
     "verify:env": "tsx scripts/verify-env.ts",
     "smoke": "tsx scripts/smoke.ts",
-    "restore-drill": "tsx scripts/restore-drill.ts",
-    "api:test": "go test -C backend ./...",
-    "api:dev": "go run -C backend ./cmd/api"
+    "restore-drill": "tsx scripts/restore-drill.ts"
   },
   "dependencies": {
     "@neon/config": "^1.3.0",
