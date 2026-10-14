@@ -36,6 +36,8 @@ type Order = {
   subtotalRupiah: number;
   redeemedPoints: number;
   loyaltyDiscountRupiah: number;
+  promoDiscountRupiah?: number;
+  promoCode?: string | null;
   totalPayableRupiah: number;
   expiresAt: string;
   serverTime: string;
@@ -617,6 +619,12 @@ export default function OrderDetailPage() {
                 <span>Subtotal</span>
                 <span>{formatRupiah(order.subtotalRupiah)}</span>
               </p>
+              {order.promoDiscountRupiah ? (
+                <p className="mt-1 flex justify-between text-sm text-ink/70">
+                  <span>Kode promo {order.promoCode}</span>
+                  <span>− {formatRupiah(order.promoDiscountRupiah)}</span>
+                </p>
+              ) : null}
               <p className="mt-1 flex justify-between text-sm text-ink/70">
                 <span>Poin {order.redeemedPoints}</span>
                 <span>− {formatRupiah(order.loyaltyDiscountRupiah)}</span>

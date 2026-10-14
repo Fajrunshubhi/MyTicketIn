@@ -1,5 +1,6 @@
 import { AppError, execute, newId, query } from "@/lib/server/http";
 import type { AuthUser } from "@/lib/server/access";
+import { invalidatePublicCatalog } from "@/lib/server/public-cache";
 import { emptyRatingSummary, type RatingSummary } from "@/lib/reviews-format";
 
 export type { RatingSummary } from "@/lib/reviews-format";
@@ -162,6 +163,7 @@ export async function upsertReview(user: AuthUser, slug: string, body: Record<st
       [newId(), event.id, user.id, input.rating, input.comment],
     );
   }
+  invalidatePublicCatalog();
   const mine = await getMyReview(user, event.id);
   if (!mine) throw new AppError("INTERNAL_ERROR", "Terjadi kesalahan internal.", {}, 500);
   return mine;

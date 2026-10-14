@@ -19,7 +19,12 @@ vi.mock("@/lib/server/http", async () => {
     }
     if (s.includes("FROM inventory_reservations WHERE event_seat_id") || s.includes("FROM tickets WHERE event_seat_id")) return [];
     if (s.includes("INSERT INTO idempotency_keys")) return [];
-    if (s.includes("FROM idempotency_keys")) return [{ id: calls.find((c) => c.sql.includes("INSERT INTO idempotency_keys"))?.params[0], status: "PROCESSING", request_hash: "", resource_id: null }];
+    if (s.includes("FROM idempotency_keys")) {
+      const claim = calls.find((c) => c.sql.includes("INSERT INTO idempotency_keys"));
+      // Before the claim insert there is no prior row (early replay lookup).
+      if (!claim) return [];
+      return [{ id: claim.params[0], status: "PROCESSING", request_hash: claim.params[3], resource_id: null }];
+    }
     if (s.startsWith("INSERT INTO orders")) return [{ id: params[0] }];
     if (s.includes("UPDATE event_ticket_types SET reserved_quantity = reserved_quantity +")) return [{ reserved_quantity: 1 }];
     if (s.startsWith("INSERT INTO inventory_reservations") && params[4] === failSeatReservation) {

@@ -1,4 +1,5 @@
 import { AppError, execute, newId, query } from "@/lib/server/http";
+import { invalidatePublicCatalog } from "@/lib/server/public-cache";
 import { getOwnedEvent, markEventCancelled } from "@/lib/server/events-organizer";
 import { eventOwnerUserId, notify, notifyAdmins } from "@/lib/server/notifications";
 
@@ -148,6 +149,7 @@ export async function decideLifecycle(adminId: string, requestId: string, decisi
     [status, adminId, d === "REJECT" ? decisionReason.trim() : null, requestId],
   );
   if (!n) throw new AppError("EVENT_VERSION_CONFLICT", "Data berubah.", {}, 409);
+  invalidatePublicCatalog();
   const next = await query<LifeRow>(
     `SELECT ${LIFE_COLS} FROM event_lifecycle_requests r
      JOIN events e ON e.id=r.event_id

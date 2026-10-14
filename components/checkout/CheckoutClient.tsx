@@ -21,6 +21,8 @@ type Summary = {
   requestedRedeemPoints: number;
   appliedRedeemPoints: number;
   loyaltyDiscountRupiah: number;
+  promoCode?: string | null;
+  promoDiscountRupiah?: number;
   totalPayableRupiah: number;
   availablePoints: number;
   maxRedeemablePoints: number;
@@ -86,6 +88,9 @@ export function CheckoutClient({ slug }: { slug: string }) {
   const [eventId, setEventId] = useState("");
   const [summary, setSummary] = useState<Summary | null>(null);
   const [points, setPoints] = useState(0);
+  const [promoInput, setPromoInput] = useState("");
+  const [promoApplied, setPromoApplied] = useState("");
+  const [promoError, setPromoError] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [holders, setHolders] = useState<Record<string, Holder[]>>({});
@@ -202,11 +207,19 @@ export function CheckoutClient({ slug }: { slug: string }) {
           items: draft.items,
           seatIds: draft.seatIds,
           redeemPoints: points,
+          promoCode: promoApplied || undefined,
         }),
       });
       const body = await res.json();
       if (cancelled) return;
       if (!res.ok) {
+        const code = String(body?.error?.code || "");
+        if (promoApplied && code.startsWith("PROMO_")) {
+          // A bad code must not blank the checkout: show it next to the field and recompute without it.
+          setPromoError(readApiError(body, "Kode promo tidak dapat dipakai."));
+          setPromoApplied("");
+          return;
+        }
         if (res.status === 401) {
           router.replace(`/login?portal=buyer&callbackUrl=${encodeURIComponent(checkoutHref)}`);
           return;
@@ -221,7 +234,7 @@ export function CheckoutClient({ slug }: { slug: string }) {
     return () => {
       cancelled = true;
     };
-  }, [checkoutHref, draft, eventId, points, router]);
+  }, [checkoutHref, draft, eventId, points, promoApplied, router]);
 
   const slots = useMemo(() => {
     if (!draft) return [];
@@ -293,6 +306,7 @@ export function CheckoutClient({ slug }: { slug: string }) {
         seatIds: draft.seatIds,
         attendees: payload.attendees,
         redeemPoints: points,
+        promoCode: promoApplied || undefined,
         confirmed: true,
       }),
     });
@@ -456,6 +470,49 @@ export function CheckoutClient({ slug }: { slug: string }) {
                 <span>Subtotal</span>
                 <span>{formatRupiah(summary.subtotalRupiah)}</span>
               </p>
+              <form
+                className="mt-3 flex items-end gap-2"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  setPromoError("");
+                  setPromoApplied(promoInput.trim());
+                }}
+              >
+                <div className="min-w-0 flex-1">
+                  <Input
+                    label="Kode promo"
+                    value={promoInput}
+                    maxLength={32}
+                    autoComplete="off"
+                    onChange={(e) => setPromoInput(e.target.value)}
+                  />
+                </div>
+                <Button type="submit" variant="secondary" disabled={!promoInput.trim()}>
+                  Terapkan
+                </Button>
+              </form>
+              {promoError ? (
+                <p className="mt-1 text-sm text-red-700" role="alert">
+                  {promoError}
+                </p>
+              ) : null}
+              {summary.promoCode ? (
+                <p className="mt-2 flex items-center justify-between text-sm text-emerald-800" role="status">
+                  <span>
+                    Kode {summary.promoCode} diterapkan: − {formatRupiah(summary.promoDiscountRupiah || 0)}
+                  </span>
+                  <button
+                    type="button"
+                    className="underline"
+                    onClick={() => {
+                      setPromoApplied("");
+                      setPromoInput("");
+                    }}
+                  >
+                    Hapus
+                  </button>
+                </p>
+              ) : null}
               <div className="mt-3">
                 <Input
                   label={`Tukar poin (tersedia ${summary.availablePoints}, maks ${summary.maxRedeemablePoints})`}

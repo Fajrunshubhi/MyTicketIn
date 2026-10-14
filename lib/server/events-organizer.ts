@@ -1,4 +1,5 @@
 import { dummyCover } from "@/lib/event-cover";
+import { invalidatePublicCatalog } from "@/lib/server/public-cache";
 import { publicImageSrc } from "@/lib/server/gallery";
 import { AppError, execute, newId, query } from "@/lib/server/http";
 import { eventOwnerUserId, notify, notifyAdmins, notifyCatalogBuyers, paidTicketBuyerIds } from "@/lib/server/notifications";
@@ -506,6 +507,7 @@ export async function decideEvent(adminId: string, id: string, decision: string,
     [status, status === "REJECTED" ? reasonTrim : null, adminId, id, expectedVersion, status === "PUBLISHED"],
   );
   if (!n) throw new AppError("EVENT_VERSION_CONFLICT", "Data berubah.", {}, 409);
+  invalidatePublicCatalog();
   const next = await query<OrgEvent>(`SELECT ${EVENT_COLS} FROM events WHERE id=$1 LIMIT 1`, [id]);
   if (!next[0]) throw new AppError("NOT_FOUND", "Event tidak ditemukan.", {}, 404);
   const owner = await eventOwnerUserId(id);
@@ -560,6 +562,7 @@ export async function markEventCancelled(eventId: string, actorId: string, reaso
     [actorId, why, eventId, expectedVersion ?? null],
   );
   if (!n) throw new AppError("EVENT_STATUS_INVALID", "Event tidak dapat dibatalkan.", {}, 409);
+  invalidatePublicCatalog();
   const ev = await query<{ title: string }>(`SELECT title FROM events WHERE id=$1`, [eventId]);
   const title = ev[0]?.title || "Event";
   const owner = await eventOwnerUserId(eventId);

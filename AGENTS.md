@@ -14,8 +14,8 @@ Target aktif adalah **MVP akademik**:
 - Deployment: Vercel untuk UI+API Next.js; migrasi SQL di `/migrations` dijalankan dengan `npm run migrate`.
 - Runtime transaksi target adalah **Next.js Route Handlers + PostgreSQL**. `backend/` Go sudah dihapus atas keputusan Product Owner (riwayat: tag git `pre-go-removal`); jangan membuat ulang.
 - Implementasi fitur mengikuti RFC-001–RFC-014; pemindahan kode mengikuti RFC-021.
-- Baseline produk `prd-improved.md` 2.2 memiliki 77 fitur: 57 Must, 5 Should, 4 Could, dan 11 Won’t; cakupan aktif MVP adalah 66 fitur.
-- F20, F46, F49, F50, F51, F65, serta F74–F77 wajib. F42, F63–F64, dan F66–F73 tetap Won’t Have.
+- Baseline produk `prd-improved.md` 2.2 memiliki 78 fitur: 58 Must, 5 Should, 4 Could, dan 11 Won’t; cakupan aktif MVP adalah 67 fitur (F78 Kode promo event ditambahkan atas keputusan Product Owner).
+- F20, F46, F49, F50, F51, F65, F74–F77, serta F78 wajib. F42, F63–F64, dan F66–F73 tetap Won’t Have.
 
 RFC-015–RFC-020 adalah rancangan komersial **Deferred**. Jangan merencanakan atau mengimplementasikannya sebelum Commercial Entry Gate disetujui eksplisit.
 

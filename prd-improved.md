@@ -113,7 +113,7 @@ Keputusan berikut menjadi baseline implementasi. Perubahan harus dicatat sebagai
 
 ### 6.1 Must Have
 
-- Baseline terdiri dari **57 Must Have**; bersama 5 Should Have dan 4 Could Have, cakupan aktif MVP adalah **66 dari total 77 fitur**. F42, F63–F64, dan F66–F73 tetap Won’t Have; F65 adalah Must Have.
+- Baseline terdiri dari **58 Must Have** (termasuk F78 Kode promo event); bersama 5 Should Have dan 4 Could Have, cakupan aktif MVP adalah **67 dari total 78 fitur**. F42, F63–F64, dan F66–F73 tetap Won’t Have; F65 adalah Must Have.
 - Registrasi/login, logout, sesi, dan otorisasi server-side.
 - Pengajuan dan persetujuan profil organizer.
 - CRUD draft event, moderasi, publikasi, dan pembatalan.

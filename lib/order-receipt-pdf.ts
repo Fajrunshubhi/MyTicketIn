@@ -35,6 +35,8 @@ export type ReceiptOrder = {
   subtotalRupiah: number;
   redeemedPoints: number;
   loyaltyDiscountRupiah: number;
+  promoDiscountRupiah?: number;
+  promoCode?: string | null;
   totalPayableRupiah: number;
   event?: {
     title?: string;
@@ -148,6 +150,9 @@ export function buildOrderReceiptLines(order: ReceiptOrder, paymentMethod?: stri
   }
   lines.push("----------------------------------------------");
   lines.push(`Subtotal                 ${money(order.subtotalRupiah)}`);
+  if (order.promoDiscountRupiah) {
+    lines.push(`Kode promo ${order.promoCode ?? ""}  - ${money(order.promoDiscountRupiah)}`);
+  }
   if (order.loyaltyDiscountRupiah > 0 || order.redeemedPoints > 0) {
     lines.push(`Diskon poin (${order.redeemedPoints} poin)  - ${money(order.loyaltyDiscountRupiah)}`);
   }
@@ -387,6 +392,9 @@ export function buildOrderReceiptPdfBytes(order: ReceiptOrder, paymentMethod?: s
         const boxX = 320;
         const boxW = right - boxX;
         const rows: [string, string, boolean][] = [["Subtotal", money(order.subtotalRupiah), false]];
+        if (order.promoDiscountRupiah) {
+          rows.push([`Kode promo ${order.promoCode ?? ""}`, `- ${money(order.promoDiscountRupiah)}`, false]);
+        }
         if (order.loyaltyDiscountRupiah > 0 || order.redeemedPoints > 0) {
           rows.push([`Diskon poin (${order.redeemedPoints})`, `- ${money(order.loyaltyDiscountRupiah)}`, false]);
         }

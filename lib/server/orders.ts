@@ -6,6 +6,8 @@ import { issueTicketsForPaidOrder } from "@/lib/server/tickets";
 import { notify } from "@/lib/server/notifications";
 import { listOrderRefunds } from "@/lib/server/refunds";
 import { ticketsCancelledByRefund } from "@/lib/order-refund-display";
+import { evaluatePromo, releasePromo, reservePromo } from "@/lib/server/promo";
+import { normalizePromoCode } from "@/lib/promo-discount";
 
 type CheckoutLine = {
   ticketTypeId: string;
@@ -23,7 +25,7 @@ export async function listOrders(user: AuthUser, limit: number) {
   const lim = Math.min(Math.max(limit || 20, 1), 50);
   const rows = await query<Record<string, unknown>>(
     `SELECT o.id, o.order_number, o.event_id, o.status::text AS status, o.currency, o.subtotal_rupiah, o.loyalty_discount_rupiah,
-            o.total_payable_rupiah, o.expires_at::text, o.created_at::text, o.version,
+            o.promo_discount_rupiah, o.promo_code, o.total_payable_rupiah, o.expires_at::text, o.created_at::text, o.version,
             e.title AS event_title, e.slug AS event_slug, e.starts_at::text AS event_starts_at,
             e.timezone AS event_timezone, e.venue_name AS event_venue, e.city AS event_city,
             EXISTS (
@@ -59,7 +61,7 @@ export async function listOrders(user: AuthUser, limit: number) {
 export async function getOrder(user: AuthUser, id: string) {
   const rows = await query<Record<string, unknown>>(
     `SELECT id, order_number, buyer_user_id, event_id, status::text AS status, currency, subtotal_rupiah,
-            loyalty_discount_rupiah, total_payable_rupiah, redeemed_points, expires_at::text, created_at::text, version
+            loyalty_discount_rupiah, promo_discount_rupiah, promo_code, total_payable_rupiah, redeemed_points, expires_at::text, created_at::text, version
      FROM orders WHERE id = $1 LIMIT 1`,
     [id],
   );
@@ -72,7 +74,7 @@ export async function getOrder(user: AuthUser, id: string) {
     if (expired) {
       const refreshed = await query<Record<string, unknown>>(
         `SELECT id, order_number, buyer_user_id, event_id, status::text AS status, currency, subtotal_rupiah,
-                loyalty_discount_rupiah, total_payable_rupiah, redeemed_points, expires_at::text, created_at::text, version
+                loyalty_discount_rupiah, promo_discount_rupiah, promo_code, total_payable_rupiah, redeemed_points, expires_at::text, created_at::text, version
          FROM orders WHERE id = $1 LIMIT 1`,
         [id],
       );
@@ -159,6 +161,8 @@ function orderDto(o: Record<string, unknown>) {
     currency: o.currency,
     subtotalRupiah: Number(o.subtotal_rupiah),
     loyaltyDiscountRupiah: Number(o.loyalty_discount_rupiah),
+    promoDiscountRupiah: Number(o.promo_discount_rupiah || 0),
+    promoCode: o.promo_code ? String(o.promo_code) : null,
     totalPayableRupiah: Number(o.total_payable_rupiah),
     expiresAt: o.expires_at
       ? new Date(String(o.expires_at)).toISOString()
@@ -192,6 +196,15 @@ function maxRedeemablePoints(subtotalRupiah: number): number {
 }
 
 /** Validates a points redemption against the buyer-organizer account; integer math only (Rp10 per point, max 20% of subtotal). */
+/** No code typed means no promo; a code that is typed but not usable is an error, never silently ignored. */
+async function resolvePromo(buyerId: string, eventId: string, subtotal: number, raw: unknown) {
+  if (raw === undefined || raw === null || String(raw).trim() === "") {
+    return { promoId: null as string | null, code: null as string | null, discount: 0 };
+  }
+  const p = await evaluatePromo(raw, eventId, buyerId, subtotal);
+  return { promoId: p.promoId as string | null, code: p.code as string | null, discount: p.discountRupiah };
+}
+
 async function resolveRedeem(
   buyerId: string,
   organizerProfileId: string,
@@ -245,13 +258,16 @@ export async function summarize(
     items?: CheckoutLine[];
     seatIds?: string[];
     redeemPoints?: number;
+    promoCode?: string;
   },
 ) {
   const plan = await planCheckout(body);
+  const promo = await resolvePromo(user.id, plan.eventId, plan.subtotal, body.promoCode);
+  // The 20% points cap applies to what is left after the promo.
   const redeem = await resolveRedeem(
     user.id,
     plan.event.organizerProfileId,
-    plan.subtotal,
+    plan.subtotal - promo.discount,
     body.redeemPoints,
   );
   const requested = redeem.points;
@@ -269,10 +285,12 @@ export async function summarize(
       seatLabel: line.seatLabel,
     })),
     subtotalRupiah: plan.subtotal,
+    promoCode: promo.code,
+    promoDiscountRupiah: promo.discount,
     requestedRedeemPoints: requested,
     appliedRedeemPoints: requested,
     loyaltyDiscountRupiah: discount,
-    totalPayableRupiah: plan.subtotal - discount,
+    totalPayableRupiah: plan.subtotal - promo.discount - discount,
     currency: "IDR",
     reservationMinutes: 15,
     availablePoints,
@@ -495,6 +513,7 @@ async function rollbackFailedOrder(
       );
     }
     await releaseLoyaltyReservation(orderId, "ORDER_CANCELLED");
+    await releasePromo(orderId, "ORDER_CANCELLED");
     await execute(
       `UPDATE inventory_reservations SET released_at=CURRENT_TIMESTAMP, release_reason='CANCELLED'
        WHERE order_id=$1 AND released_at IS NULL`,
@@ -532,6 +551,7 @@ export async function createOrder(
     }[];
     confirmed?: boolean;
     redeemPoints?: number;
+    promoCode?: string;
   },
   idemKey: string,
 ) {
@@ -545,14 +565,6 @@ export async function createOrder(
       400,
     );
   }
-  const plan = await planCheckout(body);
-  const redeem = await resolveRedeem(
-    user.id,
-    plan.event.organizerProfileId,
-    plan.subtotal,
-    body.redeemPoints,
-  );
-  const discount = redeem.points * 10;
   const keyHash = tokenHash(idemKey);
   const reqHash = createHash("sha256")
     .update(
@@ -560,10 +572,33 @@ export async function createOrder(
         eventId: body.eventId,
         items: body.items,
         seatIds: body.seatIds,
-        redeemPoints: redeem.points,
+        redeemPoints: Math.max(0, Number(body.redeemPoints || 0)),
+        promoCode: normalizePromoCode(body.promoCode),
       }),
     )
     .digest("hex");
+  // A retry of an order that already exists must replay it before anything is re-evaluated: its promo and points
+  // are already taken, so re-checking them now would wrongly report "already used" or "insufficient".
+  const prior = await query<{ request_hash: string; resource_id: string | null }>(
+    `SELECT request_hash, resource_id FROM idempotency_keys
+     WHERE actor_user_id=$1 AND scope='CREATE_ORDER' AND key_hash=$2 LIMIT 1`,
+    [user.id, keyHash],
+  );
+  if (prior[0]) {
+    if (prior[0].request_hash !== reqHash)
+      throw new AppError("IDEMPOTENCY_KEY_REUSED", "Kunci idempotensi dipakai ulang.", {}, 409);
+    if (prior[0].resource_id)
+      return { view: await getOrder(user, prior[0].resource_id), replay: true };
+  }
+  const plan = await planCheckout(body);
+  const promo = await resolvePromo(user.id, plan.eventId, plan.subtotal, body.promoCode);
+  const redeem = await resolveRedeem(
+    user.id,
+    plan.event.organizerProfileId,
+    plan.subtotal - promo.discount,
+    body.redeemPoints,
+  );
+  const discount = redeem.points * 10;
   const claimId = newId();
   await query(
     `INSERT INTO idempotency_keys (id, actor_user_id, scope, key_hash, request_hash, status, expires_at, created_at, updated_at)
@@ -598,9 +633,9 @@ export async function createOrder(
   const orderRows = await query<Record<string, unknown>>(
     `INSERT INTO orders (
        id, order_number, buyer_user_id, event_id, status, currency, subtotal_rupiah, loyalty_discount_rupiah, total_payable_rupiah,
-       redeemed_points, loyalty_account_id, expires_at, created_at, updated_at, version
+       redeemed_points, loyalty_account_id, promo_discount_rupiah, promo_code, expires_at, created_at, updated_at, version
      ) VALUES (
-       $1,$2,$3,$4,'PENDING'::order_status,'IDR',$5,$6,$7,$8,$9,
+       $1,$2,$3,$4,'PENDING'::order_status,'IDR',$5,$6,$7,$8,$9,$10,$11,
        transaction_timestamp() + INTERVAL '15 minutes', transaction_timestamp(), transaction_timestamp(), 1
      ) RETURNING id, order_number, event_id, status::text AS status, currency, subtotal_rupiah, loyalty_discount_rupiah,
                total_payable_rupiah, expires_at::text, created_at::text, version, buyer_user_id`,
@@ -611,9 +646,11 @@ export async function createOrder(
       plan.eventId,
       plan.subtotal,
       discount,
-      plan.subtotal - discount,
+      plan.subtotal - promo.discount - discount,
       redeem.points,
       redeem.accountId,
+      promo.discount,
+      promo.code,
     ],
   );
   const order = orderRows[0];
@@ -716,6 +753,7 @@ export async function createOrder(
         );
       }
     }
+    if (promo.promoId) await reservePromo(oid, user.id, promo.promoId, promo.discount);
     if (redeem.points > 0 && redeem.accountId) {
       // Conditional update is the atomic guard: two checkouts can never reserve the same points.
       const held = await query<{ id: string }>(
@@ -909,6 +947,7 @@ export async function failPendingOrder(
     orderId,
     kind === "EXPIRED" ? "PAYMENT_EXPIRED" : "PAYMENT_FAILED",
   );
+  await releasePromo(orderId, kind === "EXPIRED" ? "ORDER_EXPIRED" : "ORDER_FAILED");
   await notify({
     recipientUserId: marked[0].buyer_user_id,
     type: "PAYMENT_FAILED",
@@ -957,6 +996,7 @@ export async function expireOrderById(orderId: string): Promise<boolean> {
     );
   }
   await releaseLoyaltyReservation(orderId, "ORDER_EXPIRED");
+  await releasePromo(orderId, "ORDER_EXPIRED");
   await notify({
     recipientUserId: marked[0].buyer_user_id,
     type: "PAYMENT_FAILED",

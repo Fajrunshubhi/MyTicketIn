@@ -19,6 +19,7 @@ export const POST = routeHandler(async (req: NextRequest) => {
     attendees?: { fullName?: string; email?: string; phone?: string; identityNumber?: string }[];
     confirmed?: boolean;
     redeemPoints?: number;
+    promoCode?: string;
   }>(req);
   const { view, replay } = await createOrder(user, body, req.headers.get("idempotency-key") || "");
   return jsonData({ order: view }, replay ? 200 : 201, req);

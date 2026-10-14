@@ -410,6 +410,7 @@ export function EventEditor({ eventId, readOnly = false }: { eventId: string; re
       <p className="flex flex-wrap gap-4">
         <a className="text-gold-700 underline-offset-2 hover:underline" href={`${basePath}/preview`}>Pratinjau privat</a>
         <a className="text-gold-700 underline-offset-2 hover:underline" href={`${basePath}/staff`}>Kelola petugas</a>
+        <a className="text-gold-700 underline-offset-2 hover:underline" href={`${basePath}/promo`}>Kode promo</a>
         <a className="text-gold-700 underline-offset-2 hover:underline" href={`${basePath}/scanner`}>Scanner check-in</a>
         <a className="text-gold-700 underline-offset-2 hover:underline" href={`${basePath}/check-in-attempts`}>Riwayat check-in</a>
       </p>

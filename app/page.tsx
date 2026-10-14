@@ -11,10 +11,18 @@ import { listLandingOrganizers } from "@/lib/server/organizers";
 import { ReviewWall } from "@/components/reviews/ReviewWall";
 import { OrganizerPartners } from "@/components/landing/OrganizerPartners";
 import { loadSessionUser } from "@/lib/session";
+import { cachedPublic } from "@/lib/server/public-cache";
+
+// Errors are thrown out of the cached function (and so never cached); the loaders below turn them into the empty state.
+const cachedCatalog = cachedPublic("landing-upcoming", listCatalog);
+const cachedPast = cachedPublic("landing-past", listPastCatalog);
+const cachedFilters = cachedPublic("landing-filters", listFilters);
+const cachedOrganizers = cachedPublic("landing-organizers", listLandingOrganizers);
+const cachedReviews = cachedPublic("landing-reviews", listRecentReviews);
 
 async function loadUpcoming(): Promise<{ items: CatalogCard[]; unavailable: boolean }> {
   try {
-    const result = await listCatalog({
+    const result = await cachedCatalog({
       q: "",
       category: "",
       city: "",
@@ -30,7 +38,7 @@ async function loadUpcoming(): Promise<{ items: CatalogCard[]; unavailable: bool
 
 async function loadPast(): Promise<{ items: CatalogCard[]; unavailable: boolean }> {
   try {
-    const items = await listPastCatalog(3);
+    const items = await cachedPast(3);
     return { items, unavailable: false };
   } catch {
     return { items: [], unavailable: true };
@@ -38,7 +46,7 @@ async function loadPast(): Promise<{ items: CatalogCard[]; unavailable: boolean 
 }
 async function loadFilterOptions(): Promise<{ categories: string[]; cities: string[] }> {
   try {
-    const data = await listFilters();
+    const data = await cachedFilters();
     const cities = [...new Set((data.locations || []).map((item) => item.city).filter(Boolean))];
     return { categories: data.categories || [], cities };
   } catch {
@@ -51,7 +59,7 @@ const field =
 
 async function loadOrganizers() {
   try {
-    return await listLandingOrganizers(24);
+    return await cachedOrganizers(24);
   } catch {
     return [];
   }
@@ -59,7 +67,7 @@ async function loadOrganizers() {
 
 async function loadReviews() {
   try {
-    return await listRecentReviews(12);
+    return await cachedReviews(12);
   } catch {
     return [];
   }

@@ -29,6 +29,8 @@ export function EventCoverImg({
       alt={alt}
       width={width}
       height={height}
+      loading="lazy"
+      decoding="async"
       className={className}
       onError={(event) => {
         const el = event.currentTarget;

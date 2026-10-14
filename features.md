@@ -7,7 +7,7 @@
 | **Platform** | Web responsif, Bahasa Indonesia, Rupiah |
 | **Model pembayaran MVP** | Payment gateway sandbox; tanpa uang nyata |
 | **Jumlah fitur** | 77 |
-| **Cakupan aktif MVP** | 66 fitur (57 Must, 5 Should, 4 Could) |
+| **Cakupan aktif MVP** | 67 fitur (58 Must, 5 Should, 4 Could) |
 
 ## Gambaran Produk
 
@@ -53,7 +53,7 @@ MVP ditujukan untuk validasi akademik selama 12 minggu. Transaksi uang nyata, se
 | **Should Have** | 5 | Peningkatan penting dengan fallback |
 | **Could Have** | 4 | Dikerjakan setelah jalur kritis stabil |
 | **Won’t Have** | 11 | Di luar rilis akademik saat ini |
-| **Total** | **77** | 66 fitur aktif MVP; 11 Won’t Have |
+| **Total** | **78** | 67 fitur aktif MVP; 11 Won’t Have |
 
 ### Jumlah Berdasarkan Kategori
 
@@ -963,13 +963,13 @@ F63–F64 dan F66–F73 dicatat agar tidak “masuk diam-diam” ke rilis akadem
 - **Teknis/kasus khusus:** Model `VenueSection`, `SeatMapAsset`, dan `EventSeat`; error `SEAT_UNAVAILABLE` dan `INVENTORY_MODE_MISMATCH`; mode immutable setelah commerce. Diselesaikan oleh RFC-008 dengan fondasi authoring di RFC-005.
 - **Dependensi/keahlian:** F15/F16, F21–F26, F34–F36, F39/F40, F46; PostgreSQL concurrency, object storage, WCAG 2.1 AA.
 
-### F66 — Voucher, Promo, dan Referral
+### F66 — Voucher Lintas Event dan Referral
 
 - **Tipe/persona:** Mendatang — pembeli, organizer
 - **Prioritas:** Won’t Have
 - **Kompleksitas:** Sedang
-- **Deskripsi:** Diskon dan atribusi referral.
-- **Kriteria penerimaan rilis ini:** Checkout tidak menerima kode promo.
+- **Deskripsi:** Voucher lintas event/platform dan atribusi referral. Kode promo per event dipindahkan ke **F78** (Must Have).
+- **Kriteria penerimaan rilis ini:** Tidak ada voucher lintas event maupun referral.
 - **Teknis/kasus khusus:** Versi masa depan memerlukan stacking rule, limit, eligibility, dan abuse prevention.
 - **Dependensi/keahlian:** Pricing rules.
 
@@ -1182,3 +1182,19 @@ Fitur platform **F58–F62** harus dibangun bersama jalur kritis, bukan ditunda 
 - SLA, RTO/RPO, kapasitas, incident response, dan target bisnis.
 
 Decision gate pilot tidak memblokir MVP akademik selama sistem tetap memakai sandbox serta data uji.
+
+### F78 — Kode Promo Event
+
+- **Tipe/persona:** MVP — organizer, pembeli
+- **Prioritas:** Must Have (keputusan Product Owner; menggantikan sebagian F66)
+- **Kompleksitas:** Sedang
+- **Deskripsi:** Organizer membuat kode promo per event dengan jenis persen atau nominal tetap, periode berlaku, minimal pembelian, dan kuota. Pembeli memasukkan kode saat checkout.
+- **Kriteria penerimaan:**
+  - Satu kode hanya berlaku untuk satu event; satu kode per order; satu pembeli memakai satu kode sekali (pemakaian dilepas bila order Failed/Expired/Cancelled).
+  - Persen 1–90% dengan batas potongan opsional; nominal tetap; potongan tidak melebihi 90% subtotal (tidak ada order gratis).
+  - `total = subtotal − promo − poin`; promo dihitung lebih dulu, batas poin 20% dihitung dari sisa; seluruhnya integer Rupiah.
+  - Kode tidak diketahui, nonaktif, belum mulai, kedaluwarsa, atau milik event lain memberi pesan yang sama (anti-enumerasi).
+  - Nilai diskon tidak dapat diubah setelah dibuat; organizer hanya dapat menonaktifkan, memperpanjang masa berlaku, atau menaikkan kuota.
+  - Refund dihitung dari jumlah yang benar-benar dibayar; kode tidak dikembalikan otomatis.
+- **Teknis/kasus khusus:** Tabel `promo_codes`, `promo_redemptions` (migrasi 0035); snapshot `promo_code`/`promo_discount_rupiah` pada order; redemption atomik dengan counter (CTE satu statement), partial unique per pembeli, idempotent replay dicek sebelum evaluasi ulang. Implementasi mengikuti kontrak order RFC-008.
+- **Dependensi/keahlian:** F23–F28, F59 (poin), PostgreSQL concurrency.
