@@ -13,6 +13,11 @@ export type AccountProfile = {
   username: string;
   email: string;
   role: string;
+  phone?: string | null;
+  dateOfBirth?: string | null;
+  city?: string | null;
+  gender?: string | null;
+  emailVerifiedAt?: string | null;
   access?: AccountAccess;
 };
 

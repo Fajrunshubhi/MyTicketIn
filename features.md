@@ -3,9 +3,9 @@
 | Atribut | Nilai |
 |---|---|
 | **Sumber** | `prd-improved.md` versi 2.2 |
-| **Tujuan** | Acuan perencanaan implementasi MVP akademik |
+| **Tujuan** | Acuan produk tiket yang dapat dipakai untuk bisnis; dikerjakan sebagai skripsi |
 | **Platform** | Web responsif, Bahasa Indonesia, Rupiah |
-| **Model pembayaran MVP** | Payment gateway sandbox; tanpa uang nyata |
+| **Model pembayaran** | Uji secara default (`PAYMENT_ENV=sandbox`). Pembayaran pembeli nyata lewat Midtrans Production bila diaktifkan |
 | **Jumlah fitur** | 77 |
 | **Cakupan aktif MVP** | 67 fitur (58 Must, 5 Should, 4 Could) |
 
@@ -13,7 +13,7 @@
 
 MyTicketIn adalah platform tiket event tatap muka untuk empat persona: **pembeli**, **organizer**, **petugas check-in**, dan **admin**. Alur intinya mencakup pembuatan serta moderasi event, pengaturan inventori dalam tiga mode (`GENERAL_ADMISSION`, `ZONED`, `RESERVED_SEATING`), discovery melalui filter/rekomendasi/pencarian bahasa alami, checkout dengan loyalitas per organizer, pembayaran sandbox, penerbitan e-ticket QR, check-in satu kali, serta bantuan AI poster-ke-draft dengan kendali manusia.
 
-MVP ditujukan untuk validasi akademik selama 12 minggu. Transaksi uang nyata, settlement/payout organizer, dan peluncuran komersial tidak termasuk rilis ini.
+Pengerjaan saat ini adalah skripsi. Produk dapat menerima pembayaran pembeli nyata lewat Midtrans Production; mode uji tetap default. Pencairan otomatis ke penyelenggara tidak termasuk.
 
 ## Cara Membaca Dokumen
 
@@ -476,7 +476,7 @@ F65 (kursi bernomor dan denah venue statis) adalah Must Have inventori; spesifik
   - Nominal provider sama dengan total order.
   - QRIS, virtual account, dan e-wallet tersedia jika didukung akun sandbox terpilih.
   - Kredensial provider tidak terekspos ke client/log.
-- **Teknis/kasus khusus:** Provider dipilih lewat `PAYMENT_PROVIDER`: `sandbox` (simulator internal, dipakai tes/CI) atau `midtrans` (Midtrans Sandbox, Snap redirect; hanya Server Key berawalan `SB-Mid-server-` yang diterima). Gunakan adapter untuk mengisolasi domain.
+- **Teknis/kasus khusus:** `PAYMENT_PROVIDER=sandbox` (simulator internal, tes/CI) atau `midtrans`. `PAYMENT_ENV=sandbox` memakai host dan kunci Sandbox; `PAYMENT_ENV=production` memakai `api.midtrans.com` / `app.midtrans.com` dan Server Key `Mid-server-`, hanya jika `WEB_ORIGIN` https publik. QRIS memakai Core API `payment_type=qris`; virtual account memakai `bank_transfer`/`echannel` (BCA, BNI, BRI, Mandiri, Permata); e-wallet memakai Snap GoPay/ShopeePay. Tiket hanya setelah `settlement` yang diverifikasi. Client Key ditolak.
 - **Dependensi/keahlian:** Payment gateway pihak ketiga, API integration, secrets.
 
 ### F30 — Instruksi dan Status Pembayaran
@@ -487,8 +487,10 @@ F65 (kursi bernomor dan denah venue statis) adalah Must Have inventori; spesifik
 - **Deskripsi:** Pembeli melihat metode, instruksi, batas waktu, dan status pembayaran.
 - **Kriteria penerimaan:**
   - Halaman menampilkan Pending/Paid/Failed/Expired secara konsisten.
+  - QRIS menampilkan kode QR dan virtual account menampilkan nomor/bank; pembeli dapat menyalin instruksi.
   - Refresh tidak membuat transaksi provider baru.
   - Order non-Paid tidak menampilkan tiket.
+  - Status lunas hanya dari webhook/status API terverifikasi, bukan dari layar sukses aplikasi pembayaran.
 - **Teknis/kasus khusus:** Status internal bersumber dari webhook tepercaya, bukan query client saja.
 - **Dependensi/keahlian:** F25, F29/F31.
 
@@ -523,14 +525,14 @@ F65 (kursi bernomor dan denah venue statis) adalah Must Have inventori; spesifik
 - **Tipe/persona:** Peningkatan — admin, pembeli
 - **Prioritas:** Should Have
 - **Kompleksitas:** Tinggi
-- **Deskripsi:** Admin, pembeli, dan penyelenggara menjalankan siklus refund sandbox ala marketplace: pengajuan + rekening, keputusan, hold transfer 1×24 jam, bukti transfer, atau tolak lalu ajukan ulang; pembatalan pembeli 75%; pembatalan event 100%; tanpa uang nyata.
+- **Deskripsi:** Admin, pembeli, dan penyelenggara menjalankan siklus refund: pengajuan, keputusan, lalu Midtrans Refund API ke sumber bayar (order Midtrans) atau hold 1×24 jam + bukti transfer (jalur uji internal); atau tolak lalu ajukan ulang; pembatalan pembeli 75%; pembatalan event 100%.
 - **Kriteria penerimaan:**
-  - Pembeli punya menu Refund berisi riwayat, timeline status, dan form pengajuan (alasan + nama bank + nama/nomor rekening).
-  - Transisi pembeli: Requested → (dicek) Approved (menunggu transfer, due 24 jam) → Completed setelah bukti transfer; atau Requested → Rejected dengan alasan, lalu boleh Requested ulang.
+  - Pembeli punya menu Refund berisi riwayat, timeline status, dan form pengajuan (alasan; rekening untuk VA dan jalur uji internal).
+  - Transisi pembeli: Requested → (dicek) Approved → Completed. QRIS/e-wallet Midtrans: Approved memanggil Refund API, Completed setelah sukses/webhook, tanpa bukti transfer. Virtual account dan jalur uji internal: hold 24 jam lalu bukti transfer. Atau Requested → Rejected dengan alasan, lalu boleh Requested ulang.
   - Tiket Unused dibatalkan saat pengajuan pembeli **disetujui**, bukan menunggu bukti transfer; Used menolak refund biasa.
   - Event Cancelled membatalkan tiket Unused dan mencatat refund 100% sisa lalu Completed tanpa hold 24 jam.
   - Admin mengawasi SLA (48 jam tinjauan, 24 jam transfer), bukti, dan eskalasi; bukan memutus setiap pengajuan pembeli.
-  - Tidak ada uang nyata yang dipindahkan; bukti transfer adalah arsip sandbox.
+  - Order uji internal: tidak ada uang nyata; bukti transfer arsip sandbox. QRIS/e-wallet Midtrans Production: dana dikembalikan ke sumber bayar. Virtual account Production: transfer manual (Refund API tidak tersedia). Pencairan organizer tetap manual.
 - **Teknis/kasus khusus:** Refund tiket Used ditolak dari alur biasa. Rekening dan bukti transfer hanya untuk pemilik order, penyelenggara event, dan admin.
 - **Dependensi/keahlian:** Gateway refund sandbox, F12, F31, F45.
 
@@ -925,17 +927,21 @@ F65 (kursi bernomor dan denah venue statis) adalah Must Have inventori; spesifik
 
 ## 10. Fitur Pasca-MVP
 
-F63–F64 dan F66–F73 dicatat agar tidak “masuk diam-diam” ke rilis akademik. **F65 adalah Must Have MVP** (kursi bernomor dan denah venue statis) dan tetap memakai ID ini agar urutan F1–F77 tidak pecah. Clickable map, editor drag-and-drop, orphan-seat optimization, dan collaborative map editing tetap non-goal.
+F64 dan F66–F73 dicatat agar tidak “masuk diam-diam”. F63 (pembayaran pembeli nyata) aktif hanya lewat `PAYMENT_ENV=production`. **F65 adalah Must Have MVP** (kursi bernomor dan denah venue statis) dan tetap memakai ID ini agar urutan F1–F77 tidak pecah. Clickable map, editor drag-and-drop, orphan-seat optimization, dan collaborative map editing tetap non-goal.
 
-### F63 — Transaksi Uang Nyata, Settlement, dan Payout
+### F63 — Pembayaran Pembeli Nyata
 
 - **Tipe/persona:** Mendatang — platform, organizer
-- **Prioritas:** Won’t Have
+- **Prioritas:** Aktif bersyarat (keputusan Product Owner). Bukan klaim bahwa penulis sudah berbadan usaha.
 - **Kompleksitas:** Tinggi
-- **Deskripsi:** Menerima pembayaran nyata dan menyalurkan dana kepada organizer.
-- **Kriteria penerimaan rilis ini:** Semua transaksi menggunakan sandbox dan UI diberi label uji.
-- **Teknis/kasus khusus:** Versi produksi memerlukan merchant-of-record, KYC, fee, pajak, ledger, rekonsiliasi, dan dispute handling.
-- **Dependensi/keahlian:** Payment/legal/finance specialist.
+- **Deskripsi:** Pembeli dapat membayar sungguhan lewat Midtrans Production (QRIS, virtual account, e-wallet). Dana masuk ke akun merchant Midtrans. Pencairan otomatis ke rekening banyak penyelenggara tidak termasuk.
+- **Kriteria penerimaan:**
+  - Default dan CI tetap mode uji.
+  - Mode nyata hanya `PAYMENT_ENV=production` + Server Key `Mid-server-` + `WEB_ORIGIN` https.
+  - Nominal, signature, dan status API tetap diverifikasi. Redirect browser tidak menandai lunas.
+  - UI membedakan uji dan transaksi nyata.
+- **Teknis/kasus khusus:** Go-live Midtrans mensyaratkan akun Production disetujui, channel aktif, dan Payment Notification URL yang menjawab 200. Menyimpan dana lalu meneruskannya ke penjual adalah kegiatan PJP (PBI 23/6/PBI/2021); aplikasi memakai Midtrans sebagai penerima pembayaran dan tidak mengaktifkan disbursement otomatis.
+- **Dependensi/keahlian:** F29–F31, akun Midtrans Production.
 
 ### F64 — Refund Finansial Produksi
 
@@ -1117,7 +1123,8 @@ Keempat fitur berikut adalah Must Have aktif MVP akademik. Implementasinya tetap
   - Timeout, rate limit, output invalid, atau provider failure otomatis memakai F19/F20 sebagai fallback pencarian standar tanpa memblokir katalog.
   - Query dan output tidak dicatat utuh bila mengandung PII; telemetry hanya menyimpan metadata aman dan reason code fallback.
 - **Teknis/kasus khusus:** Gunakan port provider-neutral, timeout/circuit breaker terukur, structured output validation, dan deterministic fake. AI tidak menjadi source of truth katalog dan tidak memiliki akses langsung database.
-- **Status implementasi:** port `AiCatalogFilterPort`, validator output strict (tanpa key tak dikenal, allowlist kategori/kota/provinsi dari event Published, rentang tanggal maksimum 366 hari), service dengan timeout 5 detik, rate limit 10/menit dan 50/hari per IP, serta fallback pencarian kata kunci di `lib/server/catalog-ai.ts` dan `catalog-filter.ts`. Satu-satunya provider saat ini adalah `AI_PROVIDER=fake`, parser berbasis aturan (kategori, kota, hari ini/besok/minggu ini/akhir pekan/bulan ini/bulan depan, "terbaru") dan **bukan model bahasa**. Model sungguhan tersedia lewat `AI_PROVIDER=openai-compatible` (`lib/server/catalog-filter-llm.ts`): endpoint `chat/completions` bergaya OpenAI dengan `fetch` biasa (tanpa SDK), `temperature` 0, mode JSON, prompt statis berversi `catalog-filter.v1`, teks pengguna hanya sebagai data di dalam delimiter, base URL wajib HTTPS, dan timeout maksimum 5 detik. Balasan vendor tidak dipercaya: tetap lolos validator allowlist atau jatuh ke pencarian kata kunci; badan error vendor tidak dibaca atau dicatat. Pilihan vendor/model, retensi, dan biaya ditetapkan Product Owner lewat environment variable dan perlu dicatat pada gate AI sebelum produksi. Filter tanggal dan urutan kini benar-benar diterapkan di katalog (F20). Input pengguna, prompt, dan keluaran tidak pernah dicatat; analitik hanya menerima mode. Bila model gagal (timeout, tidak tersedia, output tidak valid, kuota habis), sistem lebih dulu memakai parser aturan (mode RULE_BASED_FALLBACK, lewat validator yang sama) dan baru jatuh ke pencarian kata kunci murni (BASIC_SEARCH_FALLBACK) bila parser aturan tidak menemukan struktur.
+- **Status implementasi:** port `AiCatalogFilterPort`, validator output strict (tanpa key tak dikenal, allowlist kategori/kota/provinsi dari event Published, rentang tanggal maksimum 366 hari), service dengan timeout 5 detik, rate limit 10/menit dan 50/hari per IP, serta fallback pencarian kata kunci di `lib/server/catalog-ai.ts` dan `catalog-filter.ts`. Satu-satunya provider saat ini adalah `AI_PROVIDER=fake`, parser berbasis aturan (kategori, kota, hari ini/besok/minggu ini/akhir pekan/bulan ini/bulan depan, "terbaru") dan **bukan model bahasa**. Model sungguhan tersedia lewat `AI_PROVIDER=openai-compatible` (`lib/server/catalog-filter-llm.ts`): endpoint `chat/completions` bergaya OpenAI dengan `fetch` biasa (tanpa SDK), `temperature` 0, mode JSON, prompt statis berversi `catalog-filter.v1`, teks pengguna hanya sebagai data di dalam delimiter, base URL wajib HTTPS, dan timeout maksimum 5 detik. Balasan vendor tidak dipercaya: tetap lolos validator allowlist atau jatuh ke pencarian kata kunci; badan error vendor tidak dibaca atau dicatat. Pilihan vendor/model, retensi, dan biaya ditetapkan Product Owner lewat environment variable dan perlu dicatat pada gate AI sebelum produksi. Filter tanggal dan urutan kini benar-benar diterapkan di katalog (F20). Input pengguna, prompt, dan keluaran tidak pernah dicatat; analitik hanya menerima mode.
+ Bila model gagal (timeout, tidak tersedia, output tidak valid, kuota habis), sistem lebih dulu memakai parser aturan (mode RULE_BASED_FALLBACK, lewat validator yang sama) dan baru jatuh ke pencarian kata kunci murni (BASIC_SEARCH_FALLBACK) bila parser aturan tidak menemukan struktur.
 - **Dependensi/keahlian:** F18–F20, F53, F58, F61/F62; validasi schema (validator manual; paket Zod belum ada di repo), PostgreSQL search, AI security.
 
 ## Jalur Kritis dan Urutan Implementasi

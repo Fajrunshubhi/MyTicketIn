@@ -2,6 +2,7 @@ import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 import { AppError, newId, query } from "@/lib/server/http";
 import { expireOrderById, failPendingOrder } from "@/lib/server/orders";
 import { recoverPaidOrderById, settlePaidOrder } from "@/lib/server/payments";
+import { completeSandboxRefund } from "@/lib/server/refunds";
 import { hitRateLimit } from "@/lib/server/rate-limit";
 import {
   fetchMidtransStatus,
@@ -20,6 +21,7 @@ const EVENT_TYPES = [
   "payment.failed",
   "payment.expired",
   "refund.completed",
+  "provider.recorded",
 ] as const;
 type EventType = (typeof EVENT_TYPES)[number];
 type ProviderName = "sandbox" | "midtrans";
@@ -124,9 +126,23 @@ async function applyEvent(
   eventRowId: string,
   p: WebhookPayload,
 ): Promise<Outcome> {
+  if (p.eventType === "provider.recorded") {
+    return { status: "PROCESSED", reason: "RECORDED", http: 200 };
+  }
   if (p.eventType === "refund.completed") {
-    // Refund completion in this MVP is driven by the organizer flow; the provider event is only recorded.
-    return { status: "PROCESSED", reason: "REFUND_EVENT_RECORDED", http: 200 };
+    const pay = await query<{ id: string }>(
+      `SELECT id FROM payments WHERE provider=$2 AND external_reference=$1 LIMIT 1`,
+      [p.externalReference, provider],
+    );
+    if (!pay[0]) return { status: "FAILED", reason: "UNKNOWN_REFERENCE", http: 202 };
+    const open = await query<{ id: string }>(
+      `SELECT id FROM refunds WHERE payment_id=$1 AND status IN ('APPROVED'::refund_status,'PROCESSING'::refund_status,'FAILED'::refund_status) ORDER BY created_at`,
+      [pay[0].id],
+    );
+    for (const rf of open) {
+      await completeSandboxRefund(rf.id);
+    }
+    return { status: "PROCESSED", reason: open.length ? "REFUND_COMPLETED" : "REFUND_EVENT_RECORDED", http: 200 };
   }
   const pay = await query<{
     id: string;
@@ -390,7 +406,7 @@ async function midtransPayload(
       eventId,
       // An unparseable amount becomes -1 so it can only produce an AMOUNT_MISMATCH, never a settlement.
       amountRupiah: amount ?? -1,
-      eventType: mapped === "provider.recorded" ? "refund.completed" : mapped,
+      eventType: mapped,
       externalReference: n.order_id,
       currency: "IDR",
     },

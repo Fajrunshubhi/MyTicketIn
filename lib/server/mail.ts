@@ -145,6 +145,33 @@ export async function sendMail(message: MailMessage): Promise<"sent" | "skipped"
   return "skipped";
 }
 
+export function emailOtpMail(input: { to: string; name: string; code: string; purpose: "REGISTER" | "LOGIN" }) {
+  const name = input.name.trim() || "Pengguna";
+  const action = input.purpose === "REGISTER" ? "menyelesaikan pendaftaran" : "masuk ke akun";
+  const subject = input.purpose === "REGISTER" ? "Kode verifikasi pendaftaran MyTicketIn" : "Kode masuk MyTicketIn";
+  const text = [
+    `Halo ${name},`,
+    "",
+    `Kode untuk ${action}: ${input.code}`,
+    "Berlaku 10 menit. Jangan bagikan kode ini.",
+    "",
+    "Jika Anda tidak meminta kode ini, abaikan email.",
+    "MyTicketIn",
+  ].join("\n");
+  const html = `<!DOCTYPE html>
+<html lang="id"><body style="margin:0;padding:24px 12px;background:#f4f1fb;font-family:Arial,Helvetica,sans-serif;color:#1c1636;">
+<table role="presentation" width="100%"><tr><td align="center">
+<table role="presentation" width="560" style="max-width:560px;width:100%;background:#fff;border-radius:24px;border:1px solid #ece8f5;">
+<tr><td style="background:#6d4aff;padding:20px 28px;color:#fff;font-size:18px;font-weight:700;">MYTICKETIN</td></tr>
+<tr><td style="padding:28px;">
+<p style="margin:0 0 8px;">Halo ${escapeHtml(name)},</p>
+<p style="margin:0 0 16px;font-size:15px;line-height:1.6;">Gunakan kode ini untuk ${escapeHtml(action)}.</p>
+<p style="margin:0 0 16px;font-size:32px;letter-spacing:0.24em;font-weight:700;">${escapeHtml(input.code)}</p>
+<p style="margin:0;font-size:13px;color:#7a748c;">Berlaku 10 menit. Jangan bagikan kode ini kepada siapa pun.</p>
+</td></tr></table></td></tr></table></body></html>`;
+  return { to: input.to, subject, text, html };
+}
+
 export async function sendPasswordResetMail(input: { to: string; name: string; resetUrl: string }): Promise<"sent" | "skipped" | "failed"> {
   const message = passwordResetEmail({ name: input.name, resetUrl: input.resetUrl });
   const from = fromHeader();

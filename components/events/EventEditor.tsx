@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { apiFetch, getCsrfToken, readApiError, type ApiError } from "@/lib/api";
 import { eventHasEnded, eventLifecycle, formatDateTime, formatRupiah, naiveLocalToUtcIso, utcIsoToNaiveLocal } from "@/lib/format";
+import { saleWindowError } from "@/lib/sales-window";
 import { reservedSeatsFromTypes, seatPrefix, seatPreview } from "@/lib/seats";
 import { Alert } from "@/components/ui/Alert";
 import { FloatingAlert } from "@/components/ui/FloatingAlert";
@@ -221,12 +222,9 @@ export function EventEditor({ eventId, readOnly = false }: { eventId: string; re
     const start = new Date(saleStartsAt);
     const end = new Date(saleEndsAt);
     const eventStart = new Date(e.startsAt);
-    if (!(start < end)) {
-      setToast({ tone: "error", title: "Gagal", body: "Selesai jual harus setelah mulai jual." });
-      return;
-    }
-    if (end > eventStart) {
-      setToast({ tone: "error", title: "Gagal", body: "Penjualan harus berakhir sebelum event dimulai." });
+    const saleErr = saleWindowError(start, end, eventStart);
+    if (saleErr) {
+      setToast({ tone: "error", title: "Gagal", body: saleErr });
       return;
     }
     await mutate(`/api/organizer/events/${eventId}/ticket-types`, "POST", {
@@ -426,6 +424,7 @@ export function EventEditor({ eventId, readOnly = false }: { eventId: string; re
               ticket={t}
               timezone={tz}
               canEdit={canEditDetails}
+              eventStartsAt={e.startsAt}
               onSave={async (body) => mutate(`/api/organizer/events/${eventId}/ticket-types/${t.id}`, "PATCH", body)}
               onDelete={
                 canAuthorTickets && (t.paidQuantity ?? 0) + (t.reservedQuantity ?? 0) === 0
@@ -445,7 +444,7 @@ export function EventEditor({ eventId, readOnly = false }: { eventId: string; re
           ))}
         </ul>
         {canAuthorTickets ? (
-          <FormSection title="Tambah jenis tiket" description="Selesai jual harus setelah mulai jual, dan sebelum event dimulai.">
+          <FormSection title="Tambah jenis tiket" description="Jendela penjualan dapat diperpanjang setelah habis, paling lambat H-1 (24 jam sebelum kegiatan). Jika event diundur, batasan H-1 mengikuti jadwal baru.">
             <Input label="Nama jenis" name="ticketName" value={ticketName} onChange={(ev) => setTicketName(ev.target.value)} />
             <Input label="Harga (Rupiah, integer)" name="priceRupiah" inputMode="numeric" value={price} onChange={(ev) => setPrice(ev.target.value)} />
             <Input label="Kuota" name="quota" inputMode="numeric" value={quota} onChange={(ev) => setQuota(ev.target.value)} />
@@ -700,6 +699,7 @@ function TicketTypeEditor({
   ticket,
   timezone,
   canEdit,
+  eventStartsAt,
   onSave,
   onDelete,
   stopSales,
@@ -708,6 +708,7 @@ function TicketTypeEditor({
   ticket: TicketTypeRecord;
   timezone: string;
   canEdit: boolean;
+  eventStartsAt: string;
   onSave: (body: unknown) => Promise<boolean>;
   onDelete?: () => Promise<boolean | void>;
   stopSales?: () => void;
@@ -718,6 +719,8 @@ function TicketTypeEditor({
   const minQuota = paid + reserved;
   const [price, setPrice] = useState(String(ticket.priceRupiah));
   const [quota, setQuota] = useState(String(ticket.quota));
+  const [saleStart, setSaleStart] = useState(() => utcIsoToNaiveLocal(ticket.saleStartsAt, timezone));
+  const [saleEnd, setSaleEnd] = useState(() => utcIsoToNaiveLocal(ticket.saleEndsAt, timezone));
   const [localError, setLocalError] = useState("");
 
   async function save() {
@@ -736,14 +739,28 @@ function TicketTypeEditor({
       );
       return;
     }
+    let saleStartsAt = ticket.saleStartsAt;
+    let saleEndsAt = ticket.saleEndsAt;
+    try {
+      saleStartsAt = naiveLocalToUtcIso(saleStart, timezone);
+      saleEndsAt = naiveLocalToUtcIso(saleEnd, timezone);
+    } catch {
+      setLocalError("Waktu penjualan tidak valid.");
+      return;
+    }
+    const saleErr = saleWindowError(new Date(saleStartsAt), new Date(saleEndsAt), new Date(eventStartsAt));
+    if (saleErr) {
+      setLocalError(saleErr);
+      return;
+    }
     await onSave({
       name: ticket.name,
       description: ticket.description || "",
       priceRupiah,
       quota: q,
       maxPerAccount: ticket.maxPerAccount > 0 ? ticket.maxPerAccount : q,
-      saleStartsAt: ticket.saleStartsAt,
-      saleEndsAt: ticket.saleEndsAt,
+      saleStartsAt,
+      saleEndsAt,
       sortOrder: ticket.sortOrder,
       expectedVersion: ticket.version,
     });
@@ -767,6 +784,20 @@ function TicketTypeEditor({
             inputMode="numeric"
             value={quota}
             onChange={(ev) => setQuota(ev.target.value)}
+          />
+          <Input
+            label="Mulai jual"
+            name={`saleStartsAt-${ticket.id}`}
+            type="datetime-local"
+            value={saleStart}
+            onChange={(ev) => setSaleStart(ev.target.value)}
+          />
+          <Input
+            label="Selesai jual (maks. H-1)"
+            name={`saleEndsAt-${ticket.id}`}
+            type="datetime-local"
+            value={saleEnd}
+            onChange={(ev) => setSaleEnd(ev.target.value)}
           />
           {localError ? (
             <FloatingAlert tone="error" title="Gagal" onClose={() => setLocalError("")}>

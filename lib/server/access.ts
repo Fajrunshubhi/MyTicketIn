@@ -156,7 +156,19 @@ function portalAllowsPath(portal: string, path: string): boolean {
   return true;
 }
 
-export function userPayload(user: AuthUser, portal: string, acc: Access, callback: string) {
+export function userPayload(
+  user: AuthUser,
+  portal: string,
+  acc: Access,
+  callback: string,
+  extra?: {
+    phone?: string | null;
+    dateOfBirth?: string | null;
+    city?: string | null;
+    gender?: string | null;
+    emailVerifiedAt?: string | null;
+  },
+) {
   return {
     id: user.id,
     name: user.name,
@@ -166,5 +178,10 @@ export function userPayload(user: AuthUser, portal: string, acc: Access, callbac
     portal,
     access: acc,
     nextPath: portalNextPath(portal, acc, callback),
+    phone: extra?.phone ?? null,
+    dateOfBirth: extra?.dateOfBirth ?? null,
+    city: extra?.city ?? null,
+    gender: extra?.gender ?? null,
+    emailVerifiedAt: extra?.emailVerifiedAt ?? null,
   };
 }

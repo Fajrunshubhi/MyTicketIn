@@ -10,6 +10,8 @@ import { formatRupiah } from "@/lib/format";
 import { apiFetch, readApiError } from "@/lib/api";
 import { downloadOrderReceiptPdf } from "@/lib/order-receipt-pdf";
 import { pingNotificationsLive } from "@/lib/notifications-live";
+import { PaymentInstructionCard } from "@/components/checkout/PaymentInstructionCard";
+import { VA_BANKS, sanitizePaymentInstructions, type VaBank } from "@/lib/payment-methods";
 import {
   completedRefundTotal,
   hasOpenRefundRequest,
@@ -57,6 +59,7 @@ type Order = {
     status: string;
     reason: string;
     source?: string;
+    viaMidtrans?: boolean;
   }[];
   ticketsCancelled?: boolean;
 };
@@ -66,7 +69,7 @@ type Payment = {
   status: string;
   method: string;
   amountRupiah: number;
-  instructions?: Record<string, unknown>;
+  instructions?: ReturnType<typeof sanitizePaymentInstructions>;
   expiresAt?: string;
   providerExpiresAt?: string;
   sandbox?: boolean;
@@ -92,8 +95,16 @@ function formatMmSs(ms: number) {
 const METHODS = [
   { id: "QRIS", title: "QRIS", hint: "Pindai kode QR dari aplikasi bank atau e-wallet." },
   { id: "VIRTUAL_ACCOUNT", title: "Virtual Account", hint: "Transfer dari ATM, m-banking, atau internet banking." },
-  { id: "EWALLET", title: "E-wallet", hint: "GoPay, OVO, DANA, dan sejenisnya (sandbox)." },
+  { id: "EWALLET", title: "E-wallet", hint: "ShopeePay lewat halaman sandbox Midtrans. Jangan pilih GoPay/QRIS di uji ini." },
 ] as const;
+
+const VA_BANK_LABEL: Record<VaBank, string> = {
+  BCA: "BCA",
+  BNI: "BNI",
+  BRI: "BRI",
+  MANDIRI: "Mandiri",
+  PERMATA: "Permata",
+};
 
 const STATUS_LABEL: Record<string, string> = {
   PENDING: "Menunggu pembayaran",
@@ -109,9 +120,8 @@ function methodLabel(id: string) {
 }
 
 function instructionText(p: Payment) {
-  const ins = p.instructions || {};
-  const copy = ins.copyText ?? ins.virtualAccount ?? ins.qrisPayload;
-  return typeof copy === "string" ? copy : "";
+  const text = p.instructions?.copyText;
+  return typeof text === "string" ? text : "";
 }
 
 export default function OrderDetailPage() {
@@ -122,6 +132,7 @@ export default function OrderDetailPage() {
   const [info, setInfo] = useState("");
   const [left, setLeft] = useState("15:00");
   const [method, setMethod] = useState("QRIS");
+  const [vaBank, setVaBank] = useState<VaBank>("BCA");
   const [busy, setBusy] = useState(false);
   const [pdfBusy, setPdfBusy] = useState(false);
   const pollRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -260,7 +271,7 @@ export default function OrderDetailPage() {
     const res = await apiFetch(`/api/orders/${params.id}/payment`, {
       method: "POST",
       headers: { "Content-Type": "application/json", "Idempotency-Key": `pay-${params.id}` },
-      body: JSON.stringify({ method }),
+      body: JSON.stringify({ method, bank: method === "VIRTUAL_ACCOUNT" ? vaBank : undefined }),
     });
     const body = await res.json().catch(() => ({}));
     setBusy(false);
@@ -305,11 +316,10 @@ export default function OrderDetailPage() {
     pingNotificationsLive();
   }
 
-  async function copyInstr() {
-    if (!payment) return;
-    const text = instructionText(payment);
-    if (!text) return;
-    await navigator.clipboard.writeText(text);
+  async function copyInstr(text?: string) {
+    const value = text || (payment ? instructionText(payment) : "");
+    if (!value) return;
+    await navigator.clipboard.writeText(value);
     setInfo("Instruksi disalin.");
   }
 
@@ -357,7 +367,7 @@ export default function OrderDetailPage() {
               </Button>
             ) : null}
             <p className="rounded-full bg-white px-3 py-1 text-xs font-medium text-gold-800" role="note">
-              Sandbox · transaksi uji
+              {payment && payment.sandbox === false ? "Transaksi nyata" : "Uji · bukan uang nasabah"}
             </p>
           </div>
         </div>
@@ -473,6 +483,35 @@ export default function OrderDetailPage() {
                       })}
                     </ul>
                   </fieldset>
+                  {method === "VIRTUAL_ACCOUNT" ? (
+                    <fieldset>
+                      <legend className="text-sm font-semibold text-ink">Bank tujuan</legend>
+                      <ul className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3">
+                        {VA_BANKS.map((bank) => {
+                          const on = vaBank === bank;
+                          return (
+                            <li key={bank}>
+                              <label
+                                className={`flex min-h-11 cursor-pointer items-center gap-2 rounded-xl border px-3 text-sm font-medium ${
+                                  on ? "border-gold-500 bg-gold-500/10 text-ink" : "border-stone-200 bg-white text-ink/80"
+                                }`}
+                              >
+                                <input
+                                  type="radio"
+                                  name="vaBank"
+                                  value={bank}
+                                  checked={on}
+                                  onChange={() => setVaBank(bank)}
+                                  className="accent-gold-600"
+                                />
+                                {VA_BANK_LABEL[bank]}
+                              </label>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    </fieldset>
+                  ) : null}
                   <Button className="w-full sm:w-auto" type="submit" loading={busy} disabled={busy}>
                     Bayar {formatRupiah(order.totalPayableRupiah)}
                   </Button>
@@ -480,70 +519,36 @@ export default function OrderDetailPage() {
               ) : null}
 
               {payment && pending ? (
-                <section className="rounded-3xl border border-stone-200 bg-white p-5">
-                  <h2 className="text-lg font-semibold text-ink">Instruksi {methodLabel(payment.method)}</h2>
-                  <p role="status" aria-live="polite" className="mt-1 text-sm text-ink/65">
-                    Status {payment.status === "SUCCEEDED" ? "berhasil" : payment.status.toLowerCase()} · sandbox
-                  </p>
-                  {payment.provider === "midtrans" ? (
-                    <p className="mt-4 text-sm text-ink/70">
-                      Pembayaran diproses di halaman Midtrans Sandbox. Setelah selesai, kembali ke sini; status
-                      diperbarui otomatis dari konfirmasi Midtrans.
-                    </p>
-                  ) : (
-                    <p className="mt-4 break-all rounded-xl bg-[#f7f8fd] p-4 font-mono text-sm text-ink">
-                      {instructionText(payment) || "Instruksi tersedia setelah pembayaran dibuat."}
-                    </p>
-                  )}
-                  <div className="mt-4 flex flex-wrap gap-2">
-                    {payment.provider === "midtrans" && payment.redirectUrl ? (
-                      <a
-                        href={payment.redirectUrl}
-                        className="inline-flex min-h-11 items-center rounded-full bg-gold-500 px-5 text-sm font-semibold text-white"
-                      >
-                        Bayar di Midtrans
-                      </a>
-                    ) : null}
-                    {payment.provider !== "midtrans" ? (
-                      <Button variant="secondary" type="button" onClick={() => void copyInstr()}>
-                        Salin
-                      </Button>
-                    ) : null}
-                    <Button
-                      variant="secondary"
-                      type="button"
-                      loading={busy}
-                      disabled={busy}
-                      onClick={() => {
-                        if (payment.provider === "midtrans") {
-                          void refreshStatus();
-                          return;
-                        }
-                        void loadPayment();
-                        void loadOrder();
-                      }}
-                    >
-                      Cek status
-                    </Button>
-                    {pending && payment.provider !== "midtrans" && (payment.status === "PENDING" || payment.status === "CREATED") ? (
-                      <Button variant="secondary" type="button" loading={busy} disabled={busy} onClick={() => void simulate()}>
-                        Simulasikan lunas
-                      </Button>
-                    ) : null}
-                  </div>
+                <>
+                  <PaymentInstructionCard
+                    methodLabel={methodLabel(payment.method)}
+                    amountRupiah={payment.amountRupiah}
+                    status={payment.status}
+                    provider={String(payment.provider || "sandbox")}
+                    sandbox={payment.sandbox !== false}
+                    instructions={sanitizePaymentInstructions(payment.instructions)}
+                    redirectUrl={payment.redirectUrl}
+                    pending={pending}
+                    busy={busy}
+                    onCopy={(text) => void copyInstr(text)}
+                    onRefresh={() => void refreshStatus()}
+                    onSimulate={String(payment.provider || "sandbox") === "sandbox" ? () => void simulate() : undefined}
+                  />
                   {payment.loyalty ? (
-                    <p className="mt-3 text-sm text-ink/60">
+                    <p className="text-sm text-ink/60">
                       Perkiraan earn {payment.loyalty.earnOnPaidPoints} poin setelah lunas. Bukan nilai tunai.
                     </p>
                   ) : null}
-                </section>
+                </>
               ) : null}
 
               {order.status === "PAID" || order.status === "REFUNDED" ? (
                 <section className="rounded-3xl border border-stone-200 bg-white p-5">
-                  <h2 className="text-lg font-semibold text-ink">Refund sandbox</h2>
+                  <h2 className="text-lg font-semibold text-ink">Refund</h2>
                   <p className="mt-1 text-sm text-ink/65">
-                    Pengembalian hanya catatan uji. Pembatalan oleh Anda: 75% nominal, 25% tidak dikembalikan. Jika event dibatalkan penyelenggara, sisa dikembalikan 100%. Tiket yang sudah check-in tidak dapat direfund.
+                    Pembatalan oleh Anda: 75% nominal, 25% tidak dikembalikan. Pembayaran Midtrans dikembalikan ke sumber
+                    bayar setelah disetujui. Jika event dibatalkan penyelenggara, sisa dikembalikan 100%. Tiket yang sudah
+                    check-in tidak dapat direfund.
                   </p>
                   {(order.refunds || []).length > 0 ? (
                     <ul className="mt-4 space-y-2 text-sm">
@@ -552,7 +557,7 @@ export default function OrderDetailPage() {
                           <span className="font-medium text-ink">{rf.refundNumber}</span>
                           <span className="text-ink/60">
                             {" "}
-                            · {refundStatusUiLabel(rf.status)} · {formatRupiah(rf.amountRupiah)}
+                            · {refundStatusUiLabel(rf.status, Boolean(rf.viaMidtrans))} · {formatRupiah(rf.amountRupiah)}
                           </span>
                           {rf.source ? (
                             <span className="mt-0.5 block text-xs text-ink/50">{refundSourceUiLabel(rf.source)}</span>
@@ -567,7 +572,7 @@ export default function OrderDetailPage() {
                         href={`/dashboard/refunds?order=${order.id}`}
                         className="inline-flex min-h-11 items-center rounded-full bg-gold-500 px-4 text-sm font-semibold text-white"
                       >
-                        Ajukan refund + rekening
+                        Ajukan refund
                       </Link>
                     </p>
                   ) : (

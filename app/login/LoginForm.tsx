@@ -9,6 +9,7 @@ import GoogleButton from "@/components/GoogleButton";
 import { PortalChoice, googleCallbackForPortal, type AuthPortal } from "@/components/auth/PortalChoice";
 import { Button } from "@/components/ui/Button";
 import { Select } from "@/components/ui/Select";
+import { OtpChallengeForm, type OtpChallenge } from "@/components/auth/OtpChallengeForm";
 import { apiFetch, readApiError } from "@/lib/api";
 
 const oauthMessages: Record<string, string> = {
@@ -17,6 +18,7 @@ const oauthMessages: Record<string, string> = {
   AUTH_INVALID_CREDENTIALS: "Username atau kata sandi salah.",
   AUTH_CSRF_INVALID: "Permintaan tidak valid. Muat ulang halaman.",
   AUTH_PORTAL_DENIED: "Jenis akun tidak cocok dengan portal yang dipilih.",
+  AUTH_OTP_REQUIRED: "Masukkan username dan kata sandi, lalu verifikasi kode OTP di email.",
 };
 
 const portalDeniedReasons: Record<string, string> = {
@@ -73,6 +75,7 @@ export default function LoginForm() {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [otp, setOtp] = useState<OtpChallenge | null>(null);
 
   useEffect(() => {
     setPortal(parsePortal(params.get("portal")));
@@ -146,7 +149,11 @@ export default function LoginForm() {
       setError(readApiError(payload, selected === "staff" ? portalDeniedReasons.staff_mismatch : "Username atau kata sandi salah."));
       return;
     }
-    const data = (payload as { data?: LoginData }).data;
+    const data = (payload as { data?: LoginData & OtpChallenge & { otpRequired?: boolean } }).data;
+    if (data?.otpRequired && data.challengeId) {
+      setOtp({ challengeId: data.challengeId, emailHint: data.emailHint, sandboxCode: data.sandboxCode });
+      return;
+    }
     if (!sessionAllowsPortal({ role: data?.role, access: data?.access }, selected)) {
       await apiFetch("/api/auth/signout", { method: "POST" }).catch(() => undefined);
       const reason =
@@ -185,10 +192,31 @@ export default function LoginForm() {
           </div>
           <h2 className="text-2xl font-semibold tracking-tight text-ink pt2">Masuk</h2>
           <p className="mt-1 text-sm text-ink/60">
-            {portal === "staff"
-              ? "Portal petugas hanya untuk masuk. Pendaftaran dilakukan oleh penyelenggara."
-              : "Pilih portal, gunakan akun gmail atau username dan kata sandi."}
+            {otp
+              ? "Masukkan kode OTP dari email untuk memastikan alamat masih aktif."
+              : portal === "staff"
+                ? "Portal petugas hanya untuk masuk. Pendaftaran dilakukan oleh penyelenggara."
+                : "Pilih portal, gunakan akun gmail atau username dan kata sandi. Login lokal diverifikasi OTP email."}
           </p>
+          {otp ? (
+            <div className="mt-4">
+              <OtpChallengeForm
+                challenge={otp}
+                onChallenge={setOtp}
+                submitLabel="Masuk"
+                onSuccess={(data) => {
+                  const fallback = portal === "admin" ? "/dashboard" : portal === "staff" ? "/petugas" : "/";
+                  const next = data.nextPath || fallback;
+                  router.push(next.startsWith("/") && !next.startsWith("//") ? next : fallback);
+                  router.refresh();
+                }}
+              />
+              <button type="button" className="mt-4 text-sm text-ink/60 underline" onClick={() => setOtp(null)}>
+                Kembali ke formulir masuk
+              </button>
+            </div>
+          ) : null}
+          {otp ? null : (
           <form onSubmit={handleSubmit} className="mt-4 grid gap-2.5" noValidate>
             <PortalChoice name="portal" legend="Masuk sebagai" includeAdmin value={portal} onChange={setPortal} />
             {portal === "staff" ? (
@@ -257,6 +285,7 @@ export default function LoginForm() {
               Masuk
             </Button>
           </form>
+          )}
           {portal === "staff" ? (
             <p className="mt-3 text-center text-sm text-ink/60">Petugas tidak dapat mendaftar sendiri.</p>
           ) : (

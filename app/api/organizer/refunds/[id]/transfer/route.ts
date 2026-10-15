@@ -9,10 +9,10 @@ export const POST = routeHandler(async (req: NextRequest, ctx) => {
   const id = String(ctx.params?.id || "");
   const form = await req.formData().catch(() => null);
   const file = form?.get("proof");
-  if (!(file instanceof File) || file.size < 1) {
+  const bytes = file instanceof File && file.size > 0 ? Buffer.from(await file.arrayBuffer()) : null;
+  if (!bytes && req.headers.get("content-type")?.includes("multipart") && !(file instanceof File)) {
     throw new AppError("VALIDATION_ERROR", "Unggah foto bukti transfer.", { proof: "Bukti transfer wajib." }, 400);
   }
-  const bytes = Buffer.from(await file.arrayBuffer());
   const refund = await confirmOrganizerTransfer(user.id, organizerProfileId, id, bytes);
   return jsonData({ refund }, 200, req);
 });

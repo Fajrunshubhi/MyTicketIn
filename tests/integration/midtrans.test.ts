@@ -14,6 +14,7 @@ const savedEnv = { ...process.env };
 // Midtrans answers per order id; the database driver keeps using the real fetch.
 const statusByOrder = new Map<string, Record<string, string>>();
 let snapCalls = 0;
+let chargeCalls = 0;
 
 function installMidtransStub() {
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -24,6 +25,53 @@ function installMidtransStub() {
         JSON.stringify({ token: `tok-${snapCalls}`, redirect_url: `https://app.sandbox.midtrans.com/snap/v4/redirection/tok-${snapCalls}` }),
         { status: 201, headers: { "Content-Type": "application/json" } },
       );
+    }
+    if (url === "https://api.sandbox.midtrans.com/v2/charge") {
+      chargeCalls += 1;
+      const payload = JSON.parse(String(init?.body || "{}")) as {
+        payment_type?: string;
+        transaction_details?: { order_id?: string; gross_amount?: number };
+        bank_transfer?: { bank?: string };
+      };
+      const orderId = String(payload.transaction_details?.order_id || "");
+      const amount = Number(payload.transaction_details?.gross_amount || 0);
+      if (payload.payment_type === "qris") {
+        return new Response(
+          JSON.stringify({
+            status_code: "201",
+            transaction_status: "pending",
+            order_id: orderId,
+            gross_amount: `${amount}.00`,
+            payment_type: "qris",
+            qr_string: `000201sandbox${orderId}`,
+            actions: [
+              {
+                name: "generate-qr-code",
+                method: "GET",
+                url: `https://api.sandbox.midtrans.com/v2/qris/tx-${chargeCalls}/qr-code`,
+              },
+            ],
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      }
+      if (payload.payment_type === "bank_transfer" || payload.payment_type === "echannel") {
+        const bank = String(payload.bank_transfer?.bank || "bca");
+        return new Response(
+          JSON.stringify({
+            status_code: "201",
+            transaction_status: "pending",
+            order_id: orderId,
+            gross_amount: `${amount}.00`,
+            payment_type: payload.payment_type,
+            va_numbers: [{ bank, va_number: "70012999888777" }],
+            biller_code: payload.payment_type === "echannel" ? "70012" : undefined,
+            bill_key: payload.payment_type === "echannel" ? "99001122" : undefined,
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      }
+      return new Response(JSON.stringify({ status_code: "400" }), { status: 400, headers: { "Content-Type": "application/json" } });
     }
     const m = /^https:\/\/api\.sandbox\.midtrans\.com\/v2\/([^/]+)\/status$/.exec(url);
     if (m) {
@@ -92,16 +140,33 @@ const paymentStatus = async (orderId: string) =>
   (await query<{ status: string }>(`SELECT status::text AS status FROM payments WHERE order_id=$1`, [orderId]))[0].status;
 
 describe("Midtrans Sandbox payments", () => {
-  it("creates a Snap redirect once and replays it without calling Midtrans again", async () => {
-    const before = snapCalls;
+  it("creates a QRIS charge once and replays it without calling Midtrans again", async () => {
+    const before = chargeCalls;
     const c = await checkout();
     expect(c.payment.provider).toBe("midtrans");
-    expect(c.payment.redirectUrl).toContain("app.sandbox.midtrans.com/snap");
+    expect(c.payment.instructions?.kind).toBe("QRIS");
+    expect(c.payment.instructions?.qrString).toContain("000201sandbox");
+    expect(c.payment.redirectUrl).toBeNull();
     expect(c.ref.length).toBeLessThanOrEqual(50);
-    expect(snapCalls).toBe(before + 1);
+    expect(chargeCalls).toBe(before + 1);
     const again = await createPayment(c.buyer, c.orderId, "QRIS");
     expect(again.replay).toBe(true);
-    expect(snapCalls).toBe(before + 1);
+    expect(chargeCalls).toBe(before + 1);
+  });
+
+  it("creates a BCA virtual account and keeps the number on replay", async () => {
+    const buyer = await seedUser("mtbuyer");
+    const eventId = await seedEvent(orgProfileId, organizer.id, "GENERAL_ADMISSION");
+    const tt = await seedTicketType(eventId, 10, 50000);
+    const { view } = await createOrder(buyer, { eventId, items: [{ ticketTypeId: tt, quantity: 1 }], confirmed: true }, idem());
+    const before = chargeCalls;
+    const first = await createPayment(buyer, String(view.id), "VIRTUAL_ACCOUNT", { bank: "BCA" });
+    expect(first.payment.instructions?.kind).toBe("VIRTUAL_ACCOUNT");
+    expect(first.payment.instructions?.vaNumber).toBe("70012999888777");
+    const again = await createPayment(buyer, String(view.id), "VIRTUAL_ACCOUNT", { bank: "BNI" });
+    expect(again.replay).toBe(true);
+    expect(again.payment.instructions?.vaNumber).toBe("70012999888777");
+    expect(chargeCalls).toBe(before + 1);
   });
 
   it("rejects a forged signature with 401 and changes nothing", async () => {

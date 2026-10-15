@@ -4,6 +4,7 @@ import { refundOversightFlag } from "@/lib/order-refund-display";
 import { buyerCancelRefundAmount, earnReversalDelta, isFullRefund, isParsedRefundBank, parseRefundBank, remainingRefundable, TRANSFER_HOLD_HOURS, type RefundBankInput } from "@/lib/server/refund-policy";
 import { readGalleryFile, saveGalleryFile } from "@/lib/server/gallery";
 import { assertNoLivePayoutForOrder } from "@/lib/server/payouts";
+import { createMidtransRefund, midtransRefundApiSupported } from "@/lib/server/midtrans";
 
 const OPEN_STATUSES = "('REQUESTED','APPROVED','PROCESSING','COMPLETED')";
 
@@ -26,12 +27,18 @@ type RefundRow = {
   transferred_at: string | null;
   transfer_proof_name: string | null;
   decision_reason: string | null;
+  payment_provider: string;
+  payment_environment: string;
+  payment_method: string;
 };
 
 const REFUND_COLS = `rf.id, rf.refund_number, rf.order_id, rf.payment_id, rf.amount_rupiah::text, rf.reason, rf.status::text AS status,
             COALESCE(rf.source, 'ADMIN') AS source, rf.requested_at::text, rf.decided_at::text, rf.completed_at::text,
             rf.bank_name, rf.bank_account_name, rf.bank_account_number, rf.transfer_due_at::text, rf.transferred_at::text,
-            rf.transfer_proof_name, rf.decision_reason`;
+            rf.transfer_proof_name, rf.decision_reason, pay.provider AS payment_provider, pay.environment AS payment_environment,
+            pay.method::text AS payment_method`;
+
+const REFUND_JOIN = `refunds rf JOIN payments pay ON pay.id = rf.payment_id`;
 
 function refundDto(r: RefundRow) {
   return {
@@ -53,10 +60,19 @@ function refundDto(r: RefundRow) {
     transferDueAt: r.transfer_due_at,
     transferredAt: r.transferred_at,
     hasTransferProof: Boolean(r.transfer_proof_name),
-    sandbox: true,
-    cashValue: false,
-    holdHours: TRANSFER_HOLD_HOURS,
+    viaMidtrans: usesMidtransRefundApi(r),
+    sandbox: String(r.payment_environment || "SANDBOX") !== "PRODUCTION",
+    cashValue: r.payment_provider === "midtrans" && String(r.payment_environment || "") === "PRODUCTION",
+    holdHours: usesMidtransRefundApi(r) ? 0 : TRANSFER_HOLD_HOURS,
   };
+}
+
+function usesMidtransRefundApi(r: { payment_provider: string; payment_method?: string }): boolean {
+  return r.payment_provider === "midtrans" && midtransRefundApiSupported(String(r.payment_method || ""));
+}
+
+function midtransRefundKey(refundId: string): string {
+  return `rfnd-${refundId.replace(/-/g, "").slice(0, 24)}`;
 }
 
 async function outstandingRupiah(orderId: string): Promise<number> {
@@ -79,8 +95,16 @@ async function assertUnusedOnly(orderId: string): Promise<void> {
 }
 
 async function paidPayment(orderId: string) {
-  const pays = await query<{ id: string; amount_rupiah: string; status: string }>(
-    `SELECT p.id, p.amount_rupiah::text, p.status::text AS status
+  const pays = await query<{
+    id: string;
+    amount_rupiah: string;
+    status: string;
+    provider: string;
+    method: string;
+    external_reference: string | null;
+    environment: string;
+  }>(
+    `SELECT p.id, p.amount_rupiah::text, p.status::text AS status, p.provider, p.method::text AS method, p.external_reference, p.environment
      FROM payments p JOIN orders o ON o.id=p.order_id
      WHERE o.id=$1 AND o.status IN ('PAID'::order_status,'REFUNDED'::order_status) AND p.status IN ('SUCCEEDED'::payment_status,'REFUNDED'::payment_status)
      ORDER BY p.created_at DESC LIMIT 1`,
@@ -100,11 +124,11 @@ async function notifyRefund(orderId: string, refundId: string, refundNumber: str
   if (!buyer) return;
   const titles: Record<string, string> = {
     REQUESTED: "Pengajuan refund diterima",
-    APPROVED: "Refund disetujui, menunggu transfer",
+    APPROVED: "Refund disetujui",
     REJECTED: "Refund ditolak",
-    PROCESSING: "Refund diproses (sandbox)",
-    COMPLETED: "Refund selesai — bukti transfer tersedia",
-    FAILED: "Refund gagal (sandbox)",
+    PROCESSING: "Refund diproses",
+    COMPLETED: "Refund selesai",
+    FAILED: "Refund gagal",
   };
   await notify({
     recipientUserId: buyer.buyer_user_id,
@@ -126,14 +150,14 @@ async function notifyRefund(orderId: string, refundId: string, refundNumber: str
         status === "REQUESTED"
           ? "Pembeli mengajukan refund"
           : status === "APPROVED"
-            ? "Transfer refund dalam 24 jam"
-            : "Refund order selesai (sandbox)",
+            ? "Refund disetujui"
+            : "Refund order selesai",
       body:
         status === "REQUESTED"
-          ? `Refund ${refundNumber} menunggu keputusan. Cek rekening pembeli.`
+          ? `Refund ${refundNumber} menunggu keputusan.`
           : status === "APPROVED"
-            ? `Refund ${refundNumber} disetujui. Unggah bukti transfer dalam 1×24 jam.`
-            : `Refund ${refundNumber} dicatat tanpa transfer uang nyata.`,
+            ? `Refund ${refundNumber} disetujui.`
+            : `Refund ${refundNumber} selesai.`,
       actionPath: `/dashboard/refunds?refund=${refundId}`,
       entityType: "Refund",
       entityId: refundId,
@@ -294,21 +318,22 @@ async function applyLoyaltyOnCompleted(orderId: string, refundId: string, cumula
 export async function completeSandboxRefund(refundId: string): Promise<ReturnType<typeof refundDto>> {
   const current = await query<RefundRow>(
     `SELECT ${REFUND_COLS}
-     FROM refunds rf WHERE rf.id=$1 LIMIT 1`,
+     FROM ${REFUND_JOIN} WHERE rf.id=$1 LIMIT 1`,
     [refundId],
   );
   const rf = current[0];
   if (!rf) throw new AppError("NOT_FOUND", "Refund tidak ditemukan.", {}, 404);
   if (rf.status === "COMPLETED") return refundDto(rf);
-  if (rf.status !== "APPROVED" && rf.status !== "PROCESSING") {
+  const midtransFailed = rf.status === "FAILED" && rf.payment_provider === "midtrans";
+  if (rf.status !== "APPROVED" && rf.status !== "PROCESSING" && !midtransFailed) {
     throw new AppError("REFUND_NOT_ALLOWED", "Refund belum siap diselesaikan.", {}, 409);
   }
   await assertUnusedOnly(rf.order_id);
   await execute(
     `UPDATE refunds SET status='PROCESSING'::refund_status, external_reference=COALESCE(external_reference,$2),
             updated_at=CURRENT_TIMESTAMP, version=version+1
-     WHERE id=$1 AND status IN ('APPROVED'::refund_status,'PROCESSING'::refund_status)`,
-    [refundId, `sandbox-rfnd-${refundId.slice(0, 16)}`],
+     WHERE id=$1 AND status IN ('APPROVED'::refund_status,'PROCESSING'::refund_status,'FAILED'::refund_status)`,
+    [refundId, rf.payment_provider === "midtrans" ? midtransRefundKey(refundId) : `sandbox-rfnd-${refundId.slice(0, 16)}`],
   );
   const marked = await execute(
     `UPDATE refunds SET status='COMPLETED'::refund_status, completed_at=CURRENT_TIMESTAMP, loyalty_processed_at=CURRENT_TIMESTAMP,
@@ -318,7 +343,7 @@ export async function completeSandboxRefund(refundId: string): Promise<ReturnTyp
   );
   if (!marked) {
     const again = await query<RefundRow>(
-      `SELECT ${REFUND_COLS} FROM refunds rf WHERE rf.id=$1`,
+      `SELECT ${REFUND_COLS} FROM ${REFUND_JOIN} WHERE rf.id=$1`,
       [refundId],
     );
     if (again[0]) return refundDto(again[0]);
@@ -341,13 +366,16 @@ export async function completeSandboxRefund(refundId: string): Promise<ReturnTyp
       [rf.payment_id],
     );
   }
-  const moneyNote =
-    rf.source === "BUYER"
+  const moneyNote = usesMidtransRefundApi(rf)
+    ? rf.source === "BUYER"
+      ? `Refund ${rf.refund_number} selesai: 75% dikembalikan ke sumber pembayaran Midtrans. 25% tidak dikembalikan.`
+      : `Refund ${rf.refund_number} selesai. Dana dikembalikan ke sumber pembayaran Midtrans.`
+    : rf.source === "BUYER"
       ? `Refund ${rf.refund_number} selesai: 75% nominal (pembatalan pembeli). 25% tidak dikembalikan. Sandbox, bukan transfer uang.`
       : `Refund ${rf.refund_number} selesai sebagai catatan uji. Tidak ada transfer uang nyata.`;
   await notifyRefund(rf.order_id, refundId, rf.refund_number, "COMPLETED", moneyNote);
   const out = await query<RefundRow>(
-    `SELECT ${REFUND_COLS} FROM refunds rf WHERE rf.id=$1`,
+    `SELECT ${REFUND_COLS} FROM ${REFUND_JOIN} WHERE rf.id=$1`,
     [refundId],
   );
   if (!out[0]) throw new AppError("NOT_FOUND", "Refund tidak ditemukan.", {}, 404);
@@ -368,7 +396,10 @@ async function insertRefund(
   let bankName: string | null = null;
   let accountName: string | null = null;
   let accountNumber: string | null = null;
-  if (source === "BUYER") {
+  if (source !== "EVENT_CANCELLED") await assertNoLivePayoutForOrder(orderId);
+  await assertUnusedOnly(orderId);
+  const p = await paidPayment(orderId);
+  if (source === "BUYER" && !midtransRefundApiSupported(p.method)) {
     const parsed = parseRefundBank(bank || {});
     if (!isParsedRefundBank(parsed)) {
       throw new AppError("VALIDATION_ERROR", parsed.error, { [parsed.field]: parsed.error }, 400);
@@ -377,9 +408,6 @@ async function insertRefund(
     accountName = parsed.accountName;
     accountNumber = parsed.accountNumber;
   }
-  if (source !== "EVENT_CANCELLED") await assertNoLivePayoutForOrder(orderId);
-  await assertUnusedOnly(orderId);
-  const p = await paidPayment(orderId);
   const outstanding = await outstandingRupiah(orderId);
   const left = remainingRefundable(Number(p.amount_rupiah), outstanding);
   if (amount > left) throw new AppError("REFUND_AMOUNT_INVALID", "Nominal refund melebihi sisa yang dapat dikembalikan.", {}, 400);
@@ -391,13 +419,16 @@ async function insertRefund(
      VALUES ($1,$2,$3,$4,$5,$6,'REQUESTED'::refund_status,$8,$7,$9,$10,$11,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP,1)`,
     [id, refundNumber, orderId, p.id, amount, why, actorId, source, bankName, accountName, accountNumber],
   );
+  const viaMidtrans = p.provider === "midtrans" && midtransRefundApiSupported(p.method);
   const waitNote =
     source === "BUYER"
-      ? `Pengajuan pembatalan pembeli ${refundNumber}: 75% (Rp${amount.toLocaleString("id-ID")}) menunggu keputusan. 25% tidak dikembalikan. Sandbox.`
-      : `Pengajuan refund ${refundNumber} sebesar Rp${amount.toLocaleString("id-ID")} menunggu keputusan. Sandbox, bukan transfer uang.`;
+      ? viaMidtrans
+        ? `Pengajuan pembatalan pembeli ${refundNumber}: 75% (Rp${amount.toLocaleString("id-ID")}) menunggu keputusan. Pengembalian ke sumber bayar Midtrans. 25% tidak dikembalikan.`
+        : `Pengajuan pembatalan pembeli ${refundNumber}: 75% (Rp${amount.toLocaleString("id-ID")}) menunggu keputusan. 25% tidak dikembalikan. Sandbox.`
+      : `Pengajuan refund ${refundNumber} sebesar Rp${amount.toLocaleString("id-ID")} menunggu keputusan.`;
   await notifyRefund(orderId, id, refundNumber, "REQUESTED", waitNote);
   const rows = await query<RefundRow>(
-    `SELECT ${REFUND_COLS} FROM refunds rf WHERE rf.id=$1`,
+    `SELECT ${REFUND_COLS} FROM ${REFUND_JOIN} WHERE rf.id=$1`,
     [id],
   );
   if (!rows[0]) throw new AppError("INTERNAL_ERROR", "Terjadi kesalahan internal.", {}, 500);
@@ -423,8 +454,8 @@ export async function requestBuyerRefund(buyerId: string, orderId: string, reaso
   }
   const priorBuyer = await query<RefundRow>(
     `SELECT ${REFUND_COLS}
-     FROM refunds rf WHERE rf.order_id=$1 AND rf.source='BUYER' AND rf.status IN ('REQUESTED','APPROVED','PROCESSING','COMPLETED')
-     ORDER BY created_at DESC LIMIT 1`,
+     FROM ${REFUND_JOIN} WHERE rf.order_id=$1 AND rf.source='BUYER' AND rf.status IN ('REQUESTED','APPROVED','PROCESSING','COMPLETED','FAILED')
+     ORDER BY rf.created_at DESC, rf.id DESC LIMIT 1`,
     [orderId],
   );
   if (priorBuyer[0]) return refundDto(priorBuyer[0]);
@@ -435,18 +466,60 @@ export async function requestBuyerRefund(buyerId: string, orderId: string, reaso
   return insertRefund(orderId, buyerId, amount, reason, "BUYER", bank);
 }
 
+async function dispatchProviderRefund(refundId: string): Promise<ReturnType<typeof refundDto>> {
+  const rows = await query<RefundRow>(`SELECT ${REFUND_COLS} FROM ${REFUND_JOIN} WHERE rf.id=$1`, [refundId]);
+  const rf = rows[0];
+  if (!rf) throw new AppError("NOT_FOUND", "Refund tidak ditemukan.", {}, 404);
+  if (rf.status === "COMPLETED") return refundDto(rf);
+  if (!usesMidtransRefundApi(rf)) {
+    throw new AppError("REFUND_NOT_ALLOWED", "Unggah bukti transfer untuk menyelesaikan refund ini.", {}, 409);
+  }
+  const pay = await paidPayment(rf.order_id);
+  const ref = String(pay.external_reference || "").trim();
+  if (!ref) throw new AppError("SERVICE_UNHEALTHY", "Referensi pembayaran Midtrans tidak ada.", {}, 502);
+  const key = midtransRefundKey(refundId);
+  await execute(
+    `UPDATE refunds SET status='PROCESSING'::refund_status, external_reference=COALESCE(external_reference,$2),
+            updated_at=CURRENT_TIMESTAMP, version=version+1
+     WHERE id=$1 AND status IN ('APPROVED'::refund_status,'PROCESSING'::refund_status,'FAILED'::refund_status)`,
+    [refundId, key],
+  );
+  try {
+    await createMidtransRefund({
+      orderId: ref,
+      amountRupiah: Number(rf.amount_rupiah),
+      refundKey: key,
+      reason: rf.reason,
+    });
+  } catch (err) {
+    const detail =
+      err instanceof AppError ? err.message.slice(0, 240) : "Refund Midtrans gagal dikirim.";
+    await execute(
+      `UPDATE refunds SET status='FAILED'::refund_status, decision_reason=$2,
+              updated_at=CURRENT_TIMESTAMP, version=version+1
+       WHERE id=$1 AND status='PROCESSING'::refund_status`,
+      [refundId, detail],
+    );
+    const failed = await query<RefundRow>(`SELECT ${REFUND_COLS} FROM ${REFUND_JOIN} WHERE rf.id=$1`, [refundId]);
+    if (failed[0]) {
+      await notifyRefund(rf.order_id, refundId, rf.refund_number, "FAILED", `Refund ${rf.refund_number} gagal di Midtrans. Coba kirim ulang.`);
+      return refundDto(failed[0]);
+    }
+    throw new AppError("SERVICE_UNHEALTHY", "Refund Midtrans belum dapat diproses.", {}, 502);
+  }
+  return completeSandboxRefund(refundId);
+}
+
 export async function decideRefund(adminId: string, refundId: string, decision: string, reason: string) {
   const why = reason.trim();
   if (why.length < 10) throw new AppError("VALIDATION_ERROR", "Alasan wajib minimal 10 karakter.", {}, 400);
   const d = decision.trim().toUpperCase();
   if (d === "APPROVE" || d === "APPROVED") {
-    const found = await query<{ order_id: string; source: string }>(
-      `SELECT order_id, COALESCE(source,'ADMIN') AS source FROM refunds rf WHERE rf.id=$1 LIMIT 1`,
-      [refundId],
-    );
+    const found = await query<RefundRow>(`SELECT ${REFUND_COLS} FROM ${REFUND_JOIN} WHERE rf.id=$1 LIMIT 1`, [refundId]);
     if (!found[0]) throw new AppError("NOT_FOUND", "Refund tidak ditemukan.", {}, 404);
     await assertUnusedOnly(found[0].order_id);
-    const holdBuyer = found[0].source === "BUYER";
+    const viaMidtrans = usesMidtransRefundApi(found[0]);
+    const holdBuyer = found[0].source === "BUYER" && !viaMidtrans;
     const n = await execute(
       holdBuyer
         ? `UPDATE refunds SET status='APPROVED'::refund_status, decided_by_user_id=$1, decided_at=CURRENT_TIMESTAMP, decision_reason=$2,
@@ -459,9 +532,12 @@ export async function decideRefund(adminId: string, refundId: string, decision: 
       [adminId, why, refundId],
     );
     if (!n) throw new AppError("EVENT_STATUS_INVALID", "Refund tidak dapat diputuskan.", {}, 409);
-    if (holdBuyer) {
+    if (found[0].source === "BUYER") {
       await cancelUnusedTickets(found[0].order_id, null, "REFUND_COMPLETED", refundId);
-      const rows = await query<RefundRow>(`SELECT ${REFUND_COLS} FROM refunds rf WHERE rf.id=$1`, [refundId]);
+    }
+    if (viaMidtrans) return dispatchProviderRefund(refundId);
+    if (holdBuyer) {
+      const rows = await query<RefundRow>(`SELECT ${REFUND_COLS} FROM ${REFUND_JOIN} WHERE rf.id=$1`, [refundId]);
       const r = rows[0];
       if (!r) throw new AppError("NOT_FOUND", "Refund tidak ditemukan.", {}, 404);
       await notifyRefund(
@@ -484,7 +560,7 @@ export async function decideRefund(adminId: string, refundId: string, decision: 
     );
     if (!n) throw new AppError("EVENT_STATUS_INVALID", "Refund tidak dapat diputuskan.", {}, 409);
     const rows = await query<RefundRow>(
-      `SELECT ${REFUND_COLS} FROM refunds rf WHERE rf.id=$1`,
+      `SELECT ${REFUND_COLS} FROM ${REFUND_JOIN} WHERE rf.id=$1`,
       [refundId],
     );
     const r = rows[0];
@@ -499,7 +575,7 @@ export async function listRefunds(limit = 40) {
   const n = Math.min(Math.max(limit || 40, 1), 80);
   const rows = await query<RefundRow & { order_number: string }>(
     `SELECT ${REFUND_COLS}, o.order_number
-     FROM refunds rf JOIN orders o ON o.id = rf.order_id
+     FROM ${REFUND_JOIN} JOIN orders o ON o.id = rf.order_id
      ORDER BY rf.created_at DESC, rf.id DESC
      LIMIT $1`,
     [n],
@@ -514,7 +590,7 @@ export async function listAdminRefunds(limit = 80) {
   >(
     `SELECT ${REFUND_COLS}, o.order_number, e.id AS event_id, e.title AS event_title,
             op.id AS organizer_profile_id, op.name AS organizer_name
-     FROM refunds rf
+     FROM ${REFUND_JOIN}
      JOIN orders o ON o.id = rf.order_id
      JOIN events e ON e.id = o.event_id
      JOIN organizer_profiles op ON op.id = e.organizer_profile_id
@@ -554,7 +630,7 @@ export async function listOrganizerRefunds(organizerProfileId: string, limit = 4
   const n = Math.min(Math.max(limit || 40, 1), 80);
   const rows = await query<RefundRow & { order_number: string; event_title: string }>(
     `SELECT ${REFUND_COLS}, o.order_number, e.title AS event_title
-     FROM refunds rf
+     FROM ${REFUND_JOIN}
      JOIN orders o ON o.id = rf.order_id
      JOIN events e ON e.id = o.event_id
      WHERE e.organizer_profile_id = $1
@@ -568,7 +644,7 @@ export async function listOrganizerRefunds(organizerProfileId: string, limit = 4
 async function assertOrganizerOwnsRefund(organizerProfileId: string, refundId: string): Promise<void> {
   const rows = await query<{ id: string }>(
     `SELECT rf.id
-     FROM refunds rf
+     FROM ${REFUND_JOIN}
      JOIN orders o ON o.id = rf.order_id
      JOIN events e ON e.id = o.event_id
      WHERE rf.id = $1 AND e.organizer_profile_id = $2
@@ -592,7 +668,7 @@ export async function decideOrganizerRefund(
 export async function listOrderRefunds(orderId: string) {
   const rows = await query<RefundRow>(
     `SELECT ${REFUND_COLS}
-     FROM refunds rf WHERE rf.order_id=$1 ORDER BY rf.created_at DESC, rf.id DESC`,
+     FROM ${REFUND_JOIN} WHERE rf.order_id=$1 ORDER BY rf.created_at DESC, rf.id DESC`,
     [orderId],
   );
   return rows.map(refundDto);
@@ -602,7 +678,7 @@ export async function listBuyerRefunds(buyerId: string, limit = 40) {
   const n = Math.min(Math.max(limit || 40, 1), 80);
   const rows = await query<RefundRow & { order_number: string; event_title: string }>(
     `SELECT ${REFUND_COLS}, o.order_number, e.title AS event_title
-     FROM refunds rf
+     FROM ${REFUND_JOIN}
      JOIN orders o ON o.id = rf.order_id
      JOIN events e ON e.id = o.event_id
      WHERE o.buyer_user_id = $1
@@ -619,8 +695,10 @@ export async function listBuyerEligibleOrders(buyerId: string) {
     order_number: string;
     total_payable_rupiah: string;
     event_title: string;
+    provider: string;
+    method: string;
   }>(
-    `SELECT o.id, o.order_number, o.total_payable_rupiah::text, e.title AS event_title
+    `SELECT o.id, o.order_number, o.total_payable_rupiah::text, e.title AS event_title, p.provider, p.method::text AS method
      FROM orders o
      JOIN events e ON e.id = o.event_id
      JOIN payments p ON p.order_id = o.id
@@ -631,7 +709,7 @@ export async function listBuyerEligibleOrders(buyerId: string) {
        AND NOT EXISTS (
          SELECT 1 FROM refunds rf
          WHERE rf.order_id = o.id AND rf.source = 'BUYER'
-           AND rf.status IN ('REQUESTED','APPROVED','PROCESSING','COMPLETED')
+           AND rf.status IN ('REQUESTED','APPROVED','PROCESSING','COMPLETED','FAILED')
        )
      ORDER BY o.created_at DESC, o.id DESC
      LIMIT 40`,
@@ -643,21 +721,28 @@ export async function listBuyerEligibleOrders(buyerId: string) {
     eventTitle: r.event_title,
     totalPayableRupiah: Number(r.total_payable_rupiah),
     estimatedRefundRupiah: buyerCancelRefundAmount(Number(r.total_payable_rupiah)),
+    viaMidtrans: r.provider === "midtrans" && midtransRefundApiSupported(r.method),
   }));
 }
 
 async function attachTransferProofAndComplete(refundId: string, proof: Buffer) {
-  const current = await query<RefundRow>(`SELECT ${REFUND_COLS} FROM refunds rf WHERE rf.id=$1`, [refundId]);
+  const current = await query<RefundRow>(`SELECT ${REFUND_COLS} FROM ${REFUND_JOIN} WHERE rf.id=$1`, [refundId]);
   const rf = current[0];
   if (!rf) throw new AppError("NOT_FOUND", "Refund tidak ditemukan.", {}, 404);
-  if (rf.status !== "APPROVED" && rf.status !== "PROCESSING") {
+  if (usesMidtransRefundApi(rf)) {
+    if (rf.status === "FAILED" || rf.status === "APPROVED" || rf.status === "PROCESSING") {
+      return dispatchProviderRefund(refundId);
+    }
+    throw new AppError("REFUND_NOT_ALLOWED", "Refund ini dikembalikan lewat Midtrans, bukan bukti transfer.", {}, 409);
+  }
+  if (rf.status !== "APPROVED" && rf.status !== "PROCESSING" && rf.status !== "FAILED") {
     throw new AppError("REFUND_NOT_ALLOWED", "Unggah bukti hanya setelah refund disetujui.", {}, 409);
   }
   const url = await saveGalleryFile(proof);
   const name = url.replace(/^.*\//, "");
   const n = await execute(
     `UPDATE refunds SET transfer_proof_name=$2, transferred_at=CURRENT_TIMESTAMP, updated_at=CURRENT_TIMESTAMP, version=version+1
-     WHERE id=$1 AND status IN ('APPROVED'::refund_status,'PROCESSING'::refund_status)`,
+     WHERE id=$1 AND status IN ('APPROVED'::refund_status,'PROCESSING'::refund_status,'FAILED'::refund_status)`,
     [refundId, name],
   );
   if (!n) throw new AppError("REFUND_NOT_ALLOWED", "Bukti transfer tidak dapat disimpan.", {}, 409);
@@ -668,15 +753,16 @@ export async function confirmOrganizerTransfer(
   _userId: string,
   organizerProfileId: string,
   refundId: string,
-  proof: Buffer,
+  proof?: Buffer | null,
 ) {
   await assertOrganizerOwnsRefund(organizerProfileId, refundId);
+  if (!proof) return dispatchProviderRefund(refundId);
   return attachTransferProofAndComplete(refundId, proof);
 }
 
-export async function confirmAdminTransfer(adminId: string, refundId: string, proof: Buffer) {
+export async function confirmAdminTransfer(adminId: string, refundId: string, proof?: Buffer | null) {
   if (!adminId) throw new AppError("FORBIDDEN", "Anda tidak memiliki akses.", {}, 403);
-  const done = await attachTransferProofAndComplete(refundId, proof);
+  const done = proof ? await attachTransferProofAndComplete(refundId, proof) : await dispatchProviderRefund(refundId);
   const owner = await query<{ owner_user_id: string }>(
     `SELECT op.owner_user_id
      FROM refunds rf
@@ -705,7 +791,7 @@ export async function confirmAdminTransfer(adminId: string, refundId: string, pr
 export async function readRefundProof(userId: string, role: string, refundId: string) {
   const rows = await query<RefundRow & { buyer_user_id: string; organizer_profile_id: string }>(
     `SELECT ${REFUND_COLS}, o.buyer_user_id, e.organizer_profile_id
-     FROM refunds rf
+     FROM ${REFUND_JOIN}
      JOIN orders o ON o.id = rf.order_id
      JOIN events e ON e.id = o.event_id
      WHERE rf.id = $1
@@ -757,7 +843,8 @@ export async function enqueueEventCancelledRefunds(eventId: string, actorId: str
          WHERE id=$3 AND status='REQUESTED'::refund_status`,
         [actorId, "Disetujui otomatis karena event dibatalkan (sandbox).", created.id],
       );
-      await completeSandboxRefund(created.id);
+      if (pay.provider === "midtrans" && midtransRefundApiSupported(pay.method)) await dispatchProviderRefund(created.id);
+      else await completeSandboxRefund(created.id);
     } catch {
       /* event cancel must not fail because one refund row failed */
     }

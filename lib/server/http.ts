@@ -197,6 +197,8 @@ export function jsonError(err: unknown, req?: NextRequest): NextResponse {
       },
     );
   }
+  const raw = err instanceof Error ? err.message : "unknown";
+  console.error("unhandled_error", raw.slice(0, 200));
   return NextResponse.json(
     { error: { code: "INTERNAL_ERROR", message: "Terjadi kesalahan internal.", correlationId: id, fieldErrors: {} } },
     { status: 500, headers: { "Cache-Control": "private, no-store", "X-Correlation-Id": id } },

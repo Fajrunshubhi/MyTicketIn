@@ -6,18 +6,19 @@ Dokumen ini berlaku untuk seluruh repository. Gunakan sebagai petunjuk operasion
 
 MyTicketIn adalah aplikasi web tiket event tatap muka untuk pembeli, organizer, petugas check-in, dan admin.
 
-Target aktif adalah **MVP akademik**:
+Konteks pengerjaan adalah **skripsi**. Produknya dirancang agar dapat dipakai untuk bisnis tiket, bukan sebagai klaim bahwa penulis sudah menjalankan badan usaha.
 
-- Payment gateway sandbox dan data uji.
-- Tidak menerima uang nyata.
-- Tidak mengaktifkan payout atau refund finansial produksi.
+- Demo, tes, dan CI memakai pembayaran **uji** (`PAYMENT_ENV=sandbox`).
+- Pembayaran pembeli **nyata** (QRIS, virtual account, e-wallet) hanya lewat Midtrans Production bila `PAYMENT_ENV=production`, Server Key `Mid-server-`, dan `WEB_ORIGIN` https publik. Dana masuk ke akun merchant Midtrans (PJP berizin), bukan ditampung aplikasi.
+- Pencairan otomatis ke banyak rekening organizer **belum** diaktifkan; pencairan organizer tetap catatan + transfer manual admin. Refund pembeli untuk pembayaran Midtrans memakai Refund API (kembali ke sumber bayar); bukti transfer manual hanya untuk jalur uji internal.
+- Jangan menganggap kunci Production di mesin lokal sebagai izin go-live.
 - Deployment: Vercel untuk UI+API Next.js; migrasi SQL di `/migrations` dijalankan dengan `npm run migrate`.
 - Runtime transaksi target adalah **Next.js Route Handlers + PostgreSQL**. `backend/` Go sudah dihapus atas keputusan Product Owner (riwayat: tag git `pre-go-removal`); jangan membuat ulang.
 - Implementasi fitur mengikuti RFC-001–RFC-014; pemindahan kode mengikuti RFC-021.
 - Baseline produk `prd-improved.md` 2.2 memiliki 78 fitur: 58 Must, 5 Should, 4 Could, dan 11 Won’t; cakupan aktif MVP adalah 67 fitur (F78 Kode promo event ditambahkan atas keputusan Product Owner).
-- F20, F46, F49, F50, F51, F65, F74–F77, serta F78 wajib. F42, F63–F64, dan F66–F73 tetap Won’t Have.
+- F20, F46, F49, F50, F51, F65, F74–F78 wajib. F63 (pembayaran pembeli nyata) aktif hanya lewat `PAYMENT_ENV=production`. F42, F64, dan F66–F73 tetap Won’t Have.
 
-RFC-015–RFC-020 adalah rancangan komersial **Deferred**. Jangan merencanakan atau mengimplementasikannya sebelum Commercial Entry Gate disetujui eksplisit.
+RFC-015–RFC-020 tetap rancangan lanjutan (legal/KYC penuh, ledger produksi, payout otomatis, live-charge gate RFC-020). Product Owner telah membuka **pembayaran pembeli Midtrans Production** sebagai kemampuan produk; itu tidak mengaktifkan Iris/payout otomatis atau mengubah F42, F64, dan F66–F73.
 
 ## 2. Sumber Kebenaran
 

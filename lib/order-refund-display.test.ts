@@ -5,6 +5,8 @@ import {
   orderDocumentTitle,
   orderStampLabel,
   refundOversightFlag,
+  refundStatusUiLabel,
+  refundTimeline,
   ticketsCancelledByRefund,
 } from "./order-refund-display";
 
@@ -34,6 +36,11 @@ describe("order refund display", () => {
   it("cancels tickets when a buyer refund is approved, before transfer proof", () => {
     expect(ticketsCancelledByRefund("PAID", [{ amountRupiah: 1, status: "APPROVED", source: "BUYER" }])).toBe(true);
     expect(ticketsCancelledByRefund("PAID", [{ amountRupiah: 1, status: "REQUESTED", source: "BUYER" }])).toBe(false);
+  });
+
+  it("explains VA refund failure as transfer proof, not Midtrans retry", () => {
+    const vaFail = refundTimeline({ status: "FAILED", viaMidtrans: false });
+    expect(vaFail.find((s) => s.id === "transfer")?.detail).toContain("bukti transfer");
   });
 
   it("flags organizer SLA breaches for platform oversight", () => {

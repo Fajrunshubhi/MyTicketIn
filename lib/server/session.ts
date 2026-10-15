@@ -1,5 +1,6 @@
 import bcrypt from "bcryptjs";
 import { NextRequest } from "next/server";
+import { parsePhoneId } from "@/lib/phone-id";
 import { accessFor, type AuthUser } from "@/lib/server/access";
 import { AppError, COOKIE_SESSION, newId, query, randomToken, SESSION_TTL_MS, tokenHash } from "@/lib/server/http";
 import { sendPasswordResetMail, passwordResetUrl } from "@/lib/server/mail";
@@ -126,12 +127,23 @@ export async function findUserByIdentifier(identifier: string): Promise<(AuthUse
   return { ...mapUser(row), passwordHash: row.password_hash };
 }
 
+export type PasswordLoginResult =
+  | { user: AuthUser; acc: Awaited<ReturnType<typeof accessFor>>; portal: string; otpRequired: true }
+  | {
+      user: AuthUser;
+      acc: Awaited<ReturnType<typeof accessFor>>;
+      portal: string;
+      raw: string;
+      csrf: string;
+      expiresAt: Date;
+    };
+
 export async function loginWithPassword(
   identifier: string,
   password: string,
   portalRaw: string,
   organizerId = "",
-) {
+): Promise<PasswordLoginResult> {
   const dummy = "$2a$10$abcdefghijklmnopqrstuuABCDEFGHIJKLMNOPQRSTUVWX12";
   const portalHint = portalRaw.trim().toLowerCase();
   if (portalHint === "staff") {
@@ -183,26 +195,152 @@ export async function loginWithPassword(
   const portal = resolvePortal(portalRaw, acc);
   const denied = authorizePortal(portal, acc);
   if (denied) throw new AppError("AUTH_PORTAL_DENIED", denied, {}, 403);
-  const issued = await issueSession(user);
-  return { user, acc, portal, ...issued };
+  return { user, acc, portal, otpRequired: true as const };
 }
 
-export async function updateProfile(user: AuthUser, nameRaw: string, emailRaw: string): Promise<AuthUser> {
+export type BuyerProfile = AuthUser & {
+  phone: string | null;
+  dateOfBirth: string | null;
+  city: string | null;
+  gender: string | null;
+  emailVerifiedAt: string | null;
+};
+
+export async function getBuyerProfile(userId: string): Promise<BuyerProfile | null> {
+  const rows = await query<{
+    id: string;
+    name: string;
+    username: string;
+    email: string;
+    role: string;
+    status: string;
+    auth_version: number;
+    phone: string | null;
+    date_of_birth: string | null;
+    city: string | null;
+    gender: string | null;
+    email_verified_at: string | null;
+  }>(
+    `SELECT id, name, username, email, role::text AS role, status::text AS status, auth_version,
+            phone, date_of_birth::text, city, gender, email_verified_at::text
+       FROM users WHERE id=$1 LIMIT 1`,
+    [userId],
+  );
+  const row = rows[0];
+  if (!row) return null;
+  return {
+    ...mapUser(row),
+    phone: row.phone,
+    dateOfBirth: row.date_of_birth,
+    city: row.city,
+    gender: row.gender,
+    emailVerifiedAt: row.email_verified_at,
+  };
+}
+
+const GENDERS = new Set(["FEMALE", "MALE", "OTHER", "UNDISCLOSED"]);
+
+export async function updateProfile(
+  user: AuthUser,
+  input: {
+    name: string;
+    username?: string;
+    email: string;
+    phone?: string;
+    dateOfBirth?: string;
+    city?: string;
+    gender?: string;
+  },
+): Promise<BuyerProfile> {
   const fields: Record<string, string> = {};
-  const name = nameRaw.trim();
+  const name = input.name.trim();
   if ([...name].length < 2 || [...name].length > 120) fields.name = "Nama wajib 2–120 karakter.";
-  const email = emailRaw.trim().toLowerCase();
-  if (email.length > 254 || !email.includes("@")) fields.email = "Format email tidak valid.";
-  if (Object.keys(fields).length) throw new AppError("VALIDATION_ERROR", "Periksa kembali isian formulir.", fields, 400);
-  const other = await findUserByIdentifier(email);
-  if (other && other.id !== user.id) {
-    throw new AppError("EMAIL_ALREADY_EXISTS", "Email sudah terdaftar.", {}, 409);
+  const username = String(input.username || user.username).trim().toLowerCase();
+  if (!/^[a-z0-9._-]{3,40}$/.test(username)) {
+    fields.username = "Username 3–40 karakter: huruf kecil, angka, titik, underscore, atau strip.";
   }
+  const email = input.email.trim().toLowerCase();
+  if (email.length > 254 || !email.includes("@")) fields.email = "Format email tidak valid.";
+  const phoneRaw = String(input.phone || "").trim();
+  const phone = phoneRaw ? parsePhoneId(phoneRaw) : null;
+  if (phoneRaw && !phone) fields.phone = "Nomor HP Indonesia tidak valid. Contoh: 081234567890.";
+  const city = String(input.city || "").trim();
+  if (city && (city.length < 2 || city.length > 80)) fields.city = "Kota/kabupaten 2–80 karakter.";
+  const gender = String(input.gender || "").trim().toUpperCase();
+  if (gender && !GENDERS.has(gender)) fields.gender = "Pilih jenis kelamin yang tersedia.";
+  let dob: string | null = null;
+  const dobRaw = String(input.dateOfBirth || "").trim();
+  if (dobRaw) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(dobRaw)) fields.dateOfBirth = "Tanggal lahir tidak valid.";
+    else {
+      const d = new Date(`${dobRaw}T00:00:00Z`);
+      const age = (Date.now() - d.getTime()) / (365.25 * 24 * 3600 * 1000);
+      if (Number.isNaN(d.getTime()) || age < 13 || age > 120) fields.dateOfBirth = "Usia minimal 13 tahun.";
+      else dob = dobRaw;
+    }
+  }
+  if (Object.keys(fields).length) throw new AppError("VALIDATION_ERROR", "Periksa kembali isian formulir.", fields, 400);
+  if (username !== user.username) {
+    const taken = await findUserByIdentifier(username);
+    if (taken && taken.id !== user.id) throw new AppError("USERNAME_ALREADY_EXISTS", "Username sudah digunakan.", {}, 409);
+  }
+  if (email !== user.email) {
+    const other = await findUserByIdentifier(email);
+    if (other && other.id !== user.id) throw new AppError("EMAIL_ALREADY_EXISTS", "Email sudah terdaftar.", {}, 409);
+  }
+  const emailChanged = email !== user.email;
+  await query(
+    `UPDATE users SET name=$2, username=$3, email=$4, phone=$5, date_of_birth=$6::date, city=$7, gender=$8,
+            email_verified_at = CASE WHEN $9 THEN NULL ELSE email_verified_at END,
+            updated_at = CURRENT_TIMESTAMP
+     WHERE id=$1`,
+    [user.id, name, username, email, phone, dob, city || null, gender || null, emailChanged],
+  );
+  const updated = await getBuyerProfile(user.id);
+  if (!updated) throw new AppError("INTERNAL_ERROR", "Terjadi kesalahan internal.", {}, 500);
+  return updated;
+}
+
+export type RegisterDraft = {
+  name: string;
+  username: string;
+  email: string;
+  phone: string;
+  passwordHash: string;
+};
+
+export function validateRegisterInput(input: {
+  name: string;
+  username: string;
+  email: string;
+  phone?: string;
+  password: string;
+  confirmPassword: string;
+}): { name: string; username: string; email: string; phone: string } {
+  const fields: Record<string, string> = {};
+  const name = input.name.trim();
+  if ([...name].length < 2 || [...name].length > 120) fields.name = "Nama wajib 2–120 karakter.";
+  const username = input.username.trim().toLowerCase();
+  if (!/^[a-z0-9._-]{3,40}$/.test(username)) {
+    fields.username = "Username 3–40 karakter: huruf kecil, angka, titik, underscore, atau strip.";
+  }
+  const email = input.email.trim().toLowerCase();
+  if (email.length > 254 || !email.includes("@")) fields.email = "Format email tidak valid.";
+  const phone = parsePhoneId(String(input.phone || ""));
+  if (!phone) fields.phone = "Nomor HP Indonesia wajib. Contoh: 081234567890.";
+  if (input.password.length < 10 || input.password.length > 128) fields.password = "Kata sandi wajib 10–128 karakter.";
+  if (input.password !== input.confirmPassword) fields.confirmPassword = "Konfirmasi kata sandi tidak sama.";
+  if (Object.keys(fields).length || !phone) throw new AppError("VALIDATION_ERROR", "Periksa kembali isian formulir.", fields, 400);
+  return { name, username, email, phone };
+}
+
+export async function insertRegisteredUser(draft: RegisterDraft): Promise<AuthUser> {
+  const id = newId();
   const rows = await query<AuthUser & { role: string; status: string; auth_version: number }>(
-    `UPDATE users SET name = $2, email = $3, updated_at = CURRENT_TIMESTAMP
-     WHERE id = $1
+    `INSERT INTO users (id, name, username, email, phone, password_hash, role, email_verified_at)
+     VALUES ($1, $2, $3, $4, $5, $6, 'USER'::user_role, CURRENT_TIMESTAMP)
      RETURNING id, name, username, email, role::text AS role, status::text AS status, auth_version`,
-    [user.id, name, email],
+    [id, draft.name, draft.username, draft.email, draft.phone, draft.passwordHash],
   );
   const row = rows[0];
   if (!row) throw new AppError("INTERNAL_ERROR", "Terjadi kesalahan internal.", {}, 500);
@@ -215,35 +353,17 @@ export async function registerUser(input: {
   email: string;
   password: string;
   confirmPassword: string;
+  phone?: string;
 }): Promise<AuthUser> {
-  const fields: Record<string, string> = {};
-  const name = input.name.trim();
-  if ([...name].length < 2 || [...name].length > 120) fields.name = "Nama wajib 2–120 karakter.";
-  const username = input.username.trim().toLowerCase();
-  if (!/^[a-z0-9._-]{3,40}$/.test(username)) {
-    fields.username = "Username 3–40 karakter: huruf kecil, angka, titik, underscore, atau strip.";
-  }
-  const email = input.email.trim().toLowerCase();
-  if (email.length > 254 || !email.includes("@")) fields.email = "Format email tidak valid.";
-  if (input.password.length < 10 || input.password.length > 128) fields.password = "Kata sandi wajib 10–128 karakter.";
-  if (input.password !== input.confirmPassword) fields.confirmPassword = "Konfirmasi kata sandi tidak sama.";
-  if (Object.keys(fields).length) throw new AppError("VALIDATION_ERROR", "Periksa kembali isian formulir.", fields, 400);
+  const parsed = validateRegisterInput(input);
   const hash = await bcrypt.hash(input.password, 12);
-  const id = newId();
-  try {
-    const rows = await query<AuthUser & { role: string; status: string; auth_version: number }>(
-      `INSERT INTO users (id, name, username, email, password_hash, role)
-       VALUES ($1, $2, $3, $4, $5, 'USER'::user_role)
-       RETURNING id, name, username, email, role::text AS role, status::text AS status, auth_version`,
-      [id, name, username, email, hash],
-    );
-    const row = rows[0];
-    if (!row) throw new AppError("INTERNAL_ERROR", "Terjadi kesalahan internal.", {}, 500);
-    return mapUser(row);
-  } catch (err) {
-    if (err instanceof AppError) throw err;
-    throw err;
-  }
+  return insertRegisteredUser({ ...parsed, passwordHash: hash });
+}
+
+export async function markEmailVerified(userId: string): Promise<void> {
+  await query(`UPDATE users SET email_verified_at = COALESCE(email_verified_at, CURRENT_TIMESTAMP), updated_at = CURRENT_TIMESTAMP WHERE id=$1`, [
+    userId,
+  ]);
 }
 
 export async function revokeAllSessions(user: AuthUser): Promise<void> {
@@ -317,8 +437,8 @@ export async function resolveGoogle(
   const username = googleUsername(email);
   const name = profile.name.trim() || username;
   const rows = await query<AuthUser & { role: string; status: string; auth_version: number }>(
-    `INSERT INTO users (id, name, username, email, role)
-     VALUES ($1, $2, $3, $4, 'USER'::user_role)
+    `INSERT INTO users (id, name, username, email, role, email_verified_at)
+     VALUES ($1, $2, $3, $4, 'USER'::user_role, CURRENT_TIMESTAMP)
      RETURNING id, name, username, email, role::text AS role, status::text AS status, auth_version`,
     [id, name, username, email],
   );

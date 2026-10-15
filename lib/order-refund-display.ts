@@ -75,12 +75,12 @@ export function orderStatusUiLabel(kind: OrderDocumentKind): string {
   return "Gagal";
 }
 
-export function refundStatusUiLabel(status: string): string {
+export function refundStatusUiLabel(status: string, viaMidtrans = false): string {
   if (status === "REQUESTED") return "Menunggu keputusan";
-  if (status === "APPROVED") return "Disetujui · menunggu transfer";
+  if (status === "APPROVED") return viaMidtrans ? "Disetujui · Midtrans" : "Disetujui · menunggu transfer";
   if (status === "REJECTED") return "Ditolak";
-  if (status === "PROCESSING") return "Transfer diproses";
-  if (status === "COMPLETED") return "Selesai";
+  if (status === "PROCESSING") return viaMidtrans ? "Diproses Midtrans" : "Transfer diproses";
+  if (status === "COMPLETED") return viaMidtrans ? "Dikembalikan Midtrans" : "Selesai";
   if (status === "FAILED") return "Gagal";
   return status;
 }
@@ -101,17 +101,20 @@ export function refundTimeline(input: {
   transferredAt?: string | null;
   completedAt?: string | null;
   decisionReason?: string | null;
+  viaMidtrans?: boolean;
 }): RefundTimelineStep[] {
   const status = input.status;
   const rejected = status === "REJECTED";
+  const failed = status === "FAILED";
   const approved = status === "APPROVED" || status === "PROCESSING" || status === "COMPLETED";
   const transferring = status === "APPROVED" || status === "PROCESSING";
   const done = status === "COMPLETED";
+  const via = Boolean(input.viaMidtrans);
   return [
     {
       id: "submit",
       label: "Diajukan",
-      detail: "Pengajuan dan rekening diterima.",
+      detail: via ? "Pengajuan diterima." : "Pengajuan dan rekening diterima.",
       state: "done",
     },
     {
@@ -123,25 +126,45 @@ export function refundTimeline(input: {
     {
       id: "decision",
       label: rejected ? "Ditolak" : "Disetujui",
-      detail: rejected ? input.decisionReason || "Lihat alasan penyelenggara." : "Tiket tidak berlaku. Transfer sandbox menyusul.",
+      detail: rejected
+        ? input.decisionReason || "Lihat alasan penyelenggara."
+        : via
+          ? "Tiket tidak berlaku. Dana dikembalikan ke sumber bayar Midtrans."
+          : "Tiket tidak berlaku. Transfer sandbox menyusul.",
       state: rejected ? "error" : approved ? "done" : "wait",
     },
     {
       id: "transfer",
-      label: "Menunggu transfer",
-      detail: done
-        ? "Bukti transfer sudah diunggah."
-        : transferring
-          ? "Penyelenggara boleh menahan transfer maksimal 1×24 jam."
-          : rejected
-            ? "Tidak dilanjutkan."
-            : "Setelah disetujui, maksimal 24 jam.",
-      state: done ? "done" : transferring ? "current" : rejected ? "wait" : "wait",
+      label: via ? "Refund Midtrans" : "Menunggu transfer",
+      detail: failed
+        ? via
+          ? "Pengembalian Midtrans gagal. Kirim ulang dari halaman penyelenggara."
+          : "Pengembalian otomatis tidak tersedia. Unggah bukti transfer dari halaman penyelenggara."
+        : done
+          ? via
+            ? "Midtrans mengembalikan ke sumber pembayaran."
+            : "Bukti transfer sudah diunggah."
+          : transferring
+            ? via
+              ? "Menunggu konfirmasi Midtrans."
+              : "Penyelenggara boleh menahan transfer maksimal 1×24 jam."
+            : rejected
+              ? "Tidak dilanjutkan."
+              : via
+                ? "Setelah disetujui, dana dikembalikan lewat Midtrans."
+                : "Setelah disetujui, maksimal 24 jam.",
+      state: failed ? "error" : done ? "done" : transferring ? "current" : rejected ? "wait" : "wait",
     },
     {
       id: "complete",
       label: "Selesai",
-      detail: done ? "Refund sandbox selesai. Bukan uang nyata." : "Menunggu bukti transfer.",
+      detail: done
+        ? via
+          ? "Refund selesai melalui Midtrans."
+          : "Refund sandbox selesai. Bukan uang nyata."
+        : via
+          ? "Menunggu Midtrans."
+          : "Menunggu bukti transfer.",
       state: done ? "done" : "wait",
     },
   ];

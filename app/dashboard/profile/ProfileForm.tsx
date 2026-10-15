@@ -8,6 +8,7 @@ import { Icon } from "@/components/ui/Icon";
 import { OrganizerApplicationSection } from "@/components/organizer/OrganizerApplicationSection";
 import { apiFetch, readApiError, type ApiError } from "@/lib/api";
 import { roleLabel, type AccountProfile } from "@/lib/account";
+import { displayPhoneId } from "@/lib/phone-id";
 
 const fieldClass =
   "w-full h-11 min-h-11 rounded-xl border border-stone-200 bg-white px-3 text-sm text-ink outline-none focus:ring-2";
@@ -16,7 +17,12 @@ export function ProfileForm() {
   const router = useRouter();
   const [me, setMe] = useState<AccountProfile | null>(null);
   const [name, setName] = useState("");
+  const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
+  const [dateOfBirth, setDateOfBirth] = useState("");
+  const [city, setCity] = useState("");
+  const [gender, setGender] = useState("");
   const [error, setError] = useState("");
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [saved, setSaved] = useState("");
@@ -33,7 +39,12 @@ export function ProfileForm() {
         if (body.data) {
           setMe(body.data);
           setName(body.data.name);
+          setUsername(body.data.username);
           setEmail(body.data.email);
+          setPhone(displayPhoneId(body.data.phone));
+          setDateOfBirth(body.data.dateOfBirth ? body.data.dateOfBirth.slice(0, 10) : "");
+          setCity(body.data.city || "");
+          setGender(body.data.gender || "");
         }
       })
       .catch(() => router.replace("/login"));
@@ -48,7 +59,7 @@ export function ProfileForm() {
     const response = await apiFetch("/api/me", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name, email }),
+      body: JSON.stringify({ name, username, email, phone, dateOfBirth, city, gender }),
     });
     const payload = (await response.json().catch(() => ({}))) as ApiError & { data?: AccountProfile };
     setLoading(false);
@@ -60,7 +71,12 @@ export function ProfileForm() {
     if (payload.data) {
       setMe(payload.data);
       setName(payload.data.name);
+      setUsername(payload.data.username);
       setEmail(payload.data.email);
+      setPhone(displayPhoneId(payload.data.phone));
+      setDateOfBirth(payload.data.dateOfBirth ? payload.data.dateOfBirth.slice(0, 10) : "");
+      setCity(payload.data.city || "");
+      setGender(payload.data.gender || "");
     }
     setSaved("Profil berhasil disimpan.");
   }
@@ -73,68 +89,108 @@ export function ProfileForm() {
     );
   }
 
-  // Only accounts that already have an organizer application see it here; buyers apply from the dashboard menu.
   const showOrganizerSection =
     !(me.access?.isAdmin || me.role === "ADMIN") && Boolean(me.access?.organizerStatus || me.access?.kind === "organizer");
 
   return (
     <>
-    <section className="mx-auto w-full max-w-2xl px-6 pb-4">
-      <div className="overflow-hidden rounded-3xl border border-stone-200 bg-paper p-8 shadow-card md:p-10">
-        <p className="text-sm font-medium uppercase tracking-[0.24em] text-gold-700">Profil</p>
-        <h1 className="font-display mt-4 text-4xl text-ink">Edit profil</h1>
-        <p className="mt-3 text-ink/65">Ubah nama tampilan dan email. Username dan peran tidak dapat diubah di sini.</p>
+      <section className="mx-auto w-full max-w-2xl px-6 pb-4">
+        <div className="overflow-hidden rounded-3xl border border-stone-200 bg-paper p-8 shadow-card md:p-10">
+          <p className="text-sm font-medium uppercase tracking-[0.24em] text-gold-700">Profil</p>
+          <h1 className="font-display mt-4 text-4xl text-ink">Edit profil</h1>
+          <p className="mt-3 text-ink/65">
+            Lengkapi biodata seperti aplikasi tiket produksi. Nomor HP dipakai saat beli tiket dan sebagai customer
+            details Midtrans.
+          </p>
 
-        <dl className="mt-6 grid gap-3 sm:grid-cols-2">
-          <div className="rounded-2xl border border-stone-200 bg-white p-4">
-            <dt className="flex items-center gap-2 text-sm text-ink/45">
-              <Icon name="user" className="h-4 w-4" />
-              Username
-            </dt>
-            <dd className="mt-1 text-ink">{me.username}</dd>
-          </div>
-          <div className="rounded-2xl border border-stone-200 bg-white p-4">
-            <dt className="flex items-center gap-2 text-sm text-ink/45">
-              <Icon name="shield" className="h-4 w-4" />
-              Peran
-            </dt>
-            <dd className="mt-1 text-ink">{roleLabel(me)}</dd>
-          </div>
-        </dl>
+          <dl className="mt-6 grid gap-3 sm:grid-cols-2">
+            <div className="rounded-2xl border border-stone-200 bg-white p-4">
+              <dt className="flex items-center gap-2 text-sm text-ink/45">
+                <Icon name="shield" className="h-4 w-4" />
+                Peran
+              </dt>
+              <dd className="mt-1 text-ink">{roleLabel(me)}</dd>
+            </div>
+            <div className="rounded-2xl border border-stone-200 bg-white p-4">
+              <dt className="flex items-center gap-2 text-sm text-ink/45">Email terverifikasi</dt>
+              <dd className="mt-1 text-ink">{me.emailVerifiedAt ? "Ya" : "Belum — verifikasi lewat OTP saat masuk"}</dd>
+            </div>
+          </dl>
 
-        <form className="mt-8 space-y-4" onSubmit={onSubmit} noValidate>
-          <label className="block text-sm">
-            <span className="font-medium text-ink">Nama</span>
-            <input className={`${fieldClass} mt-1`} name="name" value={name} onChange={(e) => setName(e.target.value)} required minLength={2} maxLength={120} autoComplete="name" />
-            {fieldErrors.name ? <span className="mt-1 block text-sm text-red-700">{fieldErrors.name}</span> : null}
-          </label>
-          <label className="block text-sm">
-            <span className="font-medium text-ink">Email</span>
-            <input className={`${fieldClass} mt-1`} name="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required autoComplete="email" />
-            {fieldErrors.email ? <span className="mt-1 block text-sm text-red-700">{fieldErrors.email}</span> : null}
-          </label>
-          {error ? (
-            <p role="alert" className="text-sm text-red-700">
-              {error}
-            </p>
-          ) : null}
-          {saved ? (
-            <p role="status" className="text-sm text-emerald-800">
-              {saved}
-            </p>
-          ) : null}
-          <div className="flex flex-wrap gap-3">
-            <Button type="submit" loading={loading}>
-              Simpan
-            </Button>
-            <a href="/dashboard" className="inline-flex min-h-11 items-center justify-center rounded-full px-4 py-2 text-sm font-medium text-ink/80 hover:bg-white">
-              Kembali ke dashboard
-            </a>
-          </div>
-        </form>
-      </div>
-    </section>
-    {showOrganizerSection ? <OrganizerApplicationSection /> : null}
+          <form className="mt-8 space-y-4" onSubmit={onSubmit} noValidate>
+            <label className="block text-sm">
+              <span className="font-medium text-ink">Nama lengkap</span>
+              <input className={`${fieldClass} mt-1`} name="name" value={name} onChange={(e) => setName(e.target.value)} required minLength={2} maxLength={120} autoComplete="name" />
+              {fieldErrors.name ? <span className="mt-1 block text-sm text-red-700">{fieldErrors.name}</span> : null}
+            </label>
+            <label className="block text-sm">
+              <span className="font-medium text-ink">Username</span>
+              <input className={`${fieldClass} mt-1`} name="username" value={username} onChange={(e) => setUsername(e.target.value)} required minLength={3} maxLength={40} autoComplete="username" />
+              {fieldErrors.username ? <span className="mt-1 block text-sm text-red-700">{fieldErrors.username}</span> : null}
+            </label>
+            <label className="block text-sm">
+              <span className="font-medium text-ink">Email</span>
+              <input className={`${fieldClass} mt-1`} name="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required autoComplete="email" />
+              {fieldErrors.email ? <span className="mt-1 block text-sm text-red-700">{fieldErrors.email}</span> : null}
+            </label>
+            <label className="block text-sm">
+              <span className="font-medium text-ink">Nomor HP</span>
+              <input
+                className={`${fieldClass} mt-1`}
+                name="phone"
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                inputMode="tel"
+                autoComplete="tel"
+                placeholder="081234567890"
+              />
+              {fieldErrors.phone ? <span className="mt-1 block text-sm text-red-700">{fieldErrors.phone}</span> : null}
+            </label>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <label className="block text-sm">
+                <span className="font-medium text-ink">Tanggal lahir</span>
+                <input className={`${fieldClass} mt-1`} name="dateOfBirth" type="date" value={dateOfBirth} onChange={(e) => setDateOfBirth(e.target.value)} />
+                {fieldErrors.dateOfBirth ? <span className="mt-1 block text-sm text-red-700">{fieldErrors.dateOfBirth}</span> : null}
+              </label>
+              <label className="block text-sm">
+                <span className="font-medium text-ink">Kota/kabupaten</span>
+                <input className={`${fieldClass} mt-1`} name="city" value={city} onChange={(e) => setCity(e.target.value)} autoComplete="address-level2" />
+                {fieldErrors.city ? <span className="mt-1 block text-sm text-red-700">{fieldErrors.city}</span> : null}
+              </label>
+            </div>
+            <label className="block text-sm">
+              <span className="font-medium text-ink">Jenis kelamin (opsional)</span>
+              <select className={`${fieldClass} mt-1`} name="gender" value={gender} onChange={(e) => setGender(e.target.value)}>
+                <option value="">Tidak disebutkan</option>
+                <option value="FEMALE">Perempuan</option>
+                <option value="MALE">Laki-laki</option>
+                <option value="OTHER">Lainnya</option>
+                <option value="UNDISCLOSED">Tidak ingin menyebutkan</option>
+              </select>
+              {fieldErrors.gender ? <span className="mt-1 block text-sm text-red-700">{fieldErrors.gender}</span> : null}
+            </label>
+            {error ? (
+              <p role="alert" className="text-sm text-red-700">
+                {error}
+              </p>
+            ) : null}
+            {saved ? (
+              <p role="status" className="text-sm text-emerald-800">
+                {saved}
+              </p>
+            ) : null}
+            <div className="flex flex-wrap gap-3">
+              <Button type="submit" loading={loading}>
+                Simpan
+              </Button>
+              <a href="/dashboard" className="inline-flex min-h-11 items-center justify-center rounded-full px-4 py-2 text-sm font-medium text-ink/80 hover:bg-white">
+                Kembali ke dashboard
+              </a>
+            </div>
+          </form>
+        </div>
+      </section>
+      {showOrganizerSection ? <OrganizerApplicationSection /> : null}
     </>
   );
 }

@@ -5,10 +5,11 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
-import { apiFetch, readApiError } from "@/lib/api";
-import { formatDateTime, formatRupiah } from "@/lib/format";
-import { pingNotificationsLive } from "@/lib/notifications-live";
+import { MidtransRefundNote, RefundInbox } from "@/components/refunds/RefundInbox";
 import { RefundTimeline } from "@/components/refunds/RefundTimeline";
+import { apiFetch, readApiError } from "@/lib/api";
+import { formatRupiah } from "@/lib/format";
+import { pingNotificationsLive } from "@/lib/notifications-live";
 import { refundStatusUiLabel, refundTimeline } from "@/lib/order-refund-display";
 import { REFUND_BANKS } from "@/lib/server/refund-policy";
 
@@ -32,6 +33,7 @@ type Refund = {
   accountName?: string | null;
   accountNumber?: string | null;
   hasTransferProof?: boolean;
+  viaMidtrans?: boolean;
 };
 
 type Eligible = {
@@ -40,6 +42,7 @@ type Eligible = {
   eventTitle: string;
   totalPayableRupiah: number;
   estimatedRefundRupiah: number;
+  viaMidtrans?: boolean;
 };
 
 function holdLabel(due?: string | null) {
@@ -67,7 +70,8 @@ export function BuyerRefundsClient() {
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
-  const [openId, setOpenId] = useState(focusId);
+  const [selectedId, setSelectedId] = useState(focusId);
+  const [filter, setFilter] = useState("all");
 
   function load() {
     fetch("/api/me/refunds", { credentials: "include", cache: "no-store" })
@@ -99,10 +103,16 @@ export function BuyerRefundsClient() {
   }, [preOrder]);
 
   useEffect(() => {
-    if (focusId) setOpenId(focusId);
+    if (focusId) setSelectedId(focusId);
   }, [focusId]);
 
-  const selected = useMemo(() => eligible.find((row) => row.id === orderId), [eligible, orderId]);
+  const selectedOrder = useMemo(() => eligible.find((row) => row.id === orderId), [eligible, orderId]);
+  const visible = useMemo(() => {
+    if (filter === "open") return items.filter((i) => i.status !== "COMPLETED" && i.status !== "REJECTED");
+    if (filter === "done") return items.filter((i) => i.status === "COMPLETED" || i.status === "REJECTED");
+    return items;
+  }, [items, filter]);
+  const selected = visible.find((i) => i.id === selectedId) || items.find((i) => i.id === selectedId);
 
   async function submit() {
     if (!orderId) {
@@ -122,34 +132,34 @@ export function BuyerRefundsClient() {
       setError(readApiError(body, "Tidak dapat mengajukan refund."));
       return;
     }
-    setMessage("Pengajuan terkirim. Penyelenggara akan memeriksa rekening Anda.");
+    setMessage("Pengajuan terkirim.");
     setReason("");
     pingNotificationsLive();
     load();
   }
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
       <header>
-        <p className="text-xs font-semibold uppercase tracking-wide text-gold-800">SANDBOX · bukan transfer uang nyata</p>
+        <p className="text-xs font-semibold uppercase tracking-wide text-gold-800">Refund pembeli</p>
         <h1 className="font-display mt-2 text-3xl text-ink">Refund saya</h1>
         <p className="mt-2 max-w-2xl text-sm text-ink/65">
-          Ajukan pembatalan 75% ke rekening Anda. Penyelenggara memeriksa, lalu menahan transfer paling lama 1×24 jam
-          sebelum mengunggah bukti. Jika ditolak, Anda bisa mengajukan ulang.
+          Pembatalan pembeli mengembalikan 75%. QRIS dan e-wallet Midtrans dikembalikan ke sumber bayar setelah disetujui.
+          Virtual account memakai transfer merchant ke rekening Anda.
         </p>
       </header>
 
       {error ? <Alert tone="error" title={error} /> : null}
       {message ? <Alert tone="info" title={message} /> : null}
+      <MidtransRefundNote />
 
       <section className="rounded-3xl border border-stone-200 bg-white p-5 shadow-sm md:p-6">
         <h2 className="text-lg font-semibold text-ink">Ajukan refund</h2>
-        <p className="mt-1 text-sm text-ink/60">Isi rekening tujuan. Estimasi 75% dihitung otomatis dari sisa pembayaran.</p>
         {eligible.length === 0 ? (
-          <p className="mt-4 text-sm text-ink/55">Tidak ada order yang bisa diajukan saat ini. Order lunas dengan tiket yang belum check-in akan muncul di sini.</p>
+          <p className="mt-2 text-sm text-ink/60">Tidak ada order yang dapat diajukan refund saat ini.</p>
         ) : (
           <form
-            className="mt-4 grid gap-4 md:grid-cols-2"
+            className="mt-4 grid gap-3 md:grid-cols-2"
             onSubmit={(e) => {
               e.preventDefault();
               void submit();
@@ -171,56 +181,63 @@ export function BuyerRefundsClient() {
                 ))}
               </select>
             </label>
-            {selected ? (
+            {selectedOrder ? (
               <p className="rounded-2xl bg-[#f7f5fc] px-4 py-3 text-sm text-ink/70 md:col-span-2">
-                Estimasi dikembalikan {formatRupiah(selected.estimatedRefundRupiah)} dari {formatRupiah(selected.totalPayableRupiah)}{" "}
-                (25% tidak dikembalikan).
+                Estimasi dikembalikan {formatRupiah(selectedOrder.estimatedRefundRupiah)} dari{" "}
+                {formatRupiah(selectedOrder.totalPayableRupiah)} (25% tidak dikembalikan).
               </p>
             ) : null}
-            <label className="block text-sm">
-              Bank / e-wallet
-              <select
-                className="mt-1 h-11 w-full rounded-xl border border-stone-200 bg-white px-3"
-                value={bankName}
-                onChange={(e) => setBankName(e.target.value)}
-                required
-              >
-                {banks.map((b) => (
-                  <option key={b} value={b}>
-                    {b}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="block text-sm">
-              Nama rekening
-              <input
-                className="mt-1 h-11 w-full rounded-xl border border-stone-200 px-3"
-                value={accountName}
-                onChange={(e) => setAccountName(e.target.value)}
-                autoComplete="name"
-                required
-                minLength={3}
-              />
-            </label>
+            {selectedOrder?.viaMidtrans ? (
+              <p className="rounded-2xl bg-[#f7f5fc] px-4 py-3 text-sm text-ink/70 md:col-span-2">
+                Pengembalian lewat Midtrans ke metode bayar asli. Rekening tujuan tidak diperlukan.
+              </p>
+            ) : (
+              <>
+                <label className="block text-sm">
+                  Bank / e-wallet
+                  <select
+                    className="mt-1 h-11 w-full rounded-xl border border-stone-200 bg-white px-3"
+                    value={bankName}
+                    onChange={(e) => setBankName(e.target.value)}
+                    required={!selectedOrder?.viaMidtrans}
+                  >
+                    {banks.map((b) => (
+                      <option key={b} value={b}>
+                        {b}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="block text-sm">
+                  Nama rekening
+                  <input
+                    className="mt-1 h-11 w-full rounded-xl border border-stone-200 px-3"
+                    value={accountName}
+                    onChange={(e) => setAccountName(e.target.value)}
+                    autoComplete="name"
+                    required={!selectedOrder?.viaMidtrans}
+                    minLength={3}
+                  />
+                </label>
+                <label className="block text-sm md:col-span-2">
+                  Nomor rekening
+                  <input
+                    className="mt-1 h-11 w-full rounded-xl border border-stone-200 px-3 font-mono"
+                    value={accountNumber}
+                    onChange={(e) => setAccountNumber(e.target.value.replace(/\D/g, ""))}
+                    inputMode="numeric"
+                    required={!selectedOrder?.viaMidtrans}
+                    minLength={8}
+                  />
+                </label>
+              </>
+            )}
             <label className="block text-sm md:col-span-2">
-              Nomor rekening
-              <input
-                className="mt-1 h-11 w-full rounded-xl border border-stone-200 px-3 font-mono"
-                value={accountNumber}
-                onChange={(e) => setAccountNumber(e.target.value.replace(/\D/g, ""))}
-                inputMode="numeric"
-                required
-                minLength={8}
-              />
-            </label>
-            <label className="block text-sm md:col-span-2">
-              Alasan (minimal 10 karakter)
+              Alasan
               <textarea
                 className="mt-1 w-full rounded-xl border border-stone-200 p-3"
-                rows={3}
-                minLength={10}
                 required
+                minLength={10}
                 value={reason}
                 onChange={(e) => setReason(e.target.value)}
               />
@@ -235,92 +252,74 @@ export function BuyerRefundsClient() {
       </section>
 
       <section>
-        <h2 className="text-lg font-semibold text-ink">Riwayat</h2>
-        {loading ? <p className="mt-4 text-sm text-ink/55">Memuat riwayat…</p> : null}
-        <ul className="mt-4 grid gap-4">
-          {items.map((item) => {
-            const open = openId === item.id;
-            const steps = refundTimeline(item);
-            return (
-              <li key={item.id} id={`refund-${item.id}`} className="overflow-hidden rounded-3xl border border-stone-200 bg-white shadow-sm">
-                <button
-                  type="button"
-                  className="flex w-full flex-wrap items-start justify-between gap-3 px-5 py-4 text-left"
-                  onClick={() => setOpenId(open ? "" : item.id)}
-                  aria-expanded={open}
-                >
-                  <span>
-                    <span className="block text-xs font-medium uppercase tracking-wide text-ink/45">{item.refundNumber}</span>
-                    <span className="mt-1 block font-semibold text-ink">{item.eventTitle || "Event"}</span>
-                    <span className="mt-1 block text-sm text-ink/60">
-                      {item.orderNumber} · {formatRupiah(item.amountRupiah)}
-                    </span>
-                  </span>
-                  <span
-                    className={`rounded-full px-3 py-1 text-xs font-semibold ${
-                      item.status === "COMPLETED"
-                        ? "bg-emerald-50 text-emerald-800"
-                        : item.status === "REJECTED"
-                          ? "bg-red-50 text-red-800"
-                          : "bg-[#eee8ff] text-gold-800"
-                    }`}
-                  >
-                    {refundStatusUiLabel(item.status)}
-                  </span>
-                </button>
-                {open ? (
-                  <div className="border-t border-stone-100 px-5 py-5">
-                    <RefundTimeline steps={steps} />
-                    {item.status === "APPROVED" ? (
-                      <p className="mt-2 rounded-2xl bg-amber-50 px-3 py-2 text-sm text-amber-950">{holdLabel(item.transferDueAt)}</p>
-                    ) : null}
-                    {item.status === "REJECTED" && item.decisionReason ? (
-                      <p className="mt-3 rounded-2xl bg-red-50 px-3 py-2 text-sm text-red-900">
-                        Alasan ditolak: {item.decisionReason}
-                      </p>
-                    ) : null}
-                    <dl className="mt-4 grid gap-2 text-sm text-ink/70 sm:grid-cols-2">
-                      <div>
-                        <dt className="text-xs uppercase tracking-wide text-ink/45">Rekening</dt>
-                        <dd>
-                          {item.bankName || "—"} · {item.accountName || "—"}
-                          <span className="mt-0.5 block font-mono">{item.accountNumber || "—"}</span>
-                        </dd>
-                      </div>
-                      <div>
-                        <dt className="text-xs uppercase tracking-wide text-ink/45">Diajukan</dt>
-                        <dd>{item.requestedAt ? formatDateTime(item.requestedAt) : "—"}</dd>
-                      </div>
-                    </dl>
-                    <p className="mt-3 text-sm text-ink/65">{item.reason}</p>
-                    {item.hasTransferProof ? (
-                      <figure className="mt-4">
-                        <figcaption className="text-xs font-semibold uppercase tracking-wide text-ink/45">Bukti transfer</figcaption>
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img
-                          src={`/api/me/refunds/${item.id}/proof`}
-                          alt={`Bukti transfer ${item.refundNumber}`}
-                          className="mt-2 max-h-64 rounded-2xl border border-stone-200 object-contain"
-                        />
-                      </figure>
-                    ) : null}
-                    <p className="mt-4 flex flex-wrap gap-3 text-sm">
-                      <Link className="text-gold-700 underline-offset-2 hover:underline" href={`/dashboard/order/${item.orderId}`}>
-                        Lihat order
-                      </Link>
-                      {item.status === "REJECTED" ? (
-                        <Link className="text-gold-700 underline-offset-2 hover:underline" href={`/dashboard/refunds?order=${item.orderId}`}>
-                          Ajukan ulang
-                        </Link>
-                      ) : null}
-                    </p>
-                  </div>
+        <h2 className="mb-3 text-lg font-semibold text-ink">Riwayat</h2>
+        {loading ? <p className="text-sm text-ink/55">Memuat riwayat…</p> : null}
+        <RefundInbox
+          items={visible}
+          selectedId={selected?.id || ""}
+          onSelect={setSelectedId}
+          filters={[
+            { id: "all", label: "Semua" },
+            { id: "open", label: "Berjalan" },
+            { id: "done", label: "Selesai" },
+          ]}
+          activeFilter={filter}
+          onFilter={setFilter}
+          emptyLabel="Belum ada riwayat refund."
+          detail={
+            selected ? (
+              <div>
+                <p className="text-xs font-medium uppercase tracking-wide text-ink/45">{selected.refundNumber}</p>
+                <h3 className="mt-1 text-xl font-semibold text-ink">{selected.eventTitle || "Event"}</h3>
+                <p className="mt-1 text-sm text-ink/60">
+                  {selected.orderNumber} · {formatRupiah(selected.amountRupiah)} ·{" "}
+                  {refundStatusUiLabel(selected.status, selected.viaMidtrans)}
+                </p>
+                <div className="mt-4">
+                  <RefundTimeline steps={refundTimeline(selected)} />
+                </div>
+                {selected.status === "APPROVED" && !selected.viaMidtrans ? (
+                  <p className="mt-3 text-sm text-ink/70">{holdLabel(selected.transferDueAt)}</p>
                 ) : null}
-              </li>
-            );
-          })}
-        </ul>
-        {!loading && items.length === 0 ? <p className="mt-4 text-sm text-ink/55">Belum ada riwayat refund.</p> : null}
+                <dl className="mt-4 grid gap-2 text-sm text-ink/70 sm:grid-cols-2">
+                  <div>
+                    <dt className="text-xs uppercase tracking-wide text-ink/45">{selected.viaMidtrans ? "Pengembalian" : "Rekening"}</dt>
+                    <dd>
+                      {selected.viaMidtrans
+                        ? "Sumber pembayaran Midtrans"
+                        : `${selected.bankName || "—"} · ${selected.accountName || "—"}`}
+                      {selected.viaMidtrans ? null : (
+                        <span className="mt-0.5 block font-mono">{selected.accountNumber || "—"}</span>
+                      )}
+                    </dd>
+                  </div>
+                </dl>
+                <p className="mt-3 text-sm text-ink/65">{selected.reason}</p>
+                {selected.hasTransferProof ? (
+                  <figure className="mt-4">
+                    <figcaption className="text-xs font-semibold uppercase tracking-wide text-ink/45">Bukti transfer</figcaption>
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={`/api/me/refunds/${selected.id}/proof`}
+                      alt={`Bukti transfer ${selected.refundNumber}`}
+                      className="mt-2 max-h-64 rounded-2xl border border-stone-200 object-contain"
+                    />
+                  </figure>
+                ) : null}
+                <p className="mt-4 flex flex-wrap gap-3 text-sm">
+                  <Link className="text-gold-700 underline-offset-2 hover:underline" href={`/dashboard/order/${selected.orderId}`}>
+                    Lihat order
+                  </Link>
+                  {selected.status === "REJECTED" ? (
+                    <Link className="text-gold-700 underline-offset-2 hover:underline" href={`/dashboard/refunds?order=${selected.orderId}`}>
+                      Ajukan ulang
+                    </Link>
+                  ) : null}
+                </p>
+              </div>
+            ) : null
+          }
+        />
       </section>
     </div>
   );

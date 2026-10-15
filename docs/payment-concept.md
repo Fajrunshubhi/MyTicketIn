@@ -1,6 +1,6 @@
 # Konsep Pembayaran dan Pencairan (disimpan, implementasi ditunda)
 
-Status: kode Midtrans Sandbox dan pencairan sandbox sudah ada, tetapi pengaktifan dan uji dengan Midtrans sungguhan ditunda. Dokumen ini merangkum keputusan agar bisa dilanjutkan.
+Status: pembayaran pembeli bisa uji atau nyata. Default uji. Mode nyata: `PAYMENT_ENV=production`, Server Key `Mid-server-`, `WEB_ORIGIN` https, migrasi `0036`, lalu `docs/runbooks/midtrans-production.md`. Pencairan otomatis ke penyelenggara tidak diaktifkan.
 
 ## Model dana (Opsi A: Midtrans + Payouts)
 - Semua pembayaran pembeli masuk ke satu akun merchant Midtrans milik platform. Midtrans tidak memecah dana per penyelenggara.
@@ -10,7 +10,7 @@ Status: kode Midtrans Sandbox dan pencairan sandbox sudah ada, tetapi pengaktifa
 
 ## Yang sudah ada di kode
 - Provider dipilih lewat `PAYMENT_PROVIDER=sandbox|midtrans` (default `sandbox`, dipakai tes/CI).
-- Midtrans Sandbox: Snap redirect, webhook dengan verifikasi signature SHA-512 dan pembacaan ulang status dari status API, tombol "Cek status". Hanya Server Key `SB-Mid-server-...` yang diterima.
+- Midtrans Sandbox: QRIS (Core API, QR di halaman order), virtual account (Core API, nomor VA di halaman order; bank BCA/BNI/BRI/Mandiri/Permata), e-wallet (Snap redirect GoPay/ShopeePay). Webhook dengan verifikasi signature SHA-512 dan pembacaan ulang status dari status API, tombol "Cek status". Tiket hanya terbit setelah `settlement`. Hanya Server Key `SB-Mid-server-...` yang diterima. Simulator internal (`PAYMENT_PROVIDER=sandbox`) menampilkan QR/VA uji dan tombol "Simulasikan lunas".
 - Pencairan: `lib/server/payouts.ts`, menu `/dashboard/payouts` (penyelenggara) dan `/admin/payouts` (admin), migrasi `0033`.
 
 ## Yang perlu disiapkan saat dilanjutkan
@@ -31,3 +31,6 @@ Status: kode Midtrans Sandbox dan pencairan sandbox sudah ada, tetapi pengaktifa
 
 ## Aturan refund saat ini
 - Pembatalan pembeli 75%, pembatalan event 100%. Setelah pencairan event diajukan, refund baru untuk event itu diblokir.
+- QRIS dan e-wallet Midtrans: setelah disetujui, aplikasi memanggil `POST /v2/{order_id}/refund` (idempotency `refund_key`). Dana kembali ke sumber bayar. Webhook `refund`/`partial_refund` atau Cek status menyelesaikan status.
+- Virtual account Midtrans: Refund API tidak tersedia (dokumentasi Midtrans). Tetap hold 24 jam + bukti transfer ke rekening pembeli. Dashboard Midtrans tetap menampilkan Settlement dan pendapatan bruto untuk transaksi VA; pencatatan refund ada di MyTicketIn.
+- Order uji internal (`PAYMENT_PROVIDER=sandbox`): hold 24 jam + bukti transfer. Bukan Iris/payout organizer.

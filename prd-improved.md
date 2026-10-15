@@ -3,14 +3,14 @@
 | Atribut | Nilai |
 |---|---|
 | **Versi** | 2.2 |
-| **Status** | Baseline implementasi MVP akademik |
+| **Status** | Produk tiket yang dapat dipakai untuk bisnis; dikerjakan sebagai skripsi |
 | **Platform** | Web responsif |
 | **Pasar sasaran** | Indonesia, event tatap muka |
 | **Horizon rilis** | 12 minggu, tanggal kalender TBD |
-| **Model MVP** | Validasi alur dengan payment gateway sandbox; tanpa uang nyata |
+| **Model pembayaran** | Uji secara default. Pembayaran pembeli nyata lewat Midtrans Production bila diaktifkan eksplisit |
 | **Pemilik keputusan** | Product Owner/peneliti — nama TBD |
 
-> **Batas penting:** MVP ini menguji alur produk menggunakan transaksi sandbox. Penerimaan uang nyata, settlement/payout organizer, refund finansial nyata, dan peluncuran komersial memerlukan keputusan legal, operasional, dan payment gateway terpisah.
+> **Batas penting:** Skripsi adalah konteks pengerjaan, bukan identitas permanen “hanya main-main”. Aplikasi dapat menerima pembayaran pembeli sungguhan melalui Midtrans (PJP berizin): QRIS, virtual account, dan e-wallet. Default tetap mode uji. Mode nyata wajib `PAYMENT_ENV=production`, kunci Production, origin https, dan notifikasi publik. MyTicketIn tidak menjadi bank: dana pembeli masuk ke akun merchant Midtrans. Meneruskan dana otomatis ke banyak penyelenggara (disbursement) dan refund lewat gateway produksi belum diaktifkan; itu kegiatan yang mensyaratkan perjanjian payout dan prosedur merchant (PBI 23/6/PBI/2021). Bukan nasihat hukum.
 
 ## 1. Ringkasan Eksekutif
 
@@ -94,7 +94,7 @@ Keputusan berikut menjadi baseline implementasi. Perubahan harus dicatat sebagai
 | **Moderasi event** | Event harus disetujui admin sebelum Published |
 | **Tipe event** | Tatap muka; setiap event memilih tepat satu mode: `GENERAL_ADMISSION`, `ZONED`, atau `RESERVED_SEATING` |
 | **Denah kursi MVP** | Organizer mengunggah gambar denah statis dan legenda/teks alternatif; pembeli memilih melalui list/grid aksesibel terpisah. Clickable map, editor drag-and-drop, orphan-seat optimization, dan collaborative map editing bukan bagian MVP |
-| **Pembayaran** | Satu payment gateway sandbox; QRIS, virtual account, dan e-wallet jika tersedia dalam akun sandbox |
+| **Pembayaran** | Midtrans: mode uji (default) atau Production untuk QRIS, virtual account, dan e-wallet. Nominal sama dengan total order |
 | **Reservasi kuota** | 15 menit sejak order dibuat; setelah itu order Expired dan kuota/hold kursi dilepas |
 | **Batas pembelian** | Maksimal 5 tiket per jenis tiket per akun per event |
 | **Tiket** | Satu unit tiket menghasilkan satu QR unik setelah order Paid; tiket kursi menyimpan snapshot label/kategori/harga |
@@ -154,7 +154,7 @@ Keputusan berikut menjadi baseline implementasi. Perubahan harus dicatat sebagai
 
 Ekstensi berikut tidak mengubah daftar 77 fitur, prioritas MoSCoW, atau batas “tanpa uang nyata”; detailnya ada di `features.md` dan RFC terkait.
 
-- **Provider pembayaran dapat dipilih** lewat `PAYMENT_PROVIDER=sandbox|midtrans` (default `sandbox`). Midtrans hanya Sandbox (Snap redirect): signature webhook diverifikasi, status dan nominal dibaca ulang dari status API, status pending/gagal/kedaluwarsa dipetakan, dan reversal setelah Paid hanya membuka rekonsiliasi (order tidak dibatalkan otomatis). Kunci produksi ditolak.
+- **Provider pembayaran dapat dipilih** lewat `PAYMENT_PROVIDER=sandbox|midtrans` (default `sandbox`) dan `PAYMENT_ENV=sandbox|production` (default `sandbox`). QRIS dan virtual account lewat Core API (instruksi di halaman order), e-wallet lewat Snap. Signature webhook diverifikasi, status dan nominal dibaca ulang dari status API, dan reversal setelah Paid hanya membuka rekonsiliasi. Kunci Production hanya dipakai bersama `PAYMENT_ENV=production` dan `WEB_ORIGIN` https. Lihat `docs/runbooks/midtrans-production.md`.
 - **Pencairan dana sandbox**: setelah event selesai dan masa tahan `PAYOUT_HOLD_HOURS` (default 24 jam), organizer mengajukan pencairan sebesar total order Paid dikurangi refund Completed; admin mentransfer manual ke rekening terdaftar dan mengunggah bukti, atau menolak dengan alasan. Satu pencairan aktif per event, refund terbuka dan rekening kosong memblokir pengajuan, dan refund baru diblokir setelah pencairan diajukan. Pengajuan mendukung `Idempotency-Key`.
 - **Petugas check-in**: akun petugas dibuat dan dikelola organizer; petugas masuk melalui portal petugas dan hanya dapat memindai event yang ditugaskan.
 - **Rekomendasi (F74)**: skor kategori 3, kota 2, provinsi 1, organizer 1 (riwayat Paid memakai hitungan maksimum 5 per dimensi), maksimum 2 event per organizer dalam satu daftar, satu alasan aman per item.

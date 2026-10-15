@@ -17,14 +17,16 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   try {
     requireMutating(req);
     const user = await requireAuth(req);
-    let method = "VIRTUAL_ACCOUNT";
+    let method = "QRIS";
+    let bank: string | undefined;
     try {
-      const body = await readJson<{ method?: string }>(req);
+      const body = await readJson<{ method?: string; bank?: string }>(req);
       method = body.method || method;
+      bank = body.bank;
     } catch {
-      method = "VIRTUAL_ACCOUNT";
+      method = "QRIS";
     }
-    const { payment, replay } = await createPayment(user, params.id, method);
+    const { payment, replay } = await createPayment(user, params.id, method, { bank });
     return jsonData({ payment, loyalty: null }, replay ? 200 : 201, req);
   } catch (err) {
     return jsonError(err, req);

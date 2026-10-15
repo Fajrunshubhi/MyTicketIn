@@ -1,4 +1,5 @@
 import { dummyCover } from "@/lib/event-cover";
+import { maxSaleEndsAt, saleWindowError } from "@/lib/sales-window";
 import { invalidatePublicCatalog } from "@/lib/server/public-cache";
 import { publicImageSrc } from "@/lib/server/gallery";
 import { AppError, execute, newId, query } from "@/lib/server/http";
@@ -299,10 +300,10 @@ export function normalizeTicketInput(body: Record<string, unknown>, eventStartsA
   const saleStart = new Date(String(body.saleStartsAt || ""));
   const saleEnd = new Date(String(body.saleEndsAt || ""));
   const eventStart = new Date(eventStartsAt);
-  if (Number.isNaN(saleStart.getTime()) || Number.isNaN(saleEnd.getTime()) || !(saleStart < saleEnd)) {
-    fieldErrors.saleStartsAt = "Selesai jual harus setelah mulai jual.";
-  } else if (Number.isNaN(eventStart.getTime()) || saleEnd > eventStart) {
-    fieldErrors.saleEndsAt = "Penjualan harus berakhir sebelum event dimulai.";
+  const saleErr = saleWindowError(saleStart, saleEnd, eventStart);
+  if (saleErr) {
+    fieldErrors.saleEndsAt = saleErr;
+    if (saleErr.includes("mulai jual")) fieldErrors.saleStartsAt = saleErr;
   }
   const sortOrder = Number(body.sortOrder || 0);
   if (!Number.isInteger(sortOrder) || sortOrder < 0) fieldErrors.sortOrder = "Urutan tidak boleh negatif.";
@@ -381,6 +382,18 @@ export async function updateEvent(orgId: string, id: string, body: Record<string
     ],
   );
   if (!n) throw new AppError("EVENT_VERSION_CONFLICT", "Data berubah.", {}, 409);
+  const maxEnd = maxSaleEndsAt(input.startsAt);
+  if (!Number.isNaN(maxEnd.getTime())) {
+    await execute(
+      `UPDATE event_ticket_types
+          SET sale_ends_at = LEAST(sale_ends_at, $2::timestamptz),
+              sale_starts_at = LEAST(sale_starts_at, $2::timestamptz - INTERVAL '1 minute'),
+              updated_at = CURRENT_TIMESTAMP
+        WHERE event_id = $1
+          AND (sale_ends_at > $2::timestamptz OR sale_starts_at >= $2::timestamptz)`,
+      [id, maxEnd.toISOString()],
+    );
+  }
   return getOwnedEvent(orgId, id);
 }
 

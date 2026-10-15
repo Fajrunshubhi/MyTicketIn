@@ -23,6 +23,9 @@ export const POST = routeHandler(async (req: NextRequest) => {
       portal,
       String(form.get("organizerId") || ""),
     );
+    if ("otpRequired" in result) {
+      return NextResponse.redirect(`${origin}/login?error=AUTH_OTP_REQUIRED&portal=${encodeURIComponent(portal)}`, 302);
+    }
     const next = portalNextPath(result.portal, result.acc, String(form.get("callbackUrl") || ""));
     const res = NextResponse.redirect(`${origin}${next}`, 302);
     setAuthCookies(res, result.raw, result.csrf);

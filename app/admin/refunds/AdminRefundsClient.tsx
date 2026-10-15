@@ -6,9 +6,10 @@ import { useSearchParams } from "next/navigation";
 import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { Container } from "@/components/ui/Container";
+import { MidtransRefundNote, RefundInbox } from "@/components/refunds/RefundInbox";
+import { RefundTimeline } from "@/components/refunds/RefundTimeline";
 import { apiFetch, readApiError } from "@/lib/api";
 import { formatDateTime, formatRupiah } from "@/lib/format";
-import { RefundTimeline } from "@/components/refunds/RefundTimeline";
 import {
   refundOversightLabel,
   refundSourceUiLabel,
@@ -38,6 +39,7 @@ type Refund = {
   accountNumber?: string | null;
   hasTransferProof?: boolean;
   oversightFlag?: RefundOversightFlag;
+  viaMidtrans?: boolean;
 };
 
 type Summary = {
@@ -72,7 +74,7 @@ export default function AdminRefundsClient() {
   const [error, setError] = useState("");
   const [proof, setProof] = useState<File | null>(null);
   const [busyId, setBusyId] = useState("");
-  const [openId, setOpenId] = useState(focusId);
+  const [selectedId, setSelectedId] = useState(focusId);
 
   function load() {
     fetch("/api/admin/refunds", { credentials: "include", cache: "no-store" })
@@ -95,15 +97,10 @@ export default function AdminRefundsClient() {
 
   useEffect(() => {
     if (focusId) {
-      setOpenId(focusId);
+      setSelectedId(focusId);
       setFilter("all");
     }
   }, [focusId]);
-
-  useEffect(() => {
-    if (!focusId) return;
-    document.getElementById(`refund-${focusId}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
-  }, [focusId, items]);
 
   const visible = useMemo(() => {
     return items.filter((item) => {
@@ -115,6 +112,7 @@ export default function AdminRefundsClient() {
       return true;
     });
   }, [items, filter]);
+  const selected = visible.find((i) => i.id === selectedId) || items.find((i) => i.id === selectedId);
 
   async function escalate(refundId: string, decision: string) {
     setError("");
@@ -149,8 +147,21 @@ export default function AdminRefundsClient() {
       setError(readApiError(body, "Gagal mengunggah bukti eskalasi."));
       return;
     }
-    setMessage(`Platform menyelesaikan ${body.data?.refund?.refundNumber}. Pembeli melihat status Selesai.`);
+    setMessage(`Platform menyelesaikan ${body.data?.refund?.refundNumber}.`);
     setProof(null);
+    load();
+  }
+
+  async function retryMidtrans(refundId: string) {
+    setBusyId(refundId);
+    const res = await apiFetch(`/api/admin/refunds/${refundId}/transfer`, { method: "POST" });
+    const body = await res.json().catch(() => ({}));
+    setBusyId("");
+    if (!res.ok) {
+      setError(readApiError(body, "Gagal mengirim ulang refund Midtrans."));
+      return;
+    }
+    setMessage(`Refund ${body.data?.refund?.refundNumber} dikirim ulang ke Midtrans.`);
     load();
   }
 
@@ -166,9 +177,11 @@ export default function AdminRefundsClient() {
       setError(readApiError(body, "Gagal membuat catatan admin."));
       return;
     }
-    setMessage(`Catatan admin ${body.data?.refund?.refundNumber} tersimpan (bukan pengajuan pembeli).`);
+    setMessage(`Catatan admin ${body.data?.refund?.refundNumber} tersimpan.`);
     load();
   }
+
+  const flagLabel = refundOversightLabel(selected?.oversightFlag || null);
 
   return (
     <div>
@@ -176,9 +189,8 @@ export default function AdminRefundsClient() {
         <p className="mb-2 text-sm text-gold-800">SANDBOX · pengawasan platform · bukan pencairan uang</p>
         <h1 className="font-display text-3xl text-ink">Pengawasan refund</h1>
         <p className="mt-2 max-w-3xl text-sm text-ink/65">
-          Keputusan rutin milik penyelenggara (rekening, setuju/tolak, hold 24 jam, bukti transfer). Admin hanya
-          mengawasi SLA, audit, dan eskalasi jika tinjauan &gt; 48 jam atau transfer lewat 24 jam — seperti moderator
-          marketplace, bukan antrean keputusan harian.
+          Keputusan rutin milik penyelenggara. Admin mengawasi SLA, audit, dan eskalasi jika tinjauan &gt; 48 jam atau
+          transfer lewat 24 jam.
         </p>
 
         {summary ? (
@@ -213,143 +225,119 @@ export default function AdminRefundsClient() {
           </div>
         ) : null}
 
-        <nav className="mt-6 flex flex-wrap gap-2" aria-label="Filter pengawasan">
-          {FILTERS.map((f) => (
-            <button
-              key={f.id}
-              type="button"
-              onClick={() => setFilter(f.id)}
-              className={`rounded-full px-4 py-2 text-sm font-medium ${
-                filter === f.id ? "bg-gold-500 text-white" : "border border-stone-200 bg-white text-ink/70"
-              }`}
-              aria-current={filter === f.id ? "page" : undefined}
-            >
-              {f.label}
-            </button>
-          ))}
-        </nav>
+        <div className="mt-6">
+          <MidtransRefundNote />
+        </div>
 
-        <label className="mt-6 block max-w-xl text-sm">
-          Alasan eskalasi (minimal 10 karakter, tercatat di audit)
-          <textarea
-            className="mt-1 w-full rounded-xl border border-stone-200 bg-white p-2"
-            value={reason}
-            onChange={(e) => setReason(e.target.value)}
-            minLength={10}
-          />
-        </label>
-
-        <ul className="mt-6 space-y-4">
-          {visible.map((item) => {
-            const open = openId === item.id;
-            const flagLabel = refundOversightLabel(item.oversightFlag || null);
-            return (
-              <li
-                id={`refund-${item.id}`}
-                key={item.id}
-                className={`rounded-3xl border bg-white p-5 ${
-                  item.id === focusId || item.oversightFlag ? "border-amber-300" : "border-stone-200"
-                }`}
-              >
-                <button type="button" className="flex w-full flex-wrap items-start justify-between gap-3 text-left" onClick={() => setOpenId(open ? "" : item.id)}>
-                  <span>
-                    <span className="block text-xs font-medium uppercase tracking-wide text-ink/45">{item.refundNumber}</span>
-                    <span className="mt-1 block font-semibold text-ink">{item.eventTitle || "Event"}</span>
-                    <span className="mt-1 block text-sm text-ink/60">
-                      {item.organizerName} · {item.orderNumber} · {formatRupiah(item.amountRupiah)} · {refundSourceUiLabel(item.source)}
-                    </span>
-                  </span>
-                  <span className="flex flex-col items-end gap-1">
-                    <span className="rounded-full bg-[#eee8ff] px-3 py-1 text-xs font-semibold text-gold-800">
-                      {refundStatusUiLabel(item.status)}
-                    </span>
-                    {flagLabel ? <span className="text-xs font-medium text-amber-800">{flagLabel}</span> : null}
-                  </span>
-                </button>
-                {open ? (
-                  <div className="mt-4 border-t border-stone-100 pt-4">
-                    <RefundTimeline steps={refundTimeline(item)} />
-                    <p className="mt-2 text-sm text-ink/70">{item.reason}</p>
-                    {item.bankName ? (
-                      <p className="mt-3 rounded-2xl bg-[#f7f5fc] px-4 py-3 font-mono text-sm text-ink">
-                        {item.bankName} · {item.accountName} · {item.accountNumber}
-                      </p>
-                    ) : null}
-                    <p className="mt-3 flex flex-wrap gap-3 text-sm">
-                      {item.organizerProfileId ? (
-                        <Link className="text-gold-700 underline-offset-2 hover:underline" href={`/admin/organizers/${item.organizerProfileId}`}>
-                          Profil penyelenggara
-                        </Link>
-                      ) : null}
-                      {item.eventId ? (
-                        <Link className="text-gold-700 underline-offset-2 hover:underline" href={`/admin/events/${item.eventId}`}>
-                          Event
-                        </Link>
-                      ) : null}
-                      <Link className="text-gold-700 underline-offset-2 hover:underline" href="/admin/audit">
-                        Jejak audit
-                      </Link>
-                    </p>
-                    {item.status === "REQUESTED" ? (
-                      <p className="mt-4 rounded-2xl border border-dashed border-amber-300 bg-amber-50/50 p-4 text-sm">
-                        Eskalasi hanya jika penyelenggara tidak merespons. Ini menggantikan keputusan mereka.
-                        <span className="mt-3 flex flex-wrap gap-3">
-                          <button
-                            type="button"
-                            className="font-medium text-gold-700 underline-offset-2 hover:underline"
-                            disabled={busyId === item.id}
-                            onClick={() => void escalate(item.id, "APPROVE")}
-                          >
-                            Eskalasi: setujui
-                          </button>
-                          <button
-                            type="button"
-                            className="font-medium text-ink/70 underline-offset-2 hover:underline"
-                            disabled={busyId === item.id}
-                            onClick={() => void escalate(item.id, "REJECT")}
-                          >
-                            Eskalasi: tolak
-                          </button>
-                        </span>
-                      </p>
-                    ) : null}
-                    {item.status === "APPROVED" || item.status === "PROCESSING" ? (
-                      <div className="mt-4 space-y-3 rounded-2xl border border-dashed border-amber-300 bg-amber-50/50 p-4">
-                        <p className="text-sm">
-                          Ambil alih transfer sandbox jika hold 24 jam terlewati. Unggah bukti agar status pembeli selesai.
-                        </p>
-                        <input
-                          type="file"
-                          accept="image/jpeg,image/png,image/webp"
-                          onChange={(e) => setProof(e.target.files?.[0] || null)}
-                        />
-                        <Button type="button" loading={busyId === item.id} disabled={busyId === item.id} onClick={() => void takeoverTransfer(item.id)}>
-                          Selesaikan atas nama platform
-                        </Button>
-                      </div>
-                    ) : null}
-                    {item.hasTransferProof ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
-                        src={`/api/admin/refunds/${item.id}/proof`}
-                        alt={`Bukti ${item.refundNumber}`}
-                        className="mt-4 max-h-48 rounded-2xl border border-stone-200 object-contain"
-                      />
-                    ) : null}
-                    {item.requestedAt ? (
-                      <p className="mt-3 text-xs text-ink/45">Diajukan {formatDateTime(item.requestedAt)}</p>
-                    ) : null}
+        <div className="mt-6">
+          <RefundInbox
+            items={visible}
+            selectedId={selected?.id || ""}
+            onSelect={setSelectedId}
+            filters={FILTERS}
+            activeFilter={filter}
+            onFilter={setFilter}
+            emptyLabel={
+              filter === "attention" ? "Tidak ada kasus di luar SLA." : "Tidak ada item pada filter ini."
+            }
+            detail={
+              selected ? (
+                <div>
+                  <p className="text-xs font-medium uppercase tracking-wide text-ink/45">{selected.refundNumber}</p>
+                  <h3 className="mt-1 text-xl font-semibold text-ink">{selected.eventTitle || "Event"}</h3>
+                  <p className="mt-1 text-sm text-ink/60">
+                    {selected.organizerName} · {selected.orderNumber} · {formatRupiah(selected.amountRupiah)} ·{" "}
+                    {refundSourceUiLabel(selected.source)}
+                  </p>
+                  <p className="mt-2 text-sm font-medium text-gold-800">
+                    {refundStatusUiLabel(selected.status, selected.viaMidtrans)}
+                    {flagLabel ? ` · ${flagLabel}` : ""}
+                  </p>
+                  <div className="mt-4">
+                    <RefundTimeline steps={refundTimeline(selected)} />
                   </div>
-                ) : null}
-              </li>
-            );
-          })}
-        </ul>
-        {visible.length === 0 ? (
-          <p className="mt-6 text-sm text-ink/55">
-            {filter === "attention" ? "Tidak ada kasus di luar SLA. Keputusan rutin tetap di penyelenggara." : "Tidak ada item pada filter ini."}
-          </p>
-        ) : null}
+                  <p className="mt-2 text-sm text-ink/70">{selected.reason}</p>
+                  {selected.bankName ? (
+                    <p className="mt-3 rounded-2xl bg-[#f7f5fc] px-4 py-3 font-mono text-sm text-ink">
+                      {selected.bankName} · {selected.accountName} · {selected.accountNumber}
+                    </p>
+                  ) : null}
+                  <p className="mt-3 flex flex-wrap gap-3 text-sm">
+                    {selected.organizerProfileId ? (
+                      <Link className="text-gold-700 underline-offset-2 hover:underline" href={`/admin/organizers/${selected.organizerProfileId}`}>
+                        Profil penyelenggara
+                      </Link>
+                    ) : null}
+                    {selected.eventId ? (
+                      <Link className="text-gold-700 underline-offset-2 hover:underline" href={`/admin/events/${selected.eventId}`}>
+                        Event
+                      </Link>
+                    ) : null}
+                    <Link className="text-gold-700 underline-offset-2 hover:underline" href="/admin/audit">
+                      Jejak audit
+                    </Link>
+                  </p>
+                  <label className="mt-4 block text-sm">
+                    Alasan eskalasi (minimal 10 karakter)
+                    <textarea
+                      className="mt-1 w-full rounded-xl border border-stone-200 bg-white p-2"
+                      value={reason}
+                      onChange={(e) => setReason(e.target.value)}
+                      minLength={10}
+                    />
+                  </label>
+                  {selected.status === "REQUESTED" ? (
+                    <p className="mt-4 rounded-2xl border border-dashed border-amber-300 bg-amber-50/50 p-4 text-sm">
+                      Eskalasi hanya jika penyelenggara tidak merespons.
+                      <span className="mt-3 flex flex-wrap gap-3">
+                        <Button type="button" loading={busyId === selected.id} onClick={() => void escalate(selected.id, "APPROVE")}>
+                          Eskalasi: setujui
+                        </Button>
+                        <Button type="button" variant="secondary" loading={busyId === selected.id} onClick={() => void escalate(selected.id, "REJECT")}>
+                          Eskalasi: tolak
+                        </Button>
+                      </span>
+                    </p>
+                  ) : null}
+                  {selected.viaMidtrans && (selected.status === "APPROVED" || selected.status === "PROCESSING" || selected.status === "FAILED") ? (
+                    <div className="mt-4 space-y-3 rounded-2xl border border-dashed border-amber-300 bg-amber-50/50 p-4">
+                      <p className="text-sm">Refund Midtrans ke sumber pembayaran pembeli. Bukan transfer manual.</p>
+                      {selected.status === "FAILED" ? (
+                        <Button type="button" loading={busyId === selected.id} onClick={() => void retryMidtrans(selected.id)}>
+                          Kirim ulang ke Midtrans
+                        </Button>
+                      ) : null}
+                    </div>
+                  ) : null}
+                  {!selected.viaMidtrans && (selected.status === "APPROVED" || selected.status === "PROCESSING" || selected.status === "FAILED") ? (
+                    <div className="mt-4 space-y-3 rounded-2xl border border-dashed border-amber-300 bg-amber-50/50 p-4">
+                      <p className="text-sm">Ambil alih transfer jika hold 24 jam terlewati.</p>
+                      <input
+                        type="file"
+                        accept="image/jpeg,image/png,image/webp"
+                        onChange={(e) => setProof(e.target.files?.[0] || null)}
+                      />
+                      <Button type="button" loading={busyId === selected.id} onClick={() => void takeoverTransfer(selected.id)}>
+                        Selesaikan atas nama platform
+                      </Button>
+                    </div>
+                  ) : null}
+                  {selected.hasTransferProof ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={`/api/admin/refunds/${selected.id}/proof`}
+                      alt={`Bukti ${selected.refundNumber}`}
+                      className="mt-4 max-h-48 rounded-2xl border border-stone-200 object-contain"
+                    />
+                  ) : null}
+                  {selected.requestedAt ? (
+                    <p className="mt-3 text-xs text-ink/45">Diajukan {formatDateTime(selected.requestedAt)}</p>
+                  ) : null}
+                </div>
+              ) : null
+            }
+          />
+        </div>
 
         <div className="mt-10 border-t border-stone-100 pt-6">
           <button type="button" className="text-sm font-medium text-gold-700 underline-offset-2 hover:underline" onClick={() => setShowNote((v) => !v)}>

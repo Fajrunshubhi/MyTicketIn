@@ -6,11 +6,11 @@ Dokumen ini adalah pedoman teknis proyek untuk pengembang dan bantuan AI. Aturan
 
 MyTicketIn adalah aplikasi web responsif untuk event tatap muka di Indonesia. Empat persona utamanya adalah **pembeli**, **organizer**, **petugas check-in**, dan **admin**. Alur inti meliputi moderasi event, inventori tiket dalam tiga mode (`GENERAL_ADMISSION`, `ZONED`, `RESERVED_SEATING`), discovery melalui filter/rekomendasi/pencarian bahasa alami, checkout dengan loyalitas per organizer, pembayaran sandbox, penerbitan QR, check-in satu kali, ekspor, email/reminder, serta AI poster-ke-draft dengan kendali manusia.
 
-MVP bersifat akademik:
+Konteks pengerjaan adalah skripsi. Produk dapat dipakai untuk bisnis:
 
-- Gunakan payment gateway **sandbox** dan data uji.
-- Jangan menerima uang nyata atau mengaktifkan credential produksi.
-- Settlement, payout, refund finansial nyata, KYC produksi, dan monetisasi berada di luar cakupan.
+- Default, tes, dan CI memakai pembayaran **uji**.
+- Pembayaran pembeli nyata hanya bila `PAYMENT_ENV=production`, Server Key `Mid-server-`, dan `WEB_ORIGIN` https publik.
+- Jangan mengaktifkan payout otomatis atau refund gateway produksi. Pencairan yang ada tetap transfer manual tercatat.
 - Target pengerjaan adalah 12 minggu dengan jalur kritis yang ditentukan di `features.md`.
 - Baseline `prd-improved.md` 2.2 berisi 77 fitur: 57 Must, 5 Should, 4 Could, dan 11 Won’t; cakupan aktif MVP adalah 66 fitur.
 - F20, F46, F49, F50, F51, F65, dan F74–F77 adalah Must Have. F42, F63–F64, serta F66–F73 tetap Won’t Have.
@@ -287,10 +287,11 @@ Error mode-aware tambahan: `SEAT_UNAVAILABLE` ketika kursi sudah di-hold atau Pa
 
 ## 8. Integrasi Pembayaran dan QR
 
-### 8.1 Payment Sandbox
+### 8.1 Payment
 
-- Hanya credential sandbox yang diperbolehkan.
-- UI dan data harus berlabel **SANDBOX/UJI**.
+- Mode uji memakai kunci `SB-Mid-server-` dan host `*.sandbox.midtrans.com`. Mode nyata memakai kunci `Mid-server-`, host tanpa `.sandbox`, dan `PAYMENT_ENV=production`.
+- Client Key tidak boleh menjadi `MIDTRANS_SERVER_KEY`.
+- UI membedakan transaksi uji dan transaksi nyata.
 - Verifikasi signature webhook menggunakan raw body bila provider mensyaratkan.
 - Status Order tidak boleh berubah menjadi Paid berdasarkan redirect/browser callback saja.
 - Pisahkan status Order dan Payment.

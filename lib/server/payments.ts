@@ -3,14 +3,33 @@ import type { AuthUser } from "@/lib/server/access";
 import { getOrder } from "@/lib/server/orders";
 import { issueTicketsForPaidOrder } from "@/lib/server/tickets";
 import { eventOwnerUserId, notify } from "@/lib/server/notifications";
-import { activePaymentProvider, createSnapTransaction } from "@/lib/server/midtrans";
+import {
+  activePaymentProvider,
+  createQrisCharge,
+  createSnapTransaction,
+  createVaCharge,
+  midtransMode,
+  requireMidtransKey,
+} from "@/lib/server/midtrans";
 import { publicAppOrigin } from "@/lib/server/mail";
 import { refreshMidtransPayment } from "@/lib/server/payment-webhook";
+import {
+  parsePaymentMethod,
+  parseVaBank,
+  sandboxEwalletInstructions,
+  sandboxQrisInstructions,
+  sandboxVaInstructions,
+  sanitizePaymentInstructions,
+  midtransSimulatorUrl,
+  type PaymentInstructions,
+  type VaBank,
+} from "@/lib/payment-methods";
 
 export async function createPayment(
   user: AuthUser,
   orderId: string,
   methodRaw: string,
+  opts: { bank?: string } = {},
 ) {
   const order = await getOrder(user, orderId);
   if (order.status !== "PENDING")
@@ -26,63 +45,60 @@ export async function createPayment(
   );
   if (existing[0]) {
     const row = existing[0];
-    // A previous attempt may have stored the row but failed to reach Midtrans: finish it instead of duplicating.
-    if (row.provider === "midtrans" && row.status === "CREATED" && !snapRedirectUrl(row)) {
-      const fresh = await attachSnapTransaction(user, order, row);
+    const replayBank = parseVaBank(opts.bank) || parseVaBank(String((row.instruction_data as { bank?: string } | null)?.bank || ""));
+    // A previous attempt may have stored the row but failed to reach the provider: finish it instead of duplicating.
+    if (row.status === "CREATED" && !sanitizePaymentInstructions(row.instruction_data) && !snapRedirectUrl(row)) {
+      const fresh = await attachProviderInstructions(user, order, row, replayBank);
       return { payment: payDto(fresh), replay: true };
     }
     return { payment: payDto(row), replay: true };
   }
+  const method = parsePaymentMethod(methodRaw);
+  if (!method) {
+    throw new AppError("VALIDATION_ERROR", "Metode pembayaran tidak valid.", { method: "Pilih QRIS atau virtual account." }, 400);
+  }
+  const bank = method === "VIRTUAL_ACCOUNT" ? parseVaBank(opts.bank) : null;
+  if (method === "VIRTUAL_ACCOUNT" && !bank) {
+    throw new AppError("VALIDATION_ERROR", "Pilih bank virtual account.", { bank: "Pilih bank tujuan." }, 400);
+  }
   const provider = activePaymentProvider();
-  const method = ["QRIS", "VIRTUAL_ACCOUNT", "EWALLET"].includes(
-    String(methodRaw || "").toUpperCase(),
-  )
-    ? String(methodRaw).toUpperCase()
-    : "VIRTUAL_ACCOUNT";
+  const live = provider === "midtrans" && midtransMode() === "production";
+  if (provider === "midtrans") {
+    requireMidtransKey();
+    if (live && !publicAppOrigin().startsWith("https://")) {
+      throw new AppError(
+        "SERVICE_UNHEALTHY",
+        "Pembayaran nyata membutuhkan WEB_ORIGIN https publik agar Midtrans dapat mengirim notifikasi.",
+        {},
+        503,
+      );
+    }
+  }
+  const environment = live ? "PRODUCTION" : "SANDBOX";
   const id = newId();
   // Midtrans order_id is capped at 50 characters.
   const ref = provider === "midtrans" ? `mti-${id.slice(0, 24)}` : `sandbox-${id.slice(0, 16)}`;
   let rows = await query<Record<string, unknown>>(
     `INSERT INTO payments (id, order_id, provider, environment, method, status, amount_rupiah, currency, external_reference, provider_idempotency_key)
-     VALUES ($1,$2,$7,'SANDBOX',$3::payment_method,'CREATED'::payment_status,$4,'IDR',$5,$6)
+     VALUES ($1,$2,$7,$8,$3::payment_method,'CREATED'::payment_status,$4,'IDR',$5,$6)
      ON CONFLICT (order_id) DO NOTHING
      RETURNING ${PAYMENT_COLUMNS}`,
-    [id, orderId, method, order.totalPayableRupiah, ref, `pay-${id}`, provider],
+    [id, orderId, method, order.totalPayableRupiah, ref, `pay-${id}`, provider, environment],
   );
   if (!rows[0]) {
-    // A concurrent request created the payment first.
     const again = await query<Record<string, unknown>>(
       `SELECT ${PAYMENT_COLUMNS} FROM payments WHERE order_id=$1 LIMIT 1`,
       [orderId],
     );
     return { payment: payDto(again[0]), replay: true };
   }
-  if (provider === "midtrans") {
-    rows = [await attachSnapTransaction(user, order, rows[0])];
-    await notify({
-      recipientUserId: user.id,
-      type: "PAYMENT_INSTRUCTIONS",
-      title: "Selesaikan pembayaran",
-      body: `Order ${order.orderNumber}: lanjutkan pembayaran lewat Midtrans Sandbox sebelum hold 15 menit berakhir. Bukan transfer uang nyata.`,
-      actionPath: `/dashboard/order/${orderId}`,
-      entityType: "Payment",
-      entityId: String(rows[0]?.id || id),
-      deduplicationKey: `pay-code:${orderId}`,
-      domainEventId: `pay-code:${orderId}`,
-    });
-    return { payment: payDto(rows[0]), replay: false };
-  }
-  const methodLabel =
-    method === "QRIS"
-      ? "QRIS"
-      : method === "EWALLET"
-        ? "e-wallet"
-        : "virtual account";
+  rows = [await attachProviderInstructions(user, order, rows[0], bank)];
+  const label = method === "QRIS" ? "QRIS" : method === "EWALLET" ? "e-wallet" : `virtual account${bank ? ` ${bank}` : ""}`;
   await notify({
     recipientUserId: user.id,
     type: "PAYMENT_INSTRUCTIONS",
-    title: "Kode pembayaran siap",
-    body: `Order ${order.orderNumber}: kode ${ref} (${methodLabel}). Bayar sebelum hold 15 menit berakhir. Sandbox, bukan transfer uang nyata.`,
+    title: "Selesaikan pembayaran",
+    body: `Order ${order.orderNumber}: instruksi ${label} siap. Bayar sebelum hold 15 menit berakhir. Sandbox, bukan transfer uang nyata.`,
     actionPath: `/dashboard/order/${orderId}`,
     entityType: "Payment",
     entityId: String(rows[0]?.id || id),
@@ -121,8 +137,8 @@ export async function refreshPayment(user: AuthUser, orderId: string) {
   return getPayment(user, orderId);
 }
 
-const PAYMENT_COLUMNS = `id, order_id, provider, method::text AS method, status::text AS status, amount_rupiah, currency,
-  external_reference, created_at::text, instruction_data`;
+const PAYMENT_COLUMNS = `id, order_id, provider, environment, method::text AS method, status::text AS status, amount_rupiah, currency,
+  external_reference, created_at::text, provider_expires_at::text, instruction_data, provider_idempotency_key`;
 
 function snapRedirectUrl(p: Record<string, unknown>): string {
   const data = p.instruction_data;
@@ -130,35 +146,119 @@ function snapRedirectUrl(p: Record<string, unknown>): string {
   return typeof url === "string" ? url : "";
 }
 
-/** Creates the Snap transaction for an already stored payment row; retry-safe because the Midtrans order_id is the row's reference. */
-async function attachSnapTransaction(
-  user: AuthUser,
-  order: { expiresAt: string | null },
+async function persistInstructions(
   row: Record<string, unknown>,
+  instructions: PaymentInstructions,
+  expiresAt: string,
+): Promise<Record<string, unknown>> {
+  const updated = await query<Record<string, unknown>>(
+    `UPDATE payments SET instruction_data=$2::jsonb, status='PENDING'::payment_status,
+            provider_expires_at=$3::timestamptz, updated_at=CURRENT_TIMESTAMP
+     WHERE id=$1 AND status IN ('CREATED','PENDING')
+     RETURNING ${PAYMENT_COLUMNS}`,
+    [row.id, JSON.stringify(instructions), expiresAt],
+  );
+  return updated[0] || row;
+}
+
+/** Creates provider instructions for an already stored payment row; retry-safe because the order_id/reference is stable. */
+async function attachProviderInstructions(
+  user: AuthUser,
+  order: Awaited<ReturnType<typeof getOrder>>,
+  row: Record<string, unknown>,
+  bank: VaBank | null,
 ): Promise<Record<string, unknown>> {
   const expiresAt = order.expiresAt || "";
   const minutes = Math.ceil((new Date(expiresAt).getTime() - Date.now()) / 60000);
   if (!(minutes >= 1)) throw new AppError("PAYMENT_ORDER_INVALID", "Order tidak dapat dibayar.", {}, 409);
+  const method = String(row.method);
+  const amount = Number(row.amount_rupiah);
+  const ref = String(row.external_reference);
+  const provider = String(row.provider);
+
+  if (provider !== "midtrans") {
+    const instructions =
+      method === "QRIS"
+        ? sandboxQrisInstructions(ref, amount)
+        : method === "VIRTUAL_ACCOUNT"
+          ? sandboxVaInstructions(bank || "BCA", String(row.id), amount)
+          : sandboxEwalletInstructions(ref);
+    return persistInstructions(row, instructions, expiresAt);
+  }
+
+  const buyerName = user.name || user.username || "Pembeli";
+  const buyerEmail = user.email || "";
+  const phoneRows = await query<{ phone: string | null }>(`SELECT phone FROM users WHERE id=$1 LIMIT 1`, [user.id]);
+  const buyerPhone = phoneRows[0]?.phone || undefined;
+  const chargeItems = (order.items || []).map((it) => ({
+    id: String(it.ticketTypeId || it.id),
+    name: String(it.name || "Tiket"),
+    price: Number(it.unitPriceRupiah || 0),
+    quantity: Number(it.quantity || 0),
+  }));
+  if (method === "QRIS") {
+    const instructions = await createQrisCharge({
+      orderId: ref,
+      amountRupiah: amount,
+      expiresInMinutes: minutes,
+      idempotencyKey: String(row.provider_idempotency_key || row.id),
+      customerName: buyerName,
+      customerEmail: buyerEmail,
+      customerPhone: buyerPhone,
+      items: chargeItems,
+    });
+    return persistInstructions(row, instructions, expiresAt);
+  }
+  if (method === "VIRTUAL_ACCOUNT") {
+    const instructions = await createVaCharge({
+      orderId: ref,
+      amountRupiah: amount,
+      expiresInMinutes: minutes,
+      bank: bank || "BCA",
+      idempotencyKey: String(row.provider_idempotency_key || row.id),
+      customerName: buyerName,
+      customerEmail: buyerEmail,
+      customerPhone: buyerPhone,
+      items: chargeItems,
+    });
+    return persistInstructions(row, instructions, expiresAt);
+  }
   const snap = await createSnapTransaction({
-    orderId: String(row.external_reference),
-    amountRupiah: Number(row.amount_rupiah),
+    orderId: ref,
+    amountRupiah: amount,
     expiresInMinutes: minutes,
     customerName: user.name || user.username || "Pembeli",
     customerEmail: user.email || "",
+    customerPhone: buyerPhone,
     finishUrl: `${publicAppOrigin()}/dashboard/order/${String(row.order_id)}`,
+    enabledPayments: midtransMode() === "production" ? ["gopay", "shopeepay"] : ["shopeepay"],
   });
-  const updated = await query<Record<string, unknown>>(
-    `UPDATE payments SET instruction_data=$2::jsonb, provider_expires_at=$3::timestamptz, updated_at=CURRENT_TIMESTAMP
-     WHERE id=$1 RETURNING ${PAYMENT_COLUMNS}`,
-    [row.id, JSON.stringify({ redirectUrl: snap.redirectUrl, snapToken: snap.token }), expiresAt],
+  return persistInstructions(
+    row,
+    {
+      kind: "EWALLET",
+      redirectUrl: snap.redirectUrl,
+      copyText: "",
+      ...(midtransMode() === "production"
+        ? { simulatorHint: "Selesaikan pembayaran di halaman Midtrans, lalu kembali ke sini dan tekan Cek status." }
+        : {
+            simulatorHint:
+              "Klik Lanjut di Midtrans, pilih ShopeePay, selesaikan di halaman simulator. Jangan tekan Back sebelum berhasil.",
+          }),
+    },
+    expiresAt,
   );
-  return updated[0];
 }
 
 function payDto(p: Record<string, unknown>) {
-  const redirectUrl = snapRedirectUrl(p);
+  const instructions = sanitizePaymentInstructions(p.instruction_data);
+  const redirectUrl =
+    instructions?.redirectUrl ||
+    (snapRedirectUrl(p) && ["CREATED", "PENDING"].includes(String(p.status)) ? snapRedirectUrl(p) : "");
   return {
     redirectUrl: redirectUrl && ["CREATED", "PENDING"].includes(String(p.status)) ? redirectUrl : null,
+    instructions,
+    providerExpiresAt: p.provider_expires_at ? new Date(String(p.provider_expires_at)).toISOString() : null,
     id: p.id,
     orderId: p.order_id,
     provider: p.provider,
@@ -170,7 +270,7 @@ function payDto(p: Record<string, unknown>) {
     createdAt: p.created_at
       ? new Date(String(p.created_at)).toISOString()
       : null,
-    sandbox: true,
+    sandbox: String(p.environment || "SANDBOX") !== "PRODUCTION",
   };
 }
 

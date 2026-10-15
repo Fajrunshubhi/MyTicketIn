@@ -127,18 +127,33 @@ describe("normalizeTicketInput", () => {
     ).toThrow(/formulir/i);
   });
 
-  it("accepts a window that ends before the event starts", () => {
+  it("accepts a window that ends at H-1 before the event", () => {
     const got = normalizeTicketInput(
       {
         name: "Reguler",
         priceRupiah: 100000,
         quota: 50,
         saleStartsAt: "2026-09-01T00:00:00.000Z",
-        saleEndsAt: "2026-09-30T16:00:00.000Z",
+        saleEndsAt: "2026-09-30T00:00:00.000Z",
       },
       "2026-10-01T00:00:00.000Z",
     );
     expect(got.maxPerAccount).toBe(50);
+  });
+
+  it("rejects a window that ends later than H-1", () => {
+    expect(() =>
+      normalizeTicketInput(
+        {
+          name: "Reguler",
+          priceRupiah: 100000,
+          quota: 50,
+          saleStartsAt: "2026-09-01T00:00:00.000Z",
+          saleEndsAt: "2026-09-30T16:00:00.000Z",
+        },
+        "2026-10-01T00:00:00.000Z",
+      ),
+    ).toThrow(/formulir/i);
   });
 });
 

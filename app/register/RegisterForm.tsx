@@ -7,12 +7,14 @@ import { useEffect, useState } from "react";
 import BrandMark from "@/components/BrandMark";
 import GoogleButton from "@/components/GoogleButton";
 import { googleCallbackForPortal } from "@/components/auth/PortalChoice";
+import { OtpChallengeForm, type OtpChallenge } from "@/components/auth/OtpChallengeForm";
 import { apiFetch, readApiError, type ApiError } from "@/lib/api";
 
 type RegisterFormState = {
   name: string;
   username: string;
   email: string;
+  phone: string;
   password: string;
   confirmPassword: string;
 };
@@ -21,6 +23,7 @@ const initialForm: RegisterFormState = {
   name: "",
   username: "",
   email: "",
+  phone: "",
   password: "",
   confirmPassword: "",
 };
@@ -35,6 +38,7 @@ export default function RegisterForm() {
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [otp, setOtp] = useState<OtpChallenge | null>(null);
 
   useEffect(() => {
     fetch("/api/auth/session", { credentials: "include", cache: "no-store" })
@@ -66,26 +70,23 @@ export default function RegisterForm() {
       body: JSON.stringify({ ...form, intent: "buyer" }),
     });
     const payload = (await response.json().catch(() => ({}))) as ApiError & {
-      data?: { username?: string; nextPath?: string };
+      data?: OtpChallenge & { otpRequired?: boolean; nextPath?: string };
     };
+    setLoading(false);
     if (!response.ok) {
-      setLoading(false);
       setFieldErrors(payload.error?.fieldErrors || {});
       setError(readApiError(payload, "Pendaftaran gagal."));
       return;
     }
-    const login = await apiFetch("/api/auth/login", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ username: form.username, password: form.password, portal: "buyer" }),
-    });
-    setLoading(false);
-    if (!login.ok) {
-      setError("Akun berhasil dibuat. Silakan masuk dengan username dan kata sandi Anda.");
+    if (payload.data?.otpRequired && payload.data.challengeId) {
+      setOtp({
+        challengeId: payload.data.challengeId,
+        emailHint: payload.data.emailHint,
+        sandboxCode: payload.data.sandboxCode,
+      });
       return;
     }
-    const loginBody = (await login.json().catch(() => ({}))) as { data?: { nextPath?: string } };
-    const next = loginBody.data?.nextPath || payload.data?.nextPath || "/";
+    const next = payload.data?.nextPath || "/";
     router.push(next.startsWith("/") && !next.startsWith("//") ? next : "/");
     router.refresh();
   }
@@ -110,7 +111,23 @@ export default function RegisterForm() {
             <BrandMark compact />
           </div>
           <h2 className="text-2xl font-semibold tracking-tight text-ink">Buat akun</h2>
-          <p className="mt-1 text-sm text-ink/60">Kata sandi 10–128 karakter. Hanya untuk pembeli tiket.</p>
+          <p className="mt-1 text-sm text-ink/60">
+            {otp ? "Kode OTP dikirim ke email Anda untuk memastikan alamat valid." : "Kata sandi 10–128 karakter. Nomor HP dipakai untuk tiket dan Midtrans."}
+          </p>
+          {otp ? (
+            <div className="mt-4">
+              <OtpChallengeForm
+                challenge={otp}
+                onChallenge={setOtp}
+                submitLabel="Selesaikan pendaftaran"
+                onSuccess={(data) => {
+                  const next = data.nextPath || "/";
+                  router.push(next.startsWith("/") && !next.startsWith("//") ? next : "/");
+                  router.refresh();
+                }}
+              />
+            </div>
+          ) : (
           <form onSubmit={handleSubmit} className="mt-4 grid gap-2.5" noValidate>
             <GoogleButton portal="buyer" callbackUrl={googleCallbackForPortal("buyer")} />
             <div className="flex items-center gap-3 text-[10px] uppercase tracking-[0.2em] text-ink/45">
@@ -155,6 +172,19 @@ export default function RegisterForm() {
                 required
               />
               {fieldErrors.email ? <p className="mt-0.5 text-xs text-red-700" role="alert">{fieldErrors.email}</p> : null}
+            </label>
+            <label className="block">
+              <span className="mb-1 block text-sm text-ink/70">Nomor HP</span>
+              <input
+                value={form.phone}
+                onChange={updateField("phone")}
+                className={fieldClass}
+                autoComplete="tel"
+                inputMode="tel"
+                placeholder="081234567890"
+                required
+              />
+              {fieldErrors.phone ? <p className="mt-0.5 text-xs text-red-700" role="alert">{fieldErrors.phone}</p> : null}
             </label>
             <div className="grid grid-cols-2 gap-2.5">
               <label className="block min-w-0">
@@ -205,9 +235,10 @@ export default function RegisterForm() {
               disabled={loading}
               className="w-full min-h-11 rounded-full bg-gold-500 px-4 font-semibold text-white disabled:opacity-60"
             >
-              {loading ? "Membuat akun..." : "Daftar"}
+              {loading ? "Mengirim kode..." : "Kirim kode OTP"}
             </button>
           </form>
+          )}
           <p className="mt-3 text-center text-sm text-ink/60">
             Sudah punya akun?{" "}
             <Link href="/login?portal=buyer" className="font-semibold text-gold-700 hover:text-gold-800">
