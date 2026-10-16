@@ -1,12 +1,13 @@
 import { NextRequest } from "next/server";
 import { jsonData, routeHandler } from "@/lib/server/http";
 import { readJson, requireAuth, requireBuyer, requireMutating } from "@/lib/server/guard";
-import { createOrder, listOrders } from "@/lib/server/orders";
+import { countBuyerOrders, createOrder, listOrders } from "@/lib/server/orders";
 
 export const GET = routeHandler(async (req: NextRequest) => {
   const user = await requireBuyer(req);
   const items = await listOrders(user, Number(req.nextUrl.searchParams.get("limit") || 20));
-  return jsonData({ items, nextCursor: null }, 200, req);
+  const paidCount = await countBuyerOrders(user, "PAID");
+  return jsonData({ items, paidCount, nextCursor: null }, 200, req);
 });
 
 export const POST = routeHandler(async (req: NextRequest) => {

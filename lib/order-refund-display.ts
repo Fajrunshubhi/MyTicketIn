@@ -53,7 +53,7 @@ export function orderDocumentKind(
 export function orderDocumentTitle(kind: OrderDocumentKind): string {
   if (kind === "cancelled") return "DOKUMEN PEMBATALAN";
   if (kind === "refunded") return "DOKUMEN REFUND";
-  if (kind === "paid") return "BUKTI PEMBAYARAN";
+  if (kind === "paid") return "KUITANSI ELEKTRONIK";
   return "RINGKASAN ORDER";
 }
 
@@ -130,7 +130,7 @@ export function refundTimeline(input: {
         ? input.decisionReason || "Lihat alasan penyelenggara."
         : via
           ? "Tiket tidak berlaku. Dana dikembalikan ke sumber bayar Midtrans."
-          : "Tiket tidak berlaku. Transfer sandbox menyusul.",
+          : "Tiket tidak berlaku. Transfer ke rekening pembeli menyusul.",
       state: rejected ? "error" : approved ? "done" : "wait",
     },
     {
@@ -161,7 +161,7 @@ export function refundTimeline(input: {
       detail: done
         ? via
           ? "Refund selesai melalui Midtrans."
-          : "Refund sandbox selesai. Bukan uang nyata."
+          : "Refund selesai. Bukti transfer sudah diunggah."
         : via
           ? "Menunggu Midtrans."
           : "Menunggu bukti transfer.",

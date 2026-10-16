@@ -106,7 +106,7 @@ export function DashboardClient() {
                 Rekonsiliasi pembayaran
               </DashLink>
               <DashLink href="/admin/refunds" icon="ticket">
-                Refund sandbox
+                Pengawasan refund
               </DashLink>
               <DashLink href="/admin/password-reset" icon="shield">
                 Bantuan reset kata sandi

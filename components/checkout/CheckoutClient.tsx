@@ -5,8 +5,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import BrandMark from "@/components/BrandMark";
 import LogoutButton from "@/components/LogoutButton";
-import { LiveClock } from "@/components/LiveClock";
 import { Alert } from "@/components/ui/Alert";
+import { Icon } from "@/components/ui/Icon";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { apiFetch, readApiError } from "@/lib/api";
@@ -323,19 +323,24 @@ export function CheckoutClient({ slug }: { slug: string }) {
 
   return (
     <div className="min-h-screen bg-[#f7f5fc]">
-      <header data-clock-host className="fixed inset-x-0 top-0 z-50 bg-white">
-        <div className="mx-auto flex w-full max-w-6xl items-center justify-between gap-3 px-4 py-3 sm:px-6">
-          <BrandMark compact href="/" />
-          <p className="hidden min-w-0 truncate text-sm font-medium text-ink/70 sm:block">
-            {summary?.event?.title || "Checkout tiket"}
-          </p>
+      <header data-clock-host className="fixed inset-x-0 top-0 z-50 border-b border-stone-200/80 bg-white/95 backdrop-blur">
+        <div className="mx-auto flex w-full max-w-6xl items-center gap-3 px-4 py-3 sm:px-6">
+          <div className="flex min-w-0 flex-1 items-center gap-3">
+            <BrandMark compact href="/" />
+            <span className="hidden h-6 w-px shrink-0 bg-stone-200 sm:block" aria-hidden />
+            <p className="hidden min-w-0 truncate text-sm font-medium text-ink/70 sm:block">
+              {summary?.event?.title || "Checkout tiket"}
+            </p>
+          </div>
           <div className="flex shrink-0 items-center gap-2">
-            <LiveClock />
             <Link
               href={eventHref}
-              className="inline-flex min-h-11 items-center rounded-xl px-3 text-sm font-medium text-gold-800 hover:underline"
+              aria-label="Kembali ke halaman event"
+              className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-stone-200 bg-white px-3 text-sm font-semibold text-ink transition hover:bg-stone-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold-400 sm:px-4"
             >
-              Kembali ke event
+              <Icon name="arrow" className="h-4 w-4 rotate-180" />
+              <span className="sm:hidden">Kembali</span>
+              <span className="hidden sm:inline">Kembali ke event</span>
             </Link>
             <LogoutButton />
           </div>
@@ -358,7 +363,7 @@ export function CheckoutClient({ slug }: { slug: string }) {
           </li>
         </ol>
 
-        <h1 className="font-display text-3xl text-ink">Checkout</h1>
+        <h1 className="font-display text-2xl text-ink sm:text-3xl">Checkout</h1>
         <p className="mt-2 max-w-2xl text-ink/65">
           {slots.length <= 1
             ? "Biodata nama dan email diisi dari akun Anda. Lengkapi nomor HP dan NIK. Reservasi 15 menit setelah order dibuat."
@@ -523,7 +528,7 @@ export function CheckoutClient({ slug }: { slug: string }) {
                 />
               </div>
               <p className="mt-2 text-xs text-ink/55">
-                Poin {summary.organizerName || "organizer ini"} adalah manfaat loyalty sandbox dan tidak dapat diuangkan. Diskon maksimum 20% subtotal, 1 poin = Rp10.
+                Poin {summary.organizerName || "organizer ini"} hanya berlaku di event penyelenggara ini dan tidak dapat diuangkan. Diskon maksimum 20% subtotal, 1 poin = Rp10.
               </p>
               <p className="mt-3 flex justify-between text-sm">
                 <span>Diskon poin</span>

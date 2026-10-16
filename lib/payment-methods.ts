@@ -168,7 +168,7 @@ export function sandboxQrisInstructions(ref: string, amountRupiah: number): Paym
     kind: "QRIS",
     qrString,
     copyText: qrString,
-    simulatorHint: "Ini QR uji. Gunakan tombol Simulasikan lunas. Bukan uang nyata.",
+    simulatorHint: "Pindai kode QR, atau selesaikan pembayaran sesuai instruksi di halaman ini.",
   };
 }
 
@@ -181,7 +181,7 @@ export function sandboxVaInstructions(bank: VaBank, paymentId: string, amountRup
       billerCode: "70012",
       billKey: vaNumber,
       copyText: vaNumber,
-      simulatorHint: `Bayar tepat jumlah tagihan lewat Mandiri (kode perusahaan 70012). Sandbox, bukan transfer uang nyata.`,
+      simulatorHint: `Bayar tepat jumlah tagihan lewat Mandiri (kode perusahaan 70012).`,
     };
   }
   return {
@@ -189,7 +189,7 @@ export function sandboxVaInstructions(bank: VaBank, paymentId: string, amountRup
     bank,
     vaNumber,
     copyText: vaNumber,
-    simulatorHint: `Transfer tepat jumlah tagihan ke VA ${bank}. Sandbox, bukan transfer uang nyata.`,
+    simulatorHint: `Transfer tepat jumlah tagihan ke VA ${bank}.`,
   };
 }
 
@@ -197,6 +197,6 @@ export function sandboxEwalletInstructions(ref: string): PaymentInstructions {
   return {
     kind: "EWALLET",
     copyText: ref,
-    simulatorHint: "E-wallet uji. Gunakan tombol Simulasikan lunas. Bukan uang nyata.",
+    simulatorHint: "Selesaikan pembayaran e-wallet sesuai instruksi di halaman ini.",
   };
 }

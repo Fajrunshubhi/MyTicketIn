@@ -2,13 +2,18 @@ import { describe, expect, it } from "vitest";
 import { buildOrderReceiptLines, buildOrderReceiptPdfBytes, type ReceiptOrder } from "@/lib/order-receipt-pdf";
 
 const base: ReceiptOrder = {
+  id: "ord-test-123",
   orderNumber: "MTI-ABCDEF1234",
   status: "PAID",
   createdAt: "2026-09-26T08:00:00.000Z",
+  paidAt: "2026-09-26T08:12:00.000Z",
   subtotalRupiah: 200000,
   redeemedPoints: 0,
   loyaltyDiscountRupiah: 0,
   totalPayableRupiah: 200000,
+  organizerName: "Organizer Uji",
+  buyer: { name: "Andi Pembeli", email: "andi@example.com", phone: "08123456789" },
+  payment: { method: "QRIS", provider: "midtrans", externalReference: "MTI-ABCDEF1234" },
   event: {
     title: "Konser Uji",
     venueName: "GBK",
@@ -30,7 +35,7 @@ const base: ReceiptOrder = {
 describe("buildOrderReceiptLines", () => {
   it("labels paid orders as payment proof and masks NIK", () => {
     const lines = buildOrderReceiptLines(base, "QRIS").join("\n");
-    expect(lines).toContain("BUKTI PEMBAYARAN");
+    expect(lines).toContain("KUITANSI ELEKTRONIK");
     expect(lines).toContain("MTI-ABCDEF1234");
     expect(lines).toContain("Metode bayar   : QRIS");
     expect(lines).toContain("VIP");
@@ -38,6 +43,11 @@ describe("buildOrderReceiptLines", () => {
     expect(lines).toContain("NIK xxxxxxxxxxxx0001");
     expect(lines).not.toContain("3171010101010001");
     expect(lines).toContain("TOTAL DIBAYAR");
+    expect(lines).toContain("Terbilang      : Dua ratus ribu rupiah");
+    expect(lines).toContain("Telah diterima dari Andi Pembeli");
+    expect(lines).toContain("Diterbitkan oleh");
+    expect(lines).toContain("Ditujukan kepada");
+    expect(lines).toContain("bukan faktur pajak");
   });
 
   it("writes a letterhead PDF with table, stamp, and masked NIK", () => {
@@ -45,10 +55,14 @@ describe("buildOrderReceiptLines", () => {
     const raw = new TextDecoder("latin1").decode(bytes);
     expect(raw.startsWith("%PDF-1.4")).toBe(true);
     expect(raw).toContain("MYTICKETIN");
-    expect(raw).toContain("BUKTI PEMBAYARAN");
+    expect(raw).toContain("KUITANSI ELEKTRONIK");
     expect(raw).toContain("LUNAS");
     expect(raw).toContain("DESKRIPSI");
     expect(raw).toContain("TOTAL DIBAYAR");
+    expect(raw).toContain("DITERBITKAN OLEH");
+    expect(raw).toContain("DITUJUKAN KEPADA");
+    expect(raw).toContain("PERNYATAAN PENERIMAAN");
+    expect(raw).toContain("Dua ratus ribu rupiah");
     expect(raw).toContain("Helvetica-Bold");
     expect(raw).toContain("Andi Pembeli");
     expect(raw).toContain("NIK xxxxxxxxxxxx0001");
@@ -59,7 +73,7 @@ describe("buildOrderReceiptLines", () => {
     const lines = buildOrderReceiptLines({ ...base, status: "PENDING" }).join("\n");
     expect(lines).toContain("RINGKASAN ORDER");
     expect(lines).toContain("BELUM LUNAS");
-    expect(lines).not.toContain("BUKTI PEMBAYARAN");
+    expect(lines).not.toContain("KUITANSI ELEKTRONIK");
   });
 
   it("stamps cancelled buyer refund as DIBATALKAN, not LUNAS", () => {
@@ -70,7 +84,7 @@ describe("buildOrderReceiptLines", () => {
     const lines = buildOrderReceiptLines(refunded).join("\n");
     expect(lines).toContain("DOKUMEN PEMBATALAN");
     expect(lines).toContain("DIBATALKAN");
-    expect(lines).toContain("REFUND SANDBOX");
+    expect(lines).toContain("REFUND");
     expect(lines).toContain("TIDAK DIKEMBALIKAN");
     expect(lines).toContain("Tiket QR tidak berlaku");
     const raw = new TextDecoder("latin1").decode(buildOrderReceiptPdfBytes(refunded));

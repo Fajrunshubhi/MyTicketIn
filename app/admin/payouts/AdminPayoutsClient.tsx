@@ -5,6 +5,7 @@ import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { apiFetch, readApiError } from "@/lib/api";
 import { formatDateTime, formatRupiah } from "@/lib/format";
+import { adminPayoutReportHref } from "@/lib/payout-report";
 
 type Payout = {
   id: string;
@@ -84,7 +85,7 @@ export default function AdminPayoutsClient() {
       setError(readApiError(body, "Pencairan gagal dicatat."));
       return;
     }
-    setMessage("Pencairan ditandai sudah ditransfer (sandbox). Penyelenggara diberi tahu.");
+    setMessage("Pencairan ditandai sudah ditransfer. Penyelenggara diberi tahu.");
     await load();
   }
 
@@ -111,8 +112,8 @@ export default function AdminPayoutsClient() {
     <div className="space-y-5">
       <p className="text-sm text-ink/70">
         Semua pembayaran pembeli masuk ke akun platform. Setelah event selesai dan masa tahan lewat, penyelenggara
-        mengajukan pencairan; di sini admin mentransfer ke rekening terdaftar lalu mengunggah bukti. Sandbox, bukan uang
-        nyata.
+        mengajukan pencairan; di sini admin mentransfer ke rekening terdaftar lalu mengunggah bukti. Periksa laporan
+        pendukung (PDF atau Excel) sebelum mentransfer.
       </p>
       <div role="group" aria-label="Filter status" className="flex flex-wrap gap-2">
         {FILTERS.map((f) => (
@@ -147,6 +148,14 @@ export default function AdminPayoutsClient() {
                 <p className="text-lg font-semibold text-ink">{formatRupiah(p.amountRupiah)}</p>
                 <p className="text-xs text-ink/60">{STATUS_LABEL[p.status]}</p>
               </div>
+            </div>
+            <div className="mt-3 flex flex-wrap gap-3">
+              <a className="text-sm text-gold-700 underline" href={adminPayoutReportHref(p.id, "pdf")}>
+                Unduh laporan PDF
+              </a>
+              <a className="text-sm text-gold-700 underline" href={adminPayoutReportHref(p.id, "csv")}>
+                Unduh laporan Excel
+              </a>
             </div>
             <dl className="mt-3 grid gap-1 text-sm text-ink/75 sm:grid-cols-2">
               <div>

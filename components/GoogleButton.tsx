@@ -1,16 +1,21 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { usePathname } from "next/navigation";
 import { Icon } from "@/components/ui/Icon";
 
 type Props = {
   callbackUrl?: string;
   portal?: string;
+  action?: "login" | "register";
 };
 
-export default function GoogleButton({ callbackUrl, portal }: Props) {
+export default function GoogleButton({ callbackUrl, portal, action }: Props) {
+  const pathname = usePathname() || "";
   const [enabled, setEnabled] = useState(false);
   const [loading, setLoading] = useState(false);
+  const isRegister = action === "register" || pathname.startsWith("/register");
+  const label = isRegister ? "Daftar dengan Gmail" : "Masuk dengan Gmail";
 
   useEffect(() => {
     let cancelled = false;
@@ -47,7 +52,7 @@ export default function GoogleButton({ callbackUrl, portal }: Props) {
         type="button"
         onClick={handleGoogle}
         disabled={loading}
-        aria-label="Masuk dengan Gmail"
+        aria-label={label}
         className="flex h-11 min-h-11 w-full items-center justify-center gap-3 rounded-xl border border-stone-200 bg-white px-4 text-sm font-semibold text-slate-800 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
       >
         {loading ? (
@@ -55,7 +60,7 @@ export default function GoogleButton({ callbackUrl, portal }: Props) {
         ) : (
           <>
             <Icon name="google" className="h-5 w-5" />
-            Masuk dengan Gmail
+            {label}
           </>
         )}
       </button>

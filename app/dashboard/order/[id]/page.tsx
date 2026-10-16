@@ -27,6 +27,10 @@ type Order = {
   orderNumber: string;
   status: string;
   createdAt?: string | null;
+  paidAt?: string | null;
+  organizerName?: string;
+  buyer?: { name?: string; email?: string; phone?: string };
+  payment?: { method?: string; provider?: string; externalReference?: string };
   items: {
     name: string;
     quantity: number;
@@ -68,6 +72,8 @@ type Payment = {
   id: string;
   status: string;
   method: string;
+  provider?: string;
+  externalReference?: string;
   amountRupiah: number;
   instructions?: ReturnType<typeof sanitizePaymentInstructions>;
   expiresAt?: string;
@@ -95,7 +101,7 @@ function formatMmSs(ms: number) {
 const METHODS = [
   { id: "QRIS", title: "QRIS", hint: "Pindai kode QR dari aplikasi bank atau e-wallet." },
   { id: "VIRTUAL_ACCOUNT", title: "Virtual Account", hint: "Transfer dari ATM, m-banking, atau internet banking." },
-  { id: "EWALLET", title: "E-wallet", hint: "ShopeePay lewat halaman sandbox Midtrans. Jangan pilih GoPay/QRIS di uji ini." },
+  { id: "EWALLET", title: "E-wallet", hint: "ShopeePay lewat halaman pembayaran Midtrans." },
 ] as const;
 
 const VA_BANK_LABEL: Record<VaBank, string> = {
@@ -160,9 +166,17 @@ export default function OrderDetailPage() {
     setPdfBusy(true);
     setError("");
     try {
-      await downloadOrderReceiptPdf(order, payment ? methodLabel(payment.method) : undefined);
+      await downloadOrderReceiptPdf(
+        {
+          ...order,
+          payment: order.payment || (payment
+            ? { method: payment.method, provider: payment.provider, externalReference: payment.externalReference }
+            : undefined),
+        },
+        payment ? methodLabel(payment.method) : undefined,
+      );
     } catch {
-      setError("Receipt PDF gagal diunduh. Coba lagi.");
+      setError("Kuitansi PDF gagal diunduh. Coba lagi.");
     } finally {
       setPdfBusy(false);
     }
@@ -276,12 +290,12 @@ export default function OrderDetailPage() {
     const body = await res.json().catch(() => ({}));
     setBusy(false);
     if (!res.ok) {
-      setError(readApiError(body, "Tidak dapat membuat pembayaran sandbox."));
+      setError(readApiError(body, "Tidak dapat membuat pembayaran."));
       return;
     }
     setError("");
     setPayment((body.data as { payment: Payment }).payment);
-    setInfo("Instruksi SANDBOX tampil. Status tepercaya hanya dari konfirmasi webhook, bukan dari halaman ini.");
+    setInfo("Instruksi pembayaran siap. Status lunas hanya dari konfirmasi pembayaran, bukan dari halaman ini.");
     pingNotificationsLive();
   }
 
@@ -363,12 +377,14 @@ export default function OrderDetailPage() {
           <div className="flex flex-wrap items-center gap-2">
             {order ? (
               <Button variant="secondary" loading={pdfBusy} disabled={pdfBusy} onClick={() => void downloadReceipt()}>
-                Unduh receipt PDF
+                Unduh kuitansi PDF
               </Button>
             ) : null}
-            <p className="rounded-full bg-white px-3 py-1 text-xs font-medium text-gold-800" role="note">
-              {payment && payment.sandbox === false ? "Transaksi nyata" : "Uji · bukan uang nasabah"}
-            </p>
+            {payment && payment.sandbox === false ? (
+              <p className="rounded-full bg-white px-3 py-1 text-xs font-medium text-gold-800" role="note">
+                Pembayaran Midtrans
+              </p>
+            ) : null}
           </div>
         </div>
 
@@ -395,12 +411,12 @@ export default function OrderDetailPage() {
                   <p className="mt-2 text-sm text-ink/70">
                     {awaitingRefund
                       ? "Pengajuan refund menunggu keputusan. Tiket masih berlaku sampai disetujui."
-                      : "Tiket QR ada di wallet. Receipt PDF berisi rincian pembayaran untuk disimpan."}
+                      : "Tiket QR ada di wallet. Kuitansi PDF berisi rincian pembayaran untuk disimpan."}
                   </p>
                   <div className="mt-4 flex flex-wrap gap-2">
                     <Button onClick={() => { window.location.href = "/dashboard/ticket"; }}>Buka tiket saya</Button>
                     <Button variant="secondary" loading={pdfBusy} disabled={pdfBusy} onClick={() => void downloadReceipt()}>
-                      Unduh receipt PDF
+                      Unduh kuitansi PDF
                     </Button>
                   </div>
                 </section>
@@ -410,18 +426,18 @@ export default function OrderDetailPage() {
                 <section className="rounded-3xl border border-stone-200 bg-white p-6">
                   <p className="flex items-center gap-2 font-semibold text-ink">
                     <Icon name="info" className="h-5 w-5 text-gold-600" />
-                    {docKind === "cancelled" ? "Pembatalan selesai (sandbox)" : "Refund selesai (sandbox)"}
+                    {docKind === "cancelled" ? "Pembatalan selesai" : "Refund selesai"}
                   </p>
                   <p className="mt-2 text-sm text-ink/70">
-                    Tiket tidak berlaku untuk masuk. {formatRupiah(refundedAmt)} dicatat sebagai refund uji
-                    {docKind === "cancelled" ? `; ${formatRupiah(leftoverAmt)} tidak dikembalikan (25%).` : "."} Bukan transfer uang nyata.
+                    Tiket tidak berlaku untuk masuk. {formatRupiah(refundedAmt)} dikembalikan
+                    {docKind === "cancelled" ? `; ${formatRupiah(leftoverAmt)} tidak dikembalikan (25%).` : "."}
                   </p>
                   <div className="mt-4 flex flex-wrap gap-2">
                     <Button variant="secondary" onClick={() => { window.location.href = "/dashboard/ticket?status=CANCELLED"; }}>
                       Lihat tiket dibatalkan
                     </Button>
                     <Button variant="secondary" loading={pdfBusy} disabled={pdfBusy} onClick={() => void downloadReceipt()}>
-                      Unduh receipt PDF
+                      Unduh kuitansi PDF
                     </Button>
                   </div>
                 </section>
@@ -641,7 +657,7 @@ export default function OrderDetailPage() {
               {refundedAmt > 0 ? (
                 <>
                   <p className="mt-2 flex justify-between text-sm text-ink/70">
-                    <span>Refund sandbox</span>
+                    <span>Refund</span>
                     <span>− {formatRupiah(refundedAmt)}</span>
                   </p>
                   <p className="mt-1 flex justify-between text-sm text-ink/70">
@@ -667,9 +683,9 @@ export default function OrderDetailPage() {
                 disabled={pdfBusy}
                 onClick={() => void downloadReceipt()}
               >
-                Unduh receipt PDF
+                Unduh kuitansi PDF
               </Button>
-              <p className="mt-3 text-xs text-ink/50">Poin loyalty sandbox tidak bernilai tunai. Hold berakhir jika waktu habis.</p>
+              <p className="mt-3 text-xs text-ink/50">Poin loyalty tidak bernilai tunai dan tidak dapat diuangkan. Hold berakhir jika waktu habis.</p>
             </aside>
           </div>
         ) : null}

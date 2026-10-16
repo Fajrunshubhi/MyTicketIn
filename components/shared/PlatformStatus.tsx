@@ -75,12 +75,10 @@ export function PlatformStatus({ apiBaseUrl }: { apiBaseUrl: string }) {
     );
   }
 
-  const envLabel = meta?.environment === "production-demo" ? "SANDBOX" : "UJI";
-
   return (
     <Alert tone="success" title="Layanan fondasi siap">
       <p>
-        Lingkungan: {meta?.environment} ({envLabel}). Locale {meta?.locale}, {meta?.currency}.
+        Lingkungan: {meta?.environment}. Locale {meta?.locale}, {meta?.currency}.
       </p>
       <p>
         Contoh harga: {sampleMoney}. Contoh waktu UTC ke zona default: {sampleTime}.

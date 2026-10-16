@@ -24,11 +24,13 @@ export function SiteNav({
   items,
   trailing,
   showLogout = false,
+  showClock = true,
 }: {
   brand: ReactNode;
   items: SiteNavItem[];
   trailing?: ReactNode;
   showLogout?: boolean;
+  showClock?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const panelId = useId();
@@ -91,7 +93,7 @@ export function SiteNav({
       <header data-clock-host className="fixed inset-x-0 top-0 z-50 bg-[#fbfafd]">
         <div className="mx-auto flex w-full max-w-6xl min-w-0 items-center justify-between gap-3 px-4 py-3 sm:px-6 sm:py-5">
           <div className="min-w-0 shrink">{brand}</div>
-          <LiveClock className="ml-auto min-w-0 md:ml-0" />
+          {showClock ? <LiveClock className="ml-auto min-w-0 md:ml-0" /> : <span className="ml-auto md:hidden" aria-hidden="true" />}
           <nav className="hidden min-w-0 items-center justify-end gap-2 md:flex" aria-label="Navigasi utama">
             {links}
             {trailing}
@@ -113,7 +115,7 @@ export function SiteNav({
           <div
             ref={panelRef}
             id={panelId}
-            className="border-b border-stone-200 bg-paper px-4 py-4 shadow-card md:hidden"
+            className="max-h-[min(70dvh,calc(100dvh-4.25rem))] overflow-y-auto border-b border-stone-200 bg-paper px-4 py-4 shadow-card md:hidden"
           >
             <nav className="flex flex-col gap-2" aria-label="Navigasi utama">
               {links}

@@ -202,7 +202,7 @@ export function WorkspaceShell({
             </button>
             <h1 className="min-w-0 flex-1 truncate font-display text-xl text-ink sm:text-2xl lg:flex-none lg:text-3xl">{title}</h1>
             <div className="ml-auto flex shrink-0 items-center gap-1 sm:gap-2">
-              <LiveClock />
+              <LiveClock className="hidden md:inline-flex" />
               {primaryHref && primaryLabel ? (
                 <Link
                   href={primaryHref}
@@ -239,7 +239,7 @@ export function WorkspaceShell({
       {open ? (
         <>
           <button type="button" className="fixed inset-0 z-40 bg-ink/40 lg:hidden" aria-label="Tutup menu" onClick={() => setOpen(false)} />
-          <aside ref={panelRef} id={panelId} className="fixed inset-y-0 left-0 z-50 flex w-[min(18rem,88vw)] flex-col bg-white p-4 shadow-card lg:hidden">
+          <aside ref={panelRef} id={panelId} className="fixed inset-y-0 left-0 z-50 flex w-[min(18rem,88vw)] flex-col overflow-y-auto bg-white p-4 shadow-card lg:hidden">
             <div className="flex items-center justify-between gap-2">
               <Link href="/" className="inline-flex min-h-11 items-center gap-2 font-semibold text-ink" onClick={() => setOpen(false)}>
                 <BrandMark markOnly />

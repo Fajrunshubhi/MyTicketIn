@@ -47,7 +47,7 @@ export default function AdminReconPage() {
     const res = await apiFetch(`/api/admin/payment-reconciliations/${id}/resolve`, {
       method: "POST",
       headers: { "Content-Type": "application/json", "Idempotency-Key": `recon-${id}-${decision}` },
-      body: JSON.stringify({ decision, notes: notes[id] || "Penyelesaian administratif sandbox oleh admin." }),
+      body: JSON.stringify({ decision, notes: notes[id] || "Penyelesaian administratif oleh admin." }),
     });
     const body = await res.json().catch(() => ({}));
     if (!res.ok) {
@@ -60,7 +60,7 @@ export default function AdminReconPage() {
   return (
     <div>
       <Container>
-        <p className="mb-4 text-sm text-gold-800">SANDBOX / TRANSAKSI UJI</p>
+        <p className="mb-4 text-sm text-gold-800">Rekonsiliasi pembayaran</p>
         <h1 className="font-display text-3xl text-ink">Rekonsiliasi pembayaran</h1>
         {error ? <Alert tone="error" title={error} /> : null}
         <ul className="mt-6 space-y-4">
@@ -74,7 +74,7 @@ export default function AdminReconPage() {
               </label>
               <div className="mt-2 flex gap-3">
                 <button type="button" className="text-gold-700 underline" onClick={() => resolve(row.id, "REJECT")}>Tolak</button>
-                <button type="button" className="text-gold-700 underline" onClick={() => resolve(row.id, "ACCEPT_REFUND_SANDBOX")}>Refund sandbox</button>
+                <button type="button" className="text-gold-700 underline" onClick={() => resolve(row.id, "ACCEPT_REFUND_SANDBOX")}>Setujui refund</button>
               </div>
             </li>
           ))}

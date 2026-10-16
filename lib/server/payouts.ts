@@ -337,7 +337,7 @@ export async function markPayoutPaid(adminId: string, payoutId: string, proof: B
   await notifyOrganizer(
     done,
     "Dana event dicairkan",
-    `${done.payout_number}: Rp${Number(done.amount_rupiah).toLocaleString("id-ID")} ditransfer ke ${done.bank_name} (sandbox, bukan uang nyata). Bukti transfer tersedia.`,
+    `${done.payout_number}: Rp${Number(done.amount_rupiah).toLocaleString("id-ID")} ditransfer ke ${done.bank_name}. Bukti transfer tersedia.`,
   );
   return payoutDto(done, true);
 }

@@ -17,6 +17,19 @@ function zoneLabel(timeZone: string): string {
   return ZONE_LABELS[timeZone] ?? timeZone;
 }
 
+export function formatDateLong(isoOrDate: string | Date, timeZone = "Asia/Jakarta"): string {
+  const date = typeof isoOrDate === "string" ? new Date(isoOrDate) : isoOrDate;
+  if (Number.isNaN(date.getTime())) {
+    throw new Error("Waktu tidak valid.");
+  }
+  return new Intl.DateTimeFormat("id-ID", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+    timeZone,
+  }).format(date);
+}
+
 export function formatDateTime(
   isoOrDate: string | Date,
   timeZone = "Asia/Jakarta"

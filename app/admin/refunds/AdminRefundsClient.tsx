@@ -186,7 +186,7 @@ export default function AdminRefundsClient() {
   return (
     <div>
       <Container>
-        <p className="mb-2 text-sm text-gold-800">SANDBOX · pengawasan platform · bukan pencairan uang</p>
+        <p className="mb-2 text-sm text-gold-800">Pengawasan platform</p>
         <h1 className="font-display text-3xl text-ink">Pengawasan refund</h1>
         <p className="mt-2 max-w-3xl text-sm text-ink/65">
           Keputusan rutin milik penyelenggara. Admin mengawasi SLA, audit, dan eskalasi jika tinjauan &gt; 48 jam atau
@@ -351,7 +351,7 @@ export default function AdminRefundsClient() {
                 void createNote();
               }}
             >
-              <p className="text-sm text-ink/60">Untuk koreksi uji. Pengajuan 75% + rekening tetap dari pembeli.</p>
+              <p className="text-sm text-ink/60">Untuk koreksi administratif. Pengajuan 75% + rekening tetap dari pembeli.</p>
               <label className="block text-sm">
                 ID order
                 <input className="mt-1 w-full rounded-xl border border-stone-200 p-2" value={orderId} onChange={(e) => setOrderId(e.target.value)} required />

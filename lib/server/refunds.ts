@@ -371,8 +371,8 @@ export async function completeSandboxRefund(refundId: string): Promise<ReturnTyp
       ? `Refund ${rf.refund_number} selesai: 75% dikembalikan ke sumber pembayaran Midtrans. 25% tidak dikembalikan.`
       : `Refund ${rf.refund_number} selesai. Dana dikembalikan ke sumber pembayaran Midtrans.`
     : rf.source === "BUYER"
-      ? `Refund ${rf.refund_number} selesai: 75% nominal (pembatalan pembeli). 25% tidak dikembalikan. Sandbox, bukan transfer uang.`
-      : `Refund ${rf.refund_number} selesai sebagai catatan uji. Tidak ada transfer uang nyata.`;
+      ? `Refund ${rf.refund_number} selesai: 75% nominal (pembatalan pembeli). 25% tidak dikembalikan.`
+      : `Refund ${rf.refund_number} selesai.`;
   await notifyRefund(rf.order_id, refundId, rf.refund_number, "COMPLETED", moneyNote);
   const out = await query<RefundRow>(
     `SELECT ${REFUND_COLS} FROM ${REFUND_JOIN} WHERE rf.id=$1`,
@@ -424,7 +424,7 @@ async function insertRefund(
     source === "BUYER"
       ? viaMidtrans
         ? `Pengajuan pembatalan pembeli ${refundNumber}: 75% (Rp${amount.toLocaleString("id-ID")}) menunggu keputusan. Pengembalian ke sumber bayar Midtrans. 25% tidak dikembalikan.`
-        : `Pengajuan pembatalan pembeli ${refundNumber}: 75% (Rp${amount.toLocaleString("id-ID")}) menunggu keputusan. 25% tidak dikembalikan. Sandbox.`
+        : `Pengajuan pembatalan pembeli ${refundNumber}: 75% (Rp${amount.toLocaleString("id-ID")}) menunggu keputusan. 25% tidak dikembalikan.`
       : `Pengajuan refund ${refundNumber} sebesar Rp${amount.toLocaleString("id-ID")} menunggu keputusan.`;
   await notifyRefund(orderId, id, refundNumber, "REQUESTED", waitNote);
   const rows = await query<RefundRow>(
@@ -545,7 +545,7 @@ export async function decideRefund(adminId: string, refundId: string, decision: 
         r.id,
         r.refund_number,
         "APPROVED",
-        `Refund ${r.refund_number} disetujui. Menunggu transfer sandbox paling lambat 1×24 jam. Tiket sudah tidak berlaku.`,
+        `Refund ${r.refund_number} disetujui. Menunggu transfer paling lambat 1×24 jam. Tiket sudah tidak berlaku.`,
       );
       return refundDto(r);
     }
@@ -777,7 +777,7 @@ export async function confirmAdminTransfer(adminId: string, refundId: string, pr
       recipientUserId: owner[0].owner_user_id,
       type: "REFUND_UPDATED",
       title: "Admin menyelesaikan refund (eskalasi)",
-      body: `Refund ${done.refundNumber} diselesaikan platform karena SLA transfer. Sandbox, bukan uang nyata.`,
+      body: `Refund ${done.refundNumber} diselesaikan platform karena SLA transfer.`,
       actionPath: `/dashboard/refunds?refund=${refundId}`,
       entityType: "Refund",
       entityId: refundId,
@@ -825,7 +825,7 @@ export async function enqueueEventCancelledRefunds(eventId: string, actorId: str
      ORDER BY o.id`,
     [eventId],
   );
-  const why = `${reason.trim()} Event dibatalkan; refund sandbox otomatis.`;
+  const why = `${reason.trim()} Event dibatalkan; refund otomatis.`;
   for (const row of orders) {
     try {
       const used = await query<{ n: string }>(
@@ -841,7 +841,7 @@ export async function enqueueEventCancelledRefunds(eventId: string, actorId: str
         `UPDATE refunds SET status='APPROVED'::refund_status, decided_by_user_id=$1, decided_at=CURRENT_TIMESTAMP,
                 decision_reason=$2, updated_at=CURRENT_TIMESTAMP, version=version+1
          WHERE id=$3 AND status='REQUESTED'::refund_status`,
-        [actorId, "Disetujui otomatis karena event dibatalkan (sandbox).", created.id],
+        [actorId, "Disetujui otomatis karena event dibatalkan.", created.id],
       );
       if (pay.provider === "midtrans" && midtransRefundApiSupported(pay.method)) await dispatchProviderRefund(created.id);
       else await completeSandboxRefund(created.id);

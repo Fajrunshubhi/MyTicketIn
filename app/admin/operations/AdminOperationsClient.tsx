@@ -85,7 +85,7 @@ export default function AdminOperationsClient() {
   return (
     <div>
       <Container>
-        <p className="mb-2 text-sm text-gold-800">SANDBOX / OPERASI UJI</p>
+        <p className="mb-2 text-sm text-gold-800">Operasi platform</p>
         <p className="text-ink/65">Hanya daftar dan tautan. Mutasi tetap di modul pemilik masing-masing. Angka health teragregasi, tanpa log mentah.</p>
         {offline ? <div className="mt-4"><OfflineState /></div> : null}
         {health ? (

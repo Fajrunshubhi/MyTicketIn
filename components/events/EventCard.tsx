@@ -55,7 +55,7 @@ export function EventCard({ item }: { item: CatalogCard }) {
             {price}
           </span>
           {showRatingBadge ? (
-            <span className="absolute right-3 top-3 z-10 rounded-full bg-white/95 px-2.5 py-1 text-[11px] font-semibold text-gold-800 shadow-soft">
+            <span className="absolute right-3 top-3 z-10 max-w-[calc(100%-6.5rem)] truncate rounded-full bg-white/95 px-2.5 py-1 text-[11px] font-semibold text-gold-800 shadow-soft">
               {ratingLabel}
             </span>
           ) : null}

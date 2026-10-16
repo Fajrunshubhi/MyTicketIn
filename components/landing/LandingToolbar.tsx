@@ -12,7 +12,7 @@ function isoDate(d: Date) {
 }
 
 const pill =
-  "min-h-11 appearance-none rounded-full border border-stone-200 bg-white py-2 pl-4 pr-9 text-sm text-ink/80 outline-none focus:border-gold-400";
+  "min-h-11 w-full appearance-none rounded-full border border-stone-200 bg-white py-2 pl-4 pr-9 text-sm text-ink/80 outline-none focus:border-gold-400 sm:w-auto";
 
 export function LandingToolbar({ categories }: Props) {
   const router = useRouter();
@@ -26,8 +26,8 @@ export function LandingToolbar({ categories }: Props) {
   }
 
   return (
-    <div className="flex flex-wrap items-center gap-2">
-      <label className="relative">
+    <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap sm:items-center">
+      <label className="relative w-full sm:w-auto">
         <span className="sr-only">Filter waktu</span>
         <select
           className={pill}
@@ -53,7 +53,7 @@ export function LandingToolbar({ categories }: Props) {
         </select>
         <Icon name="chevron" className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink/40" />
       </label>
-      <label className="relative">
+      <label className="relative w-full sm:w-auto">
         <span className="sr-only">Urutan</span>
         <select
           className={pill}
@@ -65,7 +65,7 @@ export function LandingToolbar({ categories }: Props) {
         </select>
         <Icon name="chevron" className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink/40" />
       </label>
-      <label className="relative">
+      <label className="relative w-full sm:w-auto">
         <span className="sr-only">Kategori</span>
         <select
           className={pill}

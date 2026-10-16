@@ -71,7 +71,7 @@ export function OtpChallengeForm({
       </p>
       {challenge.sandboxCode ? (
         <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950" role="status">
-          Mode uji: gunakan kode <strong className="font-mono tracking-widest">{challenge.sandboxCode}</strong>
+          Kode OTP: <strong className="font-mono tracking-widest">{challenge.sandboxCode}</strong>
         </p>
       ) : null}
       <label className="block">

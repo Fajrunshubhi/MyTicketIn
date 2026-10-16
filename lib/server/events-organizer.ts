@@ -598,7 +598,7 @@ export async function markEventCancelled(eventId: string, actorId: string, reaso
       recipientUserId: buyerId,
       type: "EVENT_CANCELLED",
       title: "Event tiket Anda dibatalkan",
-      body: `“${title}” dibatalkan penyelenggara atau admin. Cek status order dan refund sandbox jika ada.`,
+      body: `“${title}” dibatalkan penyelenggara atau admin. Cek status order dan refund jika ada.`,
       actionPath: "/dashboard/order",
       entityType: "Event",
       entityId: eventId,

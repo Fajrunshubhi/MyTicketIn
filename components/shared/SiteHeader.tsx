@@ -40,6 +40,7 @@ export async function SiteHeader() {
         ) : undefined
       }
       showLogout={Boolean(user)}
+      showClock={false}
     />
   );
 }

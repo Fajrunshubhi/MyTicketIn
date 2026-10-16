@@ -7,9 +7,14 @@ import { EventCard } from "@/components/events/EventCard";
 import { type CatalogCard } from "@/components/events/catalog-types";
 import { type AccountProfile, roleLabel } from "@/lib/account";
 import { formatRupiah } from "@/lib/format";
-import { Icon } from "@/components/ui/Icon";
+import { Icon, type IconName } from "@/components/ui/Icon";
 import { subscribeNotificationsLive } from "@/lib/notifications-live";
 import { NotificationHoverItem } from "@/components/notifications/NotificationHoverItem";
+import {
+  BuyerOverviewCharts,
+  NextTicketCard,
+  type BuyerDashboardData,
+} from "@/components/dashboard/BuyerOverviewCharts";
 
 type OrderRow = {
   id: string;
@@ -28,13 +33,44 @@ type TicketRow = {
 
 type Notice = { id: string; title: string; body: string; createdAt: string; readAt: string | null; actionPath: string | null };
 
+function KpiLink({
+  href,
+  label,
+  value,
+  hint,
+  icon,
+}: {
+  href: string;
+  label: string;
+  value: string;
+  hint: string;
+  icon: IconName;
+}) {
+  return (
+    <li>
+      <Link href={href} className="block rounded-3xl bg-white p-5 shadow-sm transition hover:bg-stone-50">
+        <div className="flex items-start justify-between gap-3">
+          <p className="text-xs font-medium uppercase tracking-wide text-ink/45">{label}</p>
+          <span className="inline-flex h-9 w-9 items-center justify-center rounded-2xl bg-gold-50 text-gold-700">
+            <Icon name={icon} className="h-4 w-4" />
+          </span>
+        </div>
+        <p className="mt-2 break-all text-2xl font-semibold tabular-nums text-ink sm:text-3xl">{value}</p>
+        <p className="mt-1 text-xs text-ink/45">{hint}</p>
+      </Link>
+    </li>
+  );
+}
+
 export function BuyerWorkspace() {
   const router = useRouter();
   const [me, setMe] = useState<AccountProfile | null>(null);
   const [events, setEvents] = useState<CatalogCard[]>([]);
   const [orders, setOrders] = useState<OrderRow[]>([]);
+  const [paidOrderCount, setPaidOrderCount] = useState(0);
   const [tickets, setTickets] = useState<TicketRow[]>([]);
   const [notices, setNotices] = useState<Notice[]>([]);
+  const [overview, setOverview] = useState<BuyerDashboardData | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -48,11 +84,12 @@ export function BuyerWorkspace() {
         }
         const meBody = await meRes.json().catch(() => ({}));
         if (!cancelled) setMe((meBody.data || null) as AccountProfile | null);
-        const [evRes, orRes, tiRes, noRes] = await Promise.all([
+        const [evRes, orRes, tiRes, noRes, dashRes] = await Promise.all([
           fetch("/api/events?limit=8", { credentials: "include", cache: "no-store" }),
           fetch("/api/orders", { credentials: "include", cache: "no-store" }),
           fetch("/api/tickets", { credentials: "include", cache: "no-store" }),
           fetch("/api/me/notifications?filter=all&limit=8", { credentials: "include", cache: "no-store" }),
+          fetch("/api/me/dashboard", { credentials: "include", cache: "no-store" }),
         ]);
         if (evRes.status === 401) {
           router.replace("/login?callbackUrl=/dashboard");
@@ -62,9 +99,20 @@ export function BuyerWorkspace() {
         const orBody = await orRes.json().catch(() => ({}));
         const tiBody = await tiRes.json().catch(() => ({}));
         const noBody = await noRes.json().catch(() => ({}));
+        const dashBody = await dashRes.json().catch(() => ({}));
         if (cancelled) return;
         setEvents((evBody.data?.items || []) as CatalogCard[]);
-        setOrders((orBody.data?.items || []) as OrderRow[]);
+        const orderItems = (orBody.data?.items || []) as OrderRow[];
+        setOrders(orderItems);
+        const dash = (dashBody.data || null) as BuyerDashboardData | null;
+        setOverview(dash);
+        setPaidOrderCount(
+          typeof dash?.paidOrderCount === "number"
+            ? dash.paidOrderCount
+            : typeof orBody.data?.paidCount === "number"
+              ? orBody.data.paidCount
+              : orderItems.filter((o) => o.status === "PAID").length,
+        );
         setTickets((tiBody.data?.items || []) as TicketRow[]);
         setNotices((noBody.data?.items || []) as Notice[]);
       } finally {
@@ -106,23 +154,38 @@ export function BuyerWorkspace() {
       {loading ? <p role="status" className="mt-4 text-ink/60">Memuat dashboard pembeli…</p> : null}
 
       <ul className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <li className="rounded-3xl bg-white p-5 shadow-sm">
-          <p className="text-xs font-medium uppercase tracking-wide text-ink/45">Event mendatang</p>
-          <p className="mt-2 text-3xl font-semibold text-ink">{events.length}</p>
-        </li>
-        <li className="rounded-3xl bg-white p-5 shadow-sm">
-          <p className="text-xs font-medium uppercase tracking-wide text-ink/45">Order</p>
-          <p className="mt-2 text-3xl font-semibold text-ink">{orders.length}</p>
-        </li>
-        <li className="rounded-3xl bg-white p-5 shadow-sm">
-          <p className="text-xs font-medium uppercase tracking-wide text-ink/45">Tiket</p>
-          <p className="mt-2 text-3xl font-semibold text-ink">{tickets.length}</p>
-        </li>
-        <li className="rounded-3xl bg-white p-5 shadow-sm">
-          <p className="text-xs font-medium uppercase tracking-wide text-ink/45">Notifikasi belum dibaca</p>
-          <p className="mt-2 text-3xl font-semibold text-ink">{unread}</p>
-        </li>
+        <KpiLink
+          href="/dashboard/order?status=PAID"
+          label="Pengeluaran"
+          value={overview ? formatRupiah(overview.spentRupiah) : "Rp0"}
+          hint={overview?.refundedRupiah ? `Refund ${formatRupiah(overview.refundedRupiah)}` : "Total order lunas"}
+          icon="chart"
+        />
+        <KpiLink
+          href="/dashboard/order?status=PAID"
+          label="Order"
+          value={String(paidOrderCount)}
+          hint={overview?.pendingOrderCount ? `${overview.pendingOrderCount} menunggu bayar` : "Hanya order lunas"}
+          icon="orders"
+        />
+        <KpiLink
+          href="/dashboard/ticket"
+          label="Tiket aktif"
+          value={String(overview?.activeTicketCount ?? tickets.length)}
+          hint="Tiket belum dipakai untuk event mendatang"
+          icon="ticket"
+        />
+        <KpiLink
+          href="/dashboard/poin"
+          label="Poin loyalty"
+          value={String(overview?.loyaltyPoints ?? 0)}
+          hint={unread ? `${unread} notifikasi belum dibaca` : "Tidak bernilai tunai"}
+          icon="bell"
+        />
       </ul>
+
+      {overview?.nextTicket ? <NextTicketCard ticket={overview.nextTicket} /> : null}
+      {overview ? <BuyerOverviewCharts data={overview} /> : null}
 
       {applying ? (
         <p className="mt-4 text-sm text-ink/65">

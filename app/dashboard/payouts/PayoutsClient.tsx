@@ -6,6 +6,7 @@ import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { apiFetch, readApiError } from "@/lib/api";
 import { formatDateTime, formatRupiah } from "@/lib/format";
+import { organizerPayoutReportHref } from "@/lib/payout-report";
 
 type EventRow = {
   eventId: string;
@@ -22,6 +23,7 @@ type EventRow = {
 type PayoutItem = {
   id: string;
   payoutNumber: string;
+  eventId?: string;
   eventTitle?: string;
   amountRupiah: number;
   status: string;
@@ -93,7 +95,7 @@ export function PayoutsClient() {
       setError(readApiError(body, "Pencairan gagal diajukan."));
       return;
     }
-    setMessage("Pencairan diajukan. Admin akan mentransfer ke rekening terdaftar (sandbox).");
+    setMessage("Pencairan diajukan. Admin akan mentransfer ke rekening terdaftar.");
     await load();
   }
 
@@ -101,8 +103,8 @@ export function PayoutsClient() {
     <div className="space-y-6">
       <p className="text-sm text-ink/70">
         Pembayaran pembeli diterima akun platform. Setelah event selesai dan masa tahan {data?.holdHours ?? 24} jam lewat,
-        Anda dapat mengajukan pencairan hasil penjualan bersih (setelah refund) ke rekening terdaftar. Sandbox, bukan uang
-        nyata.
+        Anda dapat mengajukan pencairan hasil penjualan bersih (setelah refund) ke rekening terdaftar. Unduh laporan
+        pendukung (PDF atau Excel) sebagai data dukung: biodata pemegang tiket, penjualan lunas, dan refund selesai.
       </p>
       {error ? <Alert tone="error" title={error} /> : null}
       {message ? <Alert tone="success" title={message} /> : null}
@@ -164,6 +166,12 @@ export function PayoutsClient() {
                         : BLOCK_TEXT[e.blockedBy] || "Belum dapat dicairkan."}
                     </p>
                   )}
+                  <a className="text-sm text-gold-700 underline" href={organizerPayoutReportHref(e.eventId, "pdf")}>
+                    Unduh laporan PDF
+                  </a>
+                  <a className="text-sm text-gold-700 underline" href={organizerPayoutReportHref(e.eventId, "csv")}>
+                    Unduh laporan Excel
+                  </a>
                 </div>
               </li>
             ))}
@@ -192,11 +200,23 @@ export function PayoutsClient() {
                 {p.status === "REJECTED" && p.decisionReason ? (
                   <p className="mt-1 text-xs text-ink/70">Alasan: {p.decisionReason}</p>
                 ) : null}
-                {p.status === "PAID" && p.hasTransferProof ? (
-                  <a className="mt-1 inline-block text-xs text-gold-700 underline" href={`/api/organizer/payouts/${p.id}/proof`} target="_blank" rel="noreferrer">
-                    Lihat bukti transfer
-                  </a>
-                ) : null}
+                <div className="mt-2 flex flex-wrap gap-3">
+                  {p.eventId ? (
+                    <>
+                      <a className="text-xs text-gold-700 underline" href={organizerPayoutReportHref(p.eventId, "pdf")}>
+                        Laporan PDF
+                      </a>
+                      <a className="text-xs text-gold-700 underline" href={organizerPayoutReportHref(p.eventId, "csv")}>
+                        Laporan Excel
+                      </a>
+                    </>
+                  ) : null}
+                  {p.status === "PAID" && p.hasTransferProof ? (
+                    <a className="text-xs text-gold-700 underline" href={`/api/organizer/payouts/${p.id}/proof`} target="_blank" rel="noreferrer">
+                      Lihat bukti transfer
+                    </a>
+                  ) : null}
+                </div>
               </li>
             ))}
           </ul>

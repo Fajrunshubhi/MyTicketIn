@@ -60,7 +60,7 @@ export function PaymentInstructionCard({
     <section className="rounded-3xl border border-stone-200 bg-white p-5">
       <h2 className="text-lg font-semibold text-ink">Instruksi {methodLabel}</h2>
       <p role="status" aria-live="polite" className="mt-1 text-sm text-ink/65">
-        Status {status === "SUCCEEDED" ? "berhasil" : status.toLowerCase()} · {sandbox ? "uji" : "transaksi nyata"}
+        Status {status === "SUCCEEDED" ? "berhasil" : status.toLowerCase()}
       </p>
       <p className="mt-2 text-sm font-medium text-ink">Bayar tepat {formatRupiah(amountRupiah)}</p>
       <p className="mt-1 text-sm text-ink/65">
@@ -74,7 +74,7 @@ export function PaymentInstructionCard({
             // eslint-disable-next-line @next/next/no-img-element
             <img
               src={qrSrc}
-              alt={`Kode QRIS sandbox sebesar ${formatRupiah(amountRupiah)}`}
+              alt={`Kode QRIS sebesar ${formatRupiah(amountRupiah)}`}
               width={240}
               height={240}
               className="h-60 w-60 rounded-xl border border-stone-200 bg-white p-2"
@@ -83,9 +83,7 @@ export function PaymentInstructionCard({
             <p className="text-sm text-ink/60">Menyiapkan kode QR…</p>
           )}
           <p className="text-center text-sm text-ink/70">
-            {sandbox
-              ? "Ini QR uji. Aplikasi bank sungguhan akan menolaknya. Pakai simulator Midtrans."
-              : "Pindai dengan aplikasi bank atau e-wallet yang mendukung QRIS."}
+            Pindai dengan aplikasi bank atau e-wallet yang mendukung QRIS.
           </p>
           {sandbox && copyTarget.startsWith("https://") ? (
             <p className="w-full break-all rounded-xl bg-[#f7f8fd] p-3 text-center font-mono text-xs text-ink/80">
@@ -127,7 +125,7 @@ export function PaymentInstructionCard({
             rel="noreferrer"
             className="font-medium text-gold-700 underline-offset-2 hover:underline"
           >
-            Buka simulator Midtrans Sandbox
+            Buka halaman pembayaran Midtrans
           </a>
         </p>
       ) : null}

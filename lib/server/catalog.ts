@@ -1,5 +1,6 @@
 import { AppError, query } from "@/lib/server/http";
 import { dummyCover } from "@/lib/event-cover";
+import { HERO_SLIDE_LIMIT, pickHeroSlides } from "@/lib/hero-slides";
 import { publicImageSrc } from "@/lib/server/gallery";
 import { emptyRatingSummary, ratingSummaryByEventIds } from "@/lib/server/reviews";
 import { organizerSalesBlocked } from "@/lib/organizer-sales";
@@ -216,6 +217,48 @@ export async function listCatalog(params: {
     nextCursor: rows.length > limit && last && cursorKey ? Buffer.from(`${cursorKey}|${last.id}`).toString("base64url") : null,
     appliedFilters: applied,
   };
+}
+
+const HERO_EVENT_SELECT = `e.id, e.organizer_profile_id, e.slug, e.title, e.description, e.category, e.venue_name, e.address_line,
+            e.city, e.province, e.latitude, e.longitude, e.tags, e.timezone, e.starts_at::text, e.ends_at::text,
+            e.terms, e.contact_email, e.contact_phone, e.status::text AS status, e.inventory_mode::text AS inventory_mode,
+            p.status::text AS organizer_status, COALESCE(s.paid, 0)::int AS paid_count`;
+
+const HERO_FROM = `FROM events e
+     JOIN organizer_profiles p ON p.id = e.organizer_profile_id
+     LEFT JOIN (
+       SELECT event_id, SUM(paid_quantity)::int AS paid FROM event_ticket_types GROUP BY event_id
+     ) s ON s.event_id = e.id
+     WHERE e.status = 'PUBLISHED' AND e.starts_at > NOW()`;
+
+/** Homepage carousel: at most 6 upcoming Published events, mixing best-sellers and the soonest dates. */
+export async function listHeroSlides(limit = HERO_SLIDE_LIMIT): Promise<CatalogCard[]> {
+  const cap = Math.min(Math.max(limit, 1), HERO_SLIDE_LIMIT);
+  type HeroRow = EventRow & { paid_count: number };
+  const [soonest, popular] = await Promise.all([
+    query<HeroRow>(
+      `SELECT ${HERO_EVENT_SELECT} ${HERO_FROM}
+       ORDER BY e.starts_at ASC, e.id ASC
+       LIMIT $1`,
+      [cap],
+    ),
+    query<HeroRow>(
+      `SELECT ${HERO_EVENT_SELECT} ${HERO_FROM}
+         AND COALESCE(s.paid, 0) > 0
+       ORDER BY COALESCE(s.paid, 0) DESC, e.starts_at ASC, e.id ASC
+       LIMIT $1`,
+      [cap],
+    ),
+  ]);
+  const picked = pickHeroSlides(
+    [...soonest, ...popular].map((row) => ({
+      ...row,
+      startsAt: row.starts_at,
+      paidCount: row.paid_count,
+    })),
+    cap,
+  );
+  return toCatalogCards(picked);
 }
 
 export async function listOrganizerPublicEvents(organizerProfileId: string): Promise<{

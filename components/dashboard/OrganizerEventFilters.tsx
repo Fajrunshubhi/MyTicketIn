@@ -2,7 +2,9 @@
 
 import { useRouter, useSearchParams } from "next/navigation";
 import { FormEvent, useMemo, useState, type ReactNode } from "react";
+import { DateFilterFields } from "@/components/events/DateFilterFields";
 import { STATUS_LABEL, type EventStatus } from "@/components/events/event-types";
+import { dateFilterChipLabel } from "@/lib/date-filter";
 
 const STATUSES: EventStatus[] = ["DRAFT", "PENDING_REVIEW", "PUBLISHED", "REJECTED", "CANCELLED", "COMPLETED"];
 
@@ -47,7 +49,9 @@ export function OrganizerEventFilters({
     }),
     [params],
   );
-  const hasAdvanced = Boolean(current.status || current.category || current.city || current.province || current.dateFrom || current.sort !== "soonest");
+  const hasAdvanced = Boolean(
+    current.status || current.category || current.city || current.province || current.dateFrom || current.dateTo || current.sort !== "soonest",
+  );
   const [open, setOpen] = useState(hasAdvanced);
 
   function apply(next: Record<string, string>) {
@@ -67,19 +71,20 @@ export function OrganizerEventFilters({
       category: String(fd.get("category") || ""),
       city: String(fd.get("city") || ""),
       province: String(fd.get("province") || ""),
-      dateFrom: String(fd.get("dateFrom") || ""),
-      dateTo: String(fd.get("dateTo") || ""),
+      dateFrom: String(fd.get("dateFrom") || "").trim(),
+      dateTo: String(fd.get("dateTo") || "").trim(),
       sort: String(fd.get("sort") || "soonest"),
     });
   }
 
+  const dateChip = dateFilterChipLabel(current.dateFrom, current.dateTo);
   const chips = [
     current.q && { key: "q", label: `Kata kunci: ${current.q}` },
     current.status && { key: "status", label: `Status: ${STATUS_LABEL[current.status as EventStatus] || current.status}` },
     current.category && { key: "category", label: `Kategori: ${current.category}` },
     current.city && { key: "city", label: `Kota: ${current.city}` },
     current.province && { key: "province", label: `Provinsi: ${current.province}` },
-    current.dateFrom && { key: "dateFrom", label: `${current.dateFrom}–${current.dateTo}` },
+    dateChip && { key: "dateFrom", label: dateChip },
   ].filter(Boolean) as { key: string; label: string }[];
 
   return (
@@ -144,12 +149,12 @@ export function OrganizerEventFilters({
                 ))}
               </select>
             </Field>
-            <Field label="Dari">
-              <input type="date" name="dateFrom" defaultValue={current.dateFrom} className={fieldClass} />
-            </Field>
-            <Field label="Sampai">
-              <input type="date" name="dateTo" defaultValue={current.dateTo} className={fieldClass} />
-            </Field>
+            <DateFilterFields
+              key={`${current.dateFrom}-${current.dateTo}`}
+              dateFrom={current.dateFrom}
+              dateTo={current.dateTo}
+              fieldClass={fieldClass}
+            />
             <Field label="Urutan">
               <select name="sort" defaultValue={current.sort} className={fieldClass}>
                 <option value="soonest">Terdekat</option>

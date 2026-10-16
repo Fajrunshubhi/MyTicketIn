@@ -1,9 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { formatClockWithZone, formatDateTime, formatLiveClock, formatLiveClockDate, formatRupiah, formatCheckInBefore, eventHasEnded, eventLifecycle, naiveLocalToUtcIso, utcIsoToNaiveLocal } from "./format";
+import { formatClockWithZone, formatDateLong, formatDateTime, formatLiveClock, formatLiveClockDate, formatRupiah, formatCheckInBefore, eventHasEnded, eventLifecycle, naiveLocalToUtcIso, utcIsoToNaiveLocal } from "./format";
 
 describe("F55 formatters", () => {
   it("formats integer Rupiah without fractions", () => {
     expect(formatRupiah(125000)).toBe("Rp125.000");
+  });
+
+  it("prints a long Indonesian calendar date", () => {
+    expect(formatDateLong("2026-10-17T00:00:00.000Z", "Asia/Jakarta")).toMatch(/2026/);
+    expect(formatDateLong("2026-10-17T00:00:00.000Z", "Asia/Jakarta")).toMatch(/Oktober|October|Okt/i);
   });
 
   it("rejects non-integer amounts", () => {

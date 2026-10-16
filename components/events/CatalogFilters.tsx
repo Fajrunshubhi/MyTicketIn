@@ -3,6 +3,8 @@
 import { useRouter, useSearchParams } from "next/navigation";
 import { FormEvent, useMemo, useState } from "react";
 import { trackEvent } from "@/lib/analytics";
+import { dateFilterChipLabel } from "@/lib/date-filter";
+import { DateFilterFields } from "./DateFilterFields";
 import { VoiceSearchButton } from "./VoiceSearchButton";
 
 type Filters = { categories: string[]; locations: { city: string; province: string }[] };
@@ -45,8 +47,8 @@ export function CatalogFilters({ filters, basePath = "/events" }: { filters: Fil
       category: String(fd.get("category") || ""),
       city: String(fd.get("city") || ""),
       province: String(fd.get("province") || ""),
-      dateFrom: String(fd.get("dateFrom") || ""),
-      dateTo: String(fd.get("dateTo") || ""),
+      dateFrom: String(fd.get("dateFrom") || "").trim(),
+      dateTo: String(fd.get("dateTo") || "").trim(),
       tag: current.tag,
       sort: String(fd.get("sort") || "soonest"),
       when: String(fd.get("when") || ""),
@@ -82,6 +84,7 @@ export function CatalogFilters({ filters, basePath = "/events" }: { filters: Fil
     router.push(q ? `${basePath}?${q}` : basePath);
   }
 
+  const dateChip = dateFilterChipLabel(current.dateFrom, current.dateTo);
   const chips = [
     current.q && { key: "q", label: `Kata kunci: ${current.q}` },
     current.when && { key: "when", label: "Waktu: telah selesai" },
@@ -89,14 +92,13 @@ export function CatalogFilters({ filters, basePath = "/events" }: { filters: Fil
     current.city && { key: "city", label: `Kota: ${current.city}` },
     current.province && { key: "province", label: `Provinsi: ${current.province}` },
     current.tag && { key: "tag", label: `Tag: ${current.tag}` },
-    current.dateFrom && { key: "dateFrom", label: `${current.dateFrom}–${current.dateTo || "…"}` },
-    !current.dateFrom && current.dateTo && { key: "dateTo", label: `Sampai ${current.dateTo}` },
+    dateChip && { key: "dateFrom", label: dateChip },
     current.sort === "newest" && { key: "sort", label: "Urutan: terbaru" },
   ].filter(Boolean) as { key: string; label: string }[];
 
   return (
     <div className="space-y-4">
-      <form onSubmit={onNatural} className="grid gap-2 sm:grid-cols-[1fr_auto]">
+      <form onSubmit={onNatural} className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto_auto]">
         <label className="block">
           <span className="sr-only">Cari dengan bahasa alami</span>
           <input
@@ -114,7 +116,7 @@ export function CatalogFilters({ filters, basePath = "/events" }: { filters: Fil
             void translate(text);
           }}
         />
-        <button type="submit" className="min-h-11 rounded-xl border border-gold-400 px-4 text-gold-800">
+        <button type="submit" className="min-h-11 rounded-xl border border-gold-400 px-4 text-gold-800 sm:w-auto">
           Terjemahkan
         </button>
       </form>
@@ -184,14 +186,11 @@ export function CatalogFilters({ filters, basePath = "/events" }: { filters: Fil
                 ))}
               </select>
             </label>
-            <label className="block text-sm text-ink/70">
-              Dari
-              <input type="date" name="dateFrom" defaultValue={current.dateFrom} className="mt-1 w-full min-h-11 rounded-lg border border-stone-200 bg-white px-3 text-ink" />
-            </label>
-            <label className="block text-sm text-ink/70">
-              Sampai
-              <input type="date" name="dateTo" defaultValue={current.dateTo} className="mt-1 w-full min-h-11 rounded-lg border border-stone-200 bg-white px-3 text-ink" />
-            </label>
+            <DateFilterFields
+              key={`${current.dateFrom}-${current.dateTo}`}
+              dateFrom={current.dateFrom}
+              dateTo={current.dateTo}
+            />
             <label className="block text-sm text-ink/70">
               Urutan
               <select name="sort" defaultValue={current.sort} className="mt-1 w-full min-h-11 rounded-lg border border-stone-200 bg-white px-3 text-ink">

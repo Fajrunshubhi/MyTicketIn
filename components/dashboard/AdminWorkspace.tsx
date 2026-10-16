@@ -73,7 +73,7 @@ export function AdminWorkspace() {
 
   return (
     <div>
-      <p className="text-sm text-gold-800">SANDBOX / OPERASI UJI · {me ? roleLabel(me) : "Admin aplikasi"}</p>
+      <p className="text-sm text-gold-800">Admin aplikasi · {me ? roleLabel(me) : "Admin"}</p>
       <p className="mt-1 text-lg font-semibold text-ink">Halo, {me?.name || me?.username || "admin"}</p>
       {error ? <p role="alert" className="mt-4 text-sm text-red-700">{error}</p> : null}
       {loading ? <p role="status" className="mt-4 text-ink/60">Memuat dashboard admin…</p> : null}

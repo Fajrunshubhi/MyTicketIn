@@ -122,7 +122,7 @@ export function NotificationBell({ compact = false, href = "/dashboard/notificat
           id={panelId}
           role="dialog"
           aria-label="Pratinjau notifikasi"
-          className="absolute right-0 z-[70] mt-2 w-[min(22rem,calc(100vw-1.5rem))] rounded-2xl border border-stone-200 bg-white p-2 shadow-card"
+          className="absolute right-0 z-[70] mt-2 w-[min(22rem,calc(100vw-1.5rem))] max-w-[calc(100vw-1.5rem)] rounded-2xl border border-stone-200 bg-white p-2 shadow-card"
         >
           {items.length === 0 ? (
             <p className="px-3 py-6 text-sm text-ink/65">Belum ada notifikasi.</p>

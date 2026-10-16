@@ -48,7 +48,7 @@ export function EventGallery({
         <img
           src={current.url}
           alt={current.alt || title}
-          className="aspect-[16/9] h-auto w-full object-cover"
+          className="aspect-[4/3] h-auto w-full object-cover sm:aspect-[16/9]"
           onError={(event) => {
             const url = current.url;
             markFallback(event.currentTarget);
@@ -59,19 +59,19 @@ export function EventGallery({
           <>
             <button
               type="button"
-              className="absolute left-3 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full bg-white/90 text-ink shadow-card"
+              className="absolute left-2 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full bg-white/90 text-ink shadow-card sm:left-3 sm:h-11 sm:w-11"
               aria-label="Gambar sebelumnya"
               onClick={() => go(index - 1)}
             >
-              <Icon name="chevron" className="h-5 w-5 -rotate-90" />
+              <Icon name="chevron" className="h-5 w-5 rotate-90" />
             </button>
             <button
               type="button"
-              className="absolute right-3 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full bg-white/90 text-ink shadow-card"
+              className="absolute right-2 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full bg-white/90 text-ink shadow-card sm:right-3 sm:h-11 sm:w-11"
               aria-label="Gambar berikutnya"
               onClick={() => go(index + 1)}
             >
-              <Icon name="chevron" className="h-5 w-5 rotate-90" />
+              <Icon name="chevron" className="h-5 w-5 -rotate-90" />
             </button>
             <p className="sr-only" aria-live="polite">
               Gambar {index + 1} dari {slides.length}

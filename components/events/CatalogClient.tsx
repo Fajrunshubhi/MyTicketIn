@@ -27,6 +27,7 @@ export function CatalogClient({ basePath = "/events" }: { basePath?: string }) {
       params.get("city") ||
       params.get("province") ||
       params.get("dateFrom") ||
+      params.get("dateTo") ||
       params.get("tag") ||
       params.get("when") === "past",
   );

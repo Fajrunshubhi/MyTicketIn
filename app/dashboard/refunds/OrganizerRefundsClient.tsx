@@ -45,7 +45,7 @@ export function OrganizerRefundsClient() {
   const search = useSearchParams();
   const focusId = search.get("refund") || "";
   const [items, setItems] = useState<Refund[]>([]);
-  const [reason, setReason] = useState("Keputusan penyelenggara untuk refund sandbox uji.");
+  const [reason, setReason] = useState("Keputusan penyelenggara untuk refund.");
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);

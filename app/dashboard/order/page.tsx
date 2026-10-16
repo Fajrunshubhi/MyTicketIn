@@ -81,12 +81,12 @@ function OrdersRoute() {
       const body = await res.json();
       const order = (body.data as { order?: Parameters<typeof downloadOrderReceiptPdf>[0] } | undefined)?.order;
       if (!res.ok || !order) {
-        setPdfError("Receipt PDF gagal diunduh. Coba lagi.");
+        setPdfError("Kuitansi PDF gagal diunduh. Coba lagi.");
         return;
       }
       await downloadOrderReceiptPdf(order);
     } catch {
-      setPdfError("Receipt PDF gagal diunduh. Coba lagi.");
+      setPdfError("Kuitansi PDF gagal diunduh. Coba lagi.");
     } finally {
       setPdfId(null);
     }
@@ -198,7 +198,7 @@ function OrdersRoute() {
                         onClick={() => void downloadReceipt(o.id)}
                         className="inline-flex min-h-11 items-center rounded-full border border-stone-200 px-4 text-sm font-semibold text-ink hover:bg-stone-50 disabled:opacity-60"
                       >
-                        {pdfId === o.id ? "Menyiapkan PDF…" : "Unduh receipt"}
+                        {pdfId === o.id ? "Menyiapkan PDF…" : "Unduh kuitansi"}
                       </button>
                       <Link
                         href={`/dashboard/order/${o.id}`}

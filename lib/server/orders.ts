@@ -58,10 +58,23 @@ export async function listOrders(user: AuthUser, limit: number) {
   }));
 }
 
+export async function countBuyerOrders(user: AuthUser, status?: "PAID"): Promise<number> {
+  const rows = status
+    ? await query<{ n: string }>(
+        `SELECT COUNT(*)::text AS n FROM orders WHERE buyer_user_id=$1 AND status=$2::order_status`,
+        [user.id, status],
+      )
+    : await query<{ n: string }>(`SELECT COUNT(*)::text AS n FROM orders WHERE buyer_user_id=$1`, [user.id]);
+  return Number(rows[0]?.n || 0);
+}
+
+const ORDER_SELECT = `id, order_number, buyer_user_id, event_id, status::text AS status, currency, subtotal_rupiah,
+            loyalty_discount_rupiah, promo_discount_rupiah, promo_code, total_payable_rupiah, redeemed_points,
+            expires_at::text, created_at::text, paid_at::text, version`;
+
 export async function getOrder(user: AuthUser, id: string) {
   const rows = await query<Record<string, unknown>>(
-    `SELECT id, order_number, buyer_user_id, event_id, status::text AS status, currency, subtotal_rupiah,
-            loyalty_discount_rupiah, promo_discount_rupiah, promo_code, total_payable_rupiah, redeemed_points, expires_at::text, created_at::text, version
+    `SELECT ${ORDER_SELECT}
      FROM orders WHERE id = $1 LIMIT 1`,
     [id],
   );
@@ -73,8 +86,7 @@ export async function getOrder(user: AuthUser, id: string) {
     const expired = await expireOrderById(String(o.id));
     if (expired) {
       const refreshed = await query<Record<string, unknown>>(
-        `SELECT id, order_number, buyer_user_id, event_id, status::text AS status, currency, subtotal_rupiah,
-                loyalty_discount_rupiah, promo_discount_rupiah, promo_code, total_payable_rupiah, redeemed_points, expires_at::text, created_at::text, version
+        `SELECT ${ORDER_SELECT}
          FROM orders WHERE id = $1 LIMIT 1`,
         [id],
       );
@@ -140,11 +152,40 @@ export async function getOrder(user: AuthUser, id: string) {
       }
     : undefined;
   const refunds = await listOrderRefunds(id);
+  const buyerRows = await query<{ name: string; email: string; phone: string | null }>(
+    `SELECT name, email, phone FROM users WHERE id=$1 LIMIT 1`,
+    [o.buyer_user_id],
+  );
+  const orgRows = await query<{ name: string }>(
+    `SELECT p.name FROM organizer_profiles p JOIN events e ON e.organizer_profile_id = p.id WHERE e.id=$1 LIMIT 1`,
+    [o.event_id],
+  );
+  const payRows = await query<{ method: string; provider: string; external_reference: string }>(
+    `SELECT method::text AS method, provider, external_reference FROM payments WHERE order_id=$1 ORDER BY created_at DESC, id DESC LIMIT 1`,
+    [id],
+  );
+  const buyer = buyerRows[0]
+    ? {
+        name: buyerRows[0].name,
+        email: buyerRows[0].email,
+        phone: buyerRows[0].phone || undefined,
+      }
+    : undefined;
+  const payment = payRows[0]
+    ? {
+        method: payRows[0].method,
+        provider: payRows[0].provider,
+        externalReference: payRows[0].external_reference,
+      }
+    : undefined;
   return {
     ...orderDto(o),
     event,
     refunds,
     ticketsCancelled: ticketsCancelledByRefund(String(o.status), refunds),
+    buyer,
+    organizerName: orgRows[0]?.name || "",
+    payment,
     items: items.map((it) => ({
       ...itemDto(it),
       attendees: byItem.get(String(it.id)) || [],
@@ -171,6 +212,7 @@ function orderDto(o: Record<string, unknown>) {
     createdAt: o.created_at
       ? new Date(String(o.created_at)).toISOString()
       : null,
+    paidAt: o.paid_at ? new Date(String(o.paid_at)).toISOString() : null,
     version: o.version,
     redeemedPoints: Number(o.redeemed_points || 0),
   };

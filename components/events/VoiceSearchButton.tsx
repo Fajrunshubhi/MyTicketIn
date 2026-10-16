@@ -95,7 +95,7 @@ export function VoiceSearchButton({ onTranscript }: { onTranscript: (text: strin
         onClick={toggle}
         aria-pressed={listening}
         aria-label={listening ? "Berhenti mendengarkan" : "Cari dengan suara"}
-        className={`inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border px-4 text-sm font-semibold ${
+        className={`inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border px-4 text-sm font-semibold sm:w-auto ${
           listening ? "border-red-500 bg-red-50 text-red-700" : "border-stone-300 bg-white text-ink hover:bg-stone-50"
         }`}
       >

@@ -14,7 +14,7 @@ describe("order refund display", () => {
   it("keeps a paid order as paid until a buyer/event refund completes", () => {
     expect(orderDocumentKind("PAID", [])).toBe("paid");
     expect(orderStampLabel("paid")).toBe("LUNAS");
-    expect(orderDocumentTitle("paid")).toBe("BUKTI PEMBAYARAN");
+    expect(orderDocumentTitle("paid")).toBe("KUITANSI ELEKTRONIK");
   });
 
   it("treats completed buyer 75% refund as cancelled tickets, not LUNAS", () => {

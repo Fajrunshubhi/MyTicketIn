@@ -317,7 +317,7 @@ export function ApplicationForm({ initial, mode, onDone, onCancel }: Props) {
 
         <FormSection
           title="Rekening penyelenggara"
-          description="Rekening untuk pencairan hasil penjualan di tahap berikutnya. Pada versi uji ini tidak ada uang nyata yang ditransfer."
+          description="Rekening untuk pencairan hasil penjualan setelah event selesai dan masa tahan berakhir."
         >
           <div className="min-w-0">
             <label htmlFor="bankName" className="mb-1 block text-sm font-medium text-ink">

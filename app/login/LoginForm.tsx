@@ -174,7 +174,7 @@ export default function LoginForm() {
   }
 
   return (
-    <main className="auth-shell auth-lock grid h-dvh max-h-dvh overflow-hidden lg:grid-cols-2">
+    <main className="auth-shell auth-lock grid min-h-dvh lg:h-dvh lg:max-h-dvh lg:grid-cols-2 lg:overflow-hidden">
       <section className="hero-stage relative hidden overflow-hidden p-10 text-white lg:flex lg:flex-col lg:justify-between">
         <BrandMark compact onDark />
         <div>
@@ -185,7 +185,7 @@ export default function LoginForm() {
         <p className="text-sm text-white/50">@ 2026 MYTICKETIN. Hak Cipta dilindungi undang-undang</p>
       </section>
 
-      <section className="flex h-dvh max-h-dvh items-center justify-center overflow-hidden px-4 py-3 sm:px-8">
+      <section className="flex min-h-dvh items-start justify-center overflow-y-auto px-4 py-8 sm:items-center sm:px-8 lg:h-dvh lg:max-h-dvh">
         <div className="w-full max-w-md min-w-0">
           <div className="lg:hidden">
             <BrandMark compact />
@@ -265,7 +265,7 @@ export default function LoginForm() {
                 required
               />
             </label>
-            <div className="flex items-center justify-between gap-3 text-sm">
+            <div className="flex flex-wrap items-center justify-between gap-3 text-sm">
               <label className="flex items-center gap-2 text-ink/70">
                 <input type="checkbox" checked={showPassword} onChange={() => setShowPassword((v) => !v)} />
                 Tampilkan kata sandi

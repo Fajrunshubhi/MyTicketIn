@@ -21,7 +21,7 @@ export async function SiteFooter() {
 
   return (
     <footer className="mt-16 bg-[#120e24] text-white">
-      <div className="mx-auto grid w-full max-w-6xl gap-10 px-6 py-14 sm:grid-cols-2 lg:grid-cols-12">
+      <div className="mx-auto grid w-full max-w-6xl gap-10 px-4 py-12 sm:grid-cols-2 sm:px-6 sm:py-14 lg:grid-cols-12">
         <div className="sm:col-span-2 lg:col-span-4">
           <BrandMark compact onDark />
           <p className="mt-4 max-w-sm text-sm leading-relaxed text-white/65">
@@ -113,9 +113,9 @@ export async function SiteFooter() {
       </div>
 
       <div className="border-t border-white/10">
-        <div className="mx-auto flex w-full max-w-6xl flex-col gap-3 px-6 py-5 text-xs text-white/45 sm:flex-row sm:items-center sm:justify-between">
+        <div className="mx-auto flex w-full max-w-6xl flex-col gap-3 px-4 py-5 text-xs text-white/45 sm:flex-row sm:items-center sm:justify-between sm:px-6">
           <p>© {year} MyTicketIn. Hak cipta dilindungi.</p>
-          <p>Pembayaran sandbox. Transaksi uji, bukan uang nyata.</p>
+          <p>Pembayaran melalui mitra pembayaran berizin.</p>
         </div>
       </div>
     </footer>

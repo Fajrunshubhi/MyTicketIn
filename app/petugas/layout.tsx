@@ -15,11 +15,11 @@ export default async function StaffLayout({ children }: { children: ReactNode })
   }
   return (
     <div className="min-h-screen bg-[#fbfafd]">
-      <header data-clock-host className="flex items-center justify-between border-b border-stone-200 bg-white px-4 py-3">
+      <header data-clock-host className="flex items-center justify-between gap-2 border-b border-stone-200 bg-white px-3 py-3 sm:px-4">
         <BrandMark compact />
-        <div className="flex items-center gap-3">
-          <LiveClock />
-          <p className="text-sm text-ink/70">Petugas check-in</p>
+        <div className="flex min-w-0 items-center gap-2 sm:gap-3">
+          <LiveClock className="hidden sm:inline-flex" />
+          <p className="hidden truncate text-sm text-ink/70 sm:block">Petugas check-in</p>
           <LogoutButton />
         </div>
       </header>

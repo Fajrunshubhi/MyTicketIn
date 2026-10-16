@@ -12,11 +12,22 @@ body {
   overflow-x: hidden;
 }
 
-#konten-utama:has(.auth-lock),
 #konten-utama:has(.workspace-root) {
   height: 100dvh;
   max-height: 100dvh;
   overflow: hidden;
+}
+
+#konten-utama:has(.auth-lock) {
+  min-height: 100dvh;
+}
+
+@media (min-width: 1024px) {
+  #konten-utama:has(.auth-lock) {
+    height: 100dvh;
+    max-height: 100dvh;
+    overflow: hidden;
+  }
 }
 
 html:has(.workspace-root),

@@ -116,7 +116,7 @@ export function buildEventTicketPdfBytes(ticket: EventTicketPdf, qrJpeg?: Uint8A
       ? "TIKET DIBATALKAN  ·  Kode QR tidak disertakan pada dokumen ini."
       : ended
         ? "EVENT TELAH SELESAI  ·  Tiket ini arsip pembelian. Check-in tidak lagi berlaku."
-        : "E-TIKET SANDBOX  ·  QR hanya berisi token check-in, bukan data pribadi.",
+        : "E-TIKET  ·  QR hanya berisi token check-in, bukan data pribadi.",
     margin + 10,
     y - 10,
     { size: 7.5, color: cancelled || ended ? PDF_WARN : PDF_PAID, maxWidth: innerW - 20 },

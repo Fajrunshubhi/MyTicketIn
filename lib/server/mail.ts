@@ -92,7 +92,7 @@ export function notificationEmail(input: { name: string; title: string; body: st
   const path = input.actionPath && input.actionPath.startsWith("/") && !input.actionPath.startsWith("//") ? input.actionPath : "/dashboard/notifications";
   const url = `${publicAppOrigin()}${path}`;
   const subject = input.title.slice(0, 160);
-  const text = [`Halo ${name},`, "", input.title, input.body, "", `Buka di MyTicketIn: ${url}`, "", "MyTicketIn (sandbox akademik)"].join("\n");
+  const text = [`Halo ${name},`, "", input.title, input.body, "", `Buka di MyTicketIn: ${url}`, "", "MyTicketIn"].join("\n");
   const html = `<!DOCTYPE html>
 <html lang="id"><body style="margin:0;padding:24px 12px;background:#f4f1fb;font-family:Arial,Helvetica,sans-serif;color:#1c1636;">
 <table role="presentation" width="100%" cellspacing="0" cellpadding="0"><tr><td align="center">
@@ -103,7 +103,7 @@ export function notificationEmail(input: { name: string; title: string; body: st
 <h1 style="margin:0 0 12px;font-size:22px;line-height:1.3;">${escapeHtml(input.title)}</h1>
 <p style="margin:0 0 24px;font-size:15px;line-height:1.6;">${escapeHtml(input.body)}</p>
 <p style="margin:0 0 20px;"><a href="${escapeHtml(url)}" style="display:inline-block;background:#6d4aff;color:#fff;text-decoration:none;border-radius:999px;padding:14px 22px;font-size:15px;font-weight:700;">Buka di MyTicketIn</a></p>
-<p style="margin:0;font-size:12px;color:#7a748c;">Email ini dikirim dari lingkungan sandbox akademik. Tidak ada transaksi uang nyata.</p>
+<p style="margin:0;font-size:12px;color:#7a748c;">Email otomatis MyTicketIn. Jangan membalas pesan ini.</p>
 </td></tr></table></td></tr></table></body></html>`;
   return { subject, text, html };
 }

@@ -94,10 +94,10 @@ export function ProfileForm() {
 
   return (
     <>
-      <section className="mx-auto w-full max-w-2xl px-6 pb-4">
-        <div className="overflow-hidden rounded-3xl border border-stone-200 bg-paper p-8 shadow-card md:p-10">
+      <section className="mx-auto w-full max-w-2xl pb-4">
+        <div className="overflow-hidden rounded-3xl border border-stone-200 bg-paper p-5 shadow-card sm:p-8 md:p-10">
           <p className="text-sm font-medium uppercase tracking-[0.24em] text-gold-700">Profil</p>
-          <h1 className="font-display mt-4 text-4xl text-ink">Edit profil</h1>
+          <h1 className="font-display mt-4 text-3xl text-ink sm:text-4xl">Edit profil</h1>
           <p className="mt-3 text-ink/65">
             Lengkapi biodata seperti aplikasi tiket produksi. Nomor HP dipakai saat beli tiket dan sebagai customer
             details Midtrans.

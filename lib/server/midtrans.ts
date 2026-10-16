@@ -311,7 +311,7 @@ export function parseQrisCharge(body: Record<string, unknown>): PaymentInstructi
       ? { simulatorHint: "Bayar dengan aplikasi bank atau e-wallet yang mendukung QRIS. Tiket terbit setelah Midtrans mengonfirmasi." }
       : {
           simulatorHint:
-            "Bayar lewat simulator Midtrans Sandbox, lalu tekan Cek status. Jangan pindai dengan aplikasi bank. Tempel URL gambar QR di simulator, Scan QR, Pay sekali.",
+            "Selesaikan pembayaran QRIS sesuai instruksi Midtrans, lalu tekan Cek status. Tiket terbit setelah pembayaran dikonfirmasi.",
         }),
   };
 }
@@ -336,7 +336,7 @@ export function parseVaCharge(body: Record<string, unknown>, bank: VaBank): Paym
     ...(midtransMode() === "production"
       ? { simulatorHint: "Transfer tepat sesuai nominal ke nomor virtual account ini. Tiket terbit setelah Midtrans mengonfirmasi." }
       : {
-          simulatorHint: "Bayar lewat simulator Midtrans Sandbox dengan nominal yang sama persis, lalu tekan Cek status. Bukan uang nyata.",
+          simulatorHint: "Transfer tepat sesuai nominal, lalu tekan Cek status. Tiket terbit setelah pembayaran dikonfirmasi.",
           simulatorUrl: midtransSimulatorUrl("VIRTUAL_ACCOUNT", bank),
         }),
   };

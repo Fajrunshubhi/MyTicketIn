@@ -23,7 +23,7 @@ INSERT INTO events (
   'Asia/Jakarta',
   TIMESTAMPTZ '2026-10-18 19:00:00+07',
   TIMESTAMPTZ '2026-10-18 23:00:00+07',
-  'Tiket sandbox uji. Pintu buka 17.30 WIB. Dilarang membawa minuman dari luar. Tiket tidak dapat dialihkan setelah check-in.',
+  'Pintu buka 17.30 WIB. Dilarang membawa minuman dari luar. Tiket tidak dapat dialihkan setelah check-in.',
   'joko@gmail.com', '+628111222333', 'PUBLISHED', 'GENERAL_ADMISSION',
   TIMESTAMPTZ '2026-09-10 10:00:00+07', TIMESTAMPTZ '2026-09-11 09:00:00+07', 'seed-admin',
   TIMESTAMPTZ '2026-09-11 09:05:00+07', NOW(), NOW(), 1
@@ -65,7 +65,7 @@ INSERT INTO events (
   'Asia/Jakarta',
   TIMESTAMPTZ '2026-10-25 19:00:00+07',
   TIMESTAMPTZ '2026-10-25 22:30:00+07',
-  'Wajib race pack dan nomor dada. Tutup registrasi 3 hari sebelum start. Ikuti arahan marshal. Tiket sandbox tidak termasuk asuransi produksi.',
+  'Wajib race pack dan nomor dada. Tutup registrasi 3 hari sebelum start. Ikuti arahan marshal. Tiket tidak termasuk asuransi produksi.',
   'joko@gmail.com', '+628111222333', 'PUBLISHED', 'GENERAL_ADMISSION',
   TIMESTAMPTZ '2026-09-08 09:00:00+07', TIMESTAMPTZ '2026-09-09 10:00:00+07', 'seed-admin',
   TIMESTAMPTZ '2026-09-09 10:10:00+07', NOW(), NOW(), 1

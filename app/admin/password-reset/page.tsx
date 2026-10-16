@@ -77,7 +77,7 @@ export default function AdminPasswordAssistPage() {
           ) : null}
           {token ? (
             <p role="status" className="break-all text-sm">
-              Token sekali pakai (mode sandbox, tanpa email): {token}
+              Token sekali pakai (email belum terkirim): {token}
             </p>
           ) : null}
           <Button type="submit" loading={loading} disabled={loading}>

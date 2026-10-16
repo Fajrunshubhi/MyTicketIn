@@ -23,7 +23,7 @@ export async function EventsCatalogView({
   const past = pastMode ? { items: [] as CatalogCard[], unavailable: false } : await loadPast();
   return (
     <>
-      <h1 className="text-3xl font-semibold tracking-tight text-ink">
+      <h1 className="text-2xl font-semibold tracking-tight text-ink sm:text-3xl">
         {pastMode ? "Event yang telah selesai" : "Event mendatang"}
       </h1>
       <p className="mt-2 max-w-2xl text-ink/65">
@@ -38,7 +38,7 @@ export async function EventsCatalogView({
       </div>
       {pastMode ? null : (
         <section className="mt-16 pb-8" aria-labelledby="past-events-heading">
-          <h2 id="past-events-heading" className="text-3xl font-semibold tracking-tight text-ink">
+          <h2 id="past-events-heading" className="text-2xl font-semibold tracking-tight text-ink sm:text-3xl">
             Event yang telah selesai
           </h2>
           <p className="mt-2 max-w-2xl text-ink/65">Event yang sudah berlangsung. Tiket tidak lagi dijual.</p>

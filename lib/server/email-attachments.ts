@@ -32,9 +32,10 @@ export async function receiptAttachments(orderId: string, recipientUserId: strin
   if (!buyer) return [];
   const order = await getOrder(buyer, orderId);
   if (String(order.status) !== "PAID") return [];
-  const pay = await query<{ method: string }>(`SELECT method::text AS method FROM payments WHERE order_id=$1 LIMIT 1`, [orderId]);
-  const bytes = buildOrderReceiptPdfBytes(order as unknown as ReceiptOrder, pay[0] ? methodName(pay[0].method) : undefined);
-  return [{ filename: `bukti-pembayaran-${String(order.orderNumber)}.pdf`, content: Buffer.from(bytes), contentType: "application/pdf" }];
+  const receipt = order as unknown as ReceiptOrder;
+  const method = receipt.payment?.method ? methodName(String(receipt.payment.method)) : undefined;
+  const bytes = buildOrderReceiptPdfBytes(receipt, method);
+  return [{ filename: `kuitansi-${String(order.orderNumber)}.pdf`, content: Buffer.from(bytes), contentType: "application/pdf" }];
 }
 
 /** One e-ticket PDF per non-cancelled ticket of the buyer's order. The QR is drawn as vector and never logged. */
