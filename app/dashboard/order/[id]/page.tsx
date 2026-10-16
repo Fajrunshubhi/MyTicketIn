@@ -79,7 +79,6 @@ type Payment = {
   expiresAt?: string;
   providerExpiresAt?: string;
   sandbox?: boolean;
-  provider?: string;
   redirectUrl?: string | null;
   orderStatus?: string;
   loyalty?: { redeemedPoints?: number; earnOnPaidPoints?: number; cashValue?: boolean };
